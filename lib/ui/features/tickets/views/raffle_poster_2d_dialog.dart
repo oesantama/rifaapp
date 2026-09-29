@@ -12,8 +12,8 @@ import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
-import 'package:rifaapp/ui/core/utils/file_saver_web.dart' if (dart.library.io) 'package:rifaapp/ui/core/utils/file_saver_stub.dart';
-import 'dart:html' if (dart.library.io) 'file_saver_stub.dart' as html_shim;
+import 'package:rifaapp/ui/core/utils/file_saver.dart';
+import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
 const Color goldAccent = Color(0xFFD4AF37);
 
@@ -188,8 +188,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   void _triggerPrint() {
     try {
-      // ignore: undefined_prefix_name
-      html_shim.window.print();
+      web_launcher.printPage();
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Para imprimir o guardar como PDF, presione Ctrl+P en su navegador.')),

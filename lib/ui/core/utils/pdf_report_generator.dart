@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:rifaapp/data/models/winner.dart';
-import 'package:rifaapp/ui/core/utils/file_saver_web.dart';
+import 'package:rifaapp/ui/core/utils/file_saver.dart';
 
 class PdfReportGenerator {
   static Future<void> generateAndDownloadDrawAuditPdf({

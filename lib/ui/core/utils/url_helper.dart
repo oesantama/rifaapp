@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-// Conditionally import html on web
-import 'dart:html' as html;
+import 'url_launcher_helper.dart' as web_launcher;
 
 class UrlHelper {
   /// Opens a URL in a new browser tab or external application
@@ -15,7 +14,7 @@ class UrlHelper {
 
     if (kIsWeb) {
       try {
-        html.window.open(cleanUrl, '_blank');
+        web_launcher.openWebWindow(cleanUrl);
       } catch (e) {
         debugPrint('Error opening window on web: $e');
       }

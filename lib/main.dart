@@ -128,217 +128,202 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 8,
         title: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
+            final isMedium = constraints.maxWidth >= 480;
+
             return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.confirmation_number, color: AppTheme.accentAmber),
-                const SizedBox(width: 8),
-                const Text('RIFA MASTER', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 18)),
-                const SizedBox(width: 12),
-                if (!authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty)
+                const Icon(Icons.confirmation_number, color: AppTheme.accentAmber, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  isWide ? 'RIFA MASTER' : 'RIFA',
+                  style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5, fontSize: 16),
+                ),
+                if (isWide && !authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty) ...[
+                  const SizedBox(width: 8),
                   Flexible(
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        value: raffleVM.selectedRaffle?.id,
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+                        items: raffleVM.raffles.map((r) {
+                          String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴]' : '';
+                          return DropdownMenuItem(
+                            value: r.id,
+                            child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
+                            raffleVM.selectRaffle(selected);
+                            Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+                if (isWide) const Spacer(),
+                if (isMedium) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: authVM.isSuperAdmin
+                            ? [Colors.purple.shade900, Colors.purple.shade700]
+                            : [Colors.blue.shade900, Colors.blue.shade700],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: authVM.isSuperAdmin ? Colors.purpleAccent : Colors.lightBlueAccent,
+                        width: 1,
+                      ),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Flexible(
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              dropdownColor: const Color(0xFF1E293B),
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                              value: raffleVM.selectedRaffle?.id,
-                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                              items: raffleVM.raffles.map((r) {
-                                String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴 INACTIVA]' : '';
-                                return DropdownMenuItem(
-                                  value: r.id,
-                                  child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
-                                  raffleVM.selectRaffle(selected);
-                                  Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
-                                }
-                              },
-                            ),
+                        Icon(
+                          authVM.isSuperAdmin ? Icons.domain_rounded : Icons.apartment_rounded,
+                          color: Colors.amber.shade300,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          authVM.companyName.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        if (authVM.isAdmin && raffleVM.selectedRaffle != null)
-                          IconButton(
-                            icon: const Icon(Icons.edit_note, color: Colors.white70, size: 20),
-                            tooltip: 'Editar Sorteo Actual (Estado, Asesores, Boletas)',
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) => RaffleEditDialog(raffle: raffleVM.selectedRaffle!),
-                              );
-                            },
-                          ),
                       ],
                     ),
                   ),
-
-                if (isWide) const Spacer(),
-
-                // CENTER COMPANY BANNER BADGE
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: authVM.isSuperAdmin
-                          ? [Colors.purple.shade900, Colors.purple.shade700]
-                          : [Colors.blue.shade900, Colors.blue.shade700],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: authVM.isSuperAdmin ? Colors.purpleAccent : Colors.lightBlueAccent,
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.25),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      )
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        authVM.isSuperAdmin ? Icons.domain_rounded : Icons.apartment_rounded,
-                        color: Colors.amber.shade300,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        authVM.companyName.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
+                ],
                 if (isWide) const Spacer(),
               ],
             );
           },
         ),
         actions: [
-          // Active User Badge (Clickable to edit profile)
-          Tooltip(
-            message: (authVM.isAdmin && !authVM.isSuperAdmin)
-                ? 'Clic para Editar Mi Perfil Administrador'
-                : (authVM.isSuperAdmin ? 'SuperAdministrador Master' : 'Usuario Asesor'),
-            child: InkWell(
-              onTap: () {
-                if (authVM.isAdmin && !authVM.isSuperAdmin) {
-                  showDialog(
-                    context: context,
-                    builder: (_) => const AdminProfileDialog(),
-                  );
-                }
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: authVM.isSuperAdmin
-                      ? Colors.purple.withValues(alpha: 0.2)
-                      : (authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2)),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: authVM.isSuperAdmin
-                        ? Colors.purpleAccent
-                        : (authVM.isAdmin ? Colors.amber : Colors.blue),
-                    width: 1.5,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      authVM.isSuperAdmin
-                          ? Icons.verified_user
-                          : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
-                      size: 16,
-                      color: authVM.isSuperAdmin
-                          ? Colors.purpleAccent
-                          : (authVM.isAdmin ? Colors.amber : Colors.blue),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      authVM.isSuperAdmin
-                          ? authVM.currentUserName
-                          : (authVM.isAdmin
-                              ? '${authVM.currentUserName} ✏️'
-                              : '${authVM.currentUserName} (${authVM.currentUserCode})'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = MediaQuery.of(context).size.width;
+              final isMobile = screenWidth < 600;
+
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () {
+                      if (authVM.isAdmin && !authVM.isSuperAdmin) {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const AdminProfileDialog(),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: 4),
+                      decoration: BoxDecoration(
                         color: authVM.isSuperAdmin
-                            ? Colors.purpleAccent
-                            : (authVM.isAdmin ? Colors.amber : Colors.white),
+                            ? Colors.purple.withValues(alpha: 0.2)
+                            : (authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2)),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: authVM.isSuperAdmin
+                              ? Colors.purpleAccent
+                              : (authVM.isAdmin ? Colors.amber : Colors.blue),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            authVM.isSuperAdmin
+                                ? Icons.verified_user
+                                : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
+                            size: 14,
+                            color: authVM.isSuperAdmin
+                                ? Colors.purpleAccent
+                                : (authVM.isAdmin ? Colors.amber : Colors.blue),
+                          ),
+                          if (!isMobile) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              authVM.isSuperAdmin
+                                  ? authVM.currentUserName
+                                  : (authVM.isAdmin
+                                      ? authVM.currentUserName
+                                      : authVM.currentUserName),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: authVM.isSuperAdmin
+                                    ? Colors.purpleAccent
+                                    : (authVM.isAdmin ? Colors.amber : Colors.white),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          IconButton(
-            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
-            onPressed: widget.onToggleDarkMode,
-            tooltip: 'Cambiar Modo Oscuro/Claro',
-          ),
-
-          if (authVM.isAdmin && !authVM.isSuperAdmin)
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => const RaffleCreateDialog(),
-                );
-              },
-              tooltip: 'Crear Nuevo Sorteo',
-            ),
-
-          IconButton(
-            icon: const Icon(Icons.logout, color: AppTheme.dangerRose),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Cerrar Sesión'),
-                  content: const Text('¿Está seguro de que desea salir del sistema?'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode, size: 20),
+                    onPressed: widget.onToggleDarkMode,
+                    tooltip: 'Modo Oscuro/Claro',
+                  ),
+                  if (authVM.isAdmin && !authVM.isSuperAdmin)
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
                       onPressed: () {
-                        Navigator.pop(ctx);
-                        authVM.logout();
+                        showDialog(
+                          context: context,
+                          builder: (_) => const RaffleCreateDialog(),
+                        );
                       },
-                      child: const Text('Salir'),
+                      tooltip: 'Crear Nuevo Sorteo',
                     ),
-                  ],
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: AppTheme.dangerRose, size: 20),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Cerrar Sesión'),
+                          content: const Text('¿Está seguro de que desea salir del sistema?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                authVM.logout();
+                              },
+                              child: const Text('Salir'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    tooltip: 'Cerrar Sesión',
+                  ),
+                  const SizedBox(width: 4),
+                ],
               );
             },
-            tooltip: 'Cerrar Sesión',
           ),
-          const SizedBox(width: 8),
         ],
       ),
       body: Row(
