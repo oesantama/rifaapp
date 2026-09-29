@@ -363,6 +363,26 @@ app.post('/api/backup/restore', (req, res) => {
   }
 });
 
+app.post('/api/backup/reset', (req, res) => {
+  db = {
+    companies: [],
+    raffles: [],
+    tickets: [],
+    advisors: [],
+    winners: [],
+    cashTransactions: [],
+    logs: [],
+    auditLogs: [],
+    commissionPayouts: []
+  };
+  saveDB();
+  res.json({
+    message: 'Base de datos limpiada por completo. Sólo SuperAdmin activo.',
+    timestamp: new Date().toISOString(),
+    stats: { companiesCount: 0, rafflesCount: 0, ticketsCount: 0, advisorsCount: 0 }
+  });
+});
+
 // GET Raffles
 app.get('/api/raffles', (req, res) => {
   const { advisorId, role, companyId } = req.query;
