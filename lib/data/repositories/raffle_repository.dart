@@ -2,6 +2,7 @@ import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
 import '../models/winner.dart';
+import '../models/company.dart';
 import '../services/api_service.dart';
 
 class RaffleRepository {
@@ -9,6 +10,8 @@ class RaffleRepository {
 
   RaffleRepository({ApiService? apiService})
       : _apiService = apiService ?? ApiService();
+
+  Future<List<Company>> fetchCompanies() => _apiService.fetchCompanies();
 
   Future<List<Raffle>> fetchRaffles({String? advisorId, bool isAsesor = false}) =>
       _apiService.getRaffles(advisorId: advisorId, isAsesor: isAsesor);

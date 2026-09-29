@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:rifaapp/data/models/advisor.dart';
+import 'package:rifaapp/data/models/company.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 
 enum UserRole { superadmin, admin, asesor }
