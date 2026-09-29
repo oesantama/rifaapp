@@ -9,6 +9,7 @@ import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/date_formatter.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 class RaffleEditDialog extends StatefulWidget {
@@ -50,8 +51,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     super.initState();
     _titleController = TextEditingController(text: widget.raffle.title);
     _descriptionController = TextEditingController(text: widget.raffle.description);
-    _mainDrawDateController = TextEditingController(text: widget.raffle.mainDrawDate);
-    _weeklyPrizesStartDateController = TextEditingController(text: widget.raffle.weeklyPrizesStartDate);
+    _mainDrawDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.mainDrawDate));
+    _weeklyPrizesStartDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.weeklyPrizesStartDate));
     _isActive = widget.raffle.status == 'ACTIVA';
     _selectedAdvisorIds = List.from(widget.raffle.assignedAdvisorIds);
     _commissionType = widget.raffle.commissionType;
@@ -153,9 +154,19 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       keyboardType: TextInputType.number,
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: dateCtrl,
-                      decoration: const InputDecoration(labelText: 'Fecha del Sorteo (AAAA-MM-DD) *', border: OutlineInputBorder()),
+                      readOnly: true,
+                      onTap: () => DateFormatterColombia.selectDate(context, dateCtrl),
+                      decoration: InputDecoration(
+                        labelText: 'Fecha del Sorteo (dd/mm/aaaa) *',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.event),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_month, color: Colors.purple),
+                          onPressed: () => DateFormatterColombia.selectDate(context, dateCtrl),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -481,11 +492,17 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _mainDrawDateController,
-                        decoration: const InputDecoration(
-                          labelText: '📅 Fecha del Sorteo Principal / Rifa *',
-                          hintText: 'Ej: 2026-12-31',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.event),
+                        readOnly: true,
+                        onTap: () => DateFormatterColombia.selectDate(context, _mainDrawDateController),
+                        decoration: InputDecoration(
+                          labelText: '📅 Fecha Sorteo Principal (Colombia) *',
+                          hintText: 'dd/mm/aaaa',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.event),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryBlue),
+                            onPressed: () => DateFormatterColombia.selectDate(context, _mainDrawDateController),
+                          ),
                         ),
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese fecha principal' : null,
                       ),
@@ -494,11 +511,17 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _weeklyPrizesStartDateController,
-                        decoration: const InputDecoration(
+                        readOnly: true,
+                        onTap: () => DateFormatterColombia.selectDate(context, _weeklyPrizesStartDateController),
+                        decoration: InputDecoration(
                           labelText: '🗓️ Fecha Inicio Premios Semanales *',
-                          hintText: 'Ej: 2026-10-01',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.date_range),
+                          hintText: 'dd/mm/aaaa',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.date_range),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryBlue),
+                            onPressed: () => DateFormatterColombia.selectDate(context, _weeklyPrizesStartDateController),
+                          ),
                         ),
                       ),
                     ),
@@ -995,8 +1018,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           bool ok = await raffleVM.updateRaffle(widget.raffle.id, {
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
-                            'mainDrawDate': _mainDrawDateController.text.trim(),
-                            'weeklyPrizesStartDate': _weeklyPrizesStartDateController.text.trim(),
+                            'mainDrawDate': DateFormatterColombia.toIsoString(_mainDrawDateController.text),
+                            'weeklyPrizesStartDate': DateFormatterColombia.toIsoString(_weeklyPrizesStartDateController.text),
                             'status': _isActive ? 'ACTIVA' : 'INACTIVA',
                             'assignedAdvisorIds': _selectedAdvisorIds,
                             'commissionType': _commissionType,

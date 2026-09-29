@@ -128,56 +128,109 @@ class _MainShellScreenState extends State<MainShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(Icons.confirmation_number, color: AppTheme.accentAmber),
-            const SizedBox(width: 8),
-            const Text('RIFA MASTER', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 18)),
-            const SizedBox(width: 16),
-            if (!authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty)
-              Flexible(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          dropdownColor: const Color(0xFF1E293B),
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                          value: raffleVM.selectedRaffle?.id,
-                          icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                          items: raffleVM.raffles.map((r) {
-                            String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴 INACTIVA]' : '';
-                            return DropdownMenuItem(
-                              value: r.id,
-                              child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
-                              raffleVM.selectRaffle(selected);
-                              Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
-                            }
-                          },
+        title: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 700;
+            return Row(
+              children: [
+                const Icon(Icons.confirmation_number, color: AppTheme.accentAmber),
+                const SizedBox(width: 8),
+                const Text('RIFA MASTER', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 18)),
+                const SizedBox(width: 12),
+                if (!authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty)
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              dropdownColor: const Color(0xFF1E293B),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              value: raffleVM.selectedRaffle?.id,
+                              icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                              items: raffleVM.raffles.map((r) {
+                                String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴 INACTIVA]' : '';
+                                return DropdownMenuItem(
+                                  value: r.id,
+                                  child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
+                                  raffleVM.selectRaffle(selected);
+                                  Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        if (authVM.isAdmin && raffleVM.selectedRaffle != null)
+                          IconButton(
+                            icon: const Icon(Icons.edit_note, color: Colors.white70, size: 20),
+                            tooltip: 'Editar Sorteo Actual (Estado, Asesores, Boletas)',
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => RaffleEditDialog(raffle: raffleVM.selectedRaffle!),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+
+                if (isWide) const Spacer(),
+
+                // CENTER COMPANY BANNER BADGE
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: authVM.isSuperAdmin
+                          ? [Colors.purple.shade900, Colors.purple.shade700]
+                          : [Colors.blue.shade900, Colors.blue.shade700],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: authVM.isSuperAdmin ? Colors.purpleAccent : Colors.lightBlueAccent,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      )
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        authVM.isSuperAdmin ? Icons.domain_rounded : Icons.apartment_rounded,
+                        color: Colors.amber.shade300,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        authVM.companyName.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
                         ),
                       ),
-                    ),
-                    if (authVM.isAdmin && raffleVM.selectedRaffle != null)
-                      IconButton(
-                        icon: const Icon(Icons.edit_note, color: Colors.white70, size: 20),
-                        tooltip: 'Editar Sorteo Actual (Estado, Asesores, Boletas)',
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => RaffleEditDialog(raffle: raffleVM.selectedRaffle!),
-                          );
-                        },
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-          ],
+
+                if (isWide) const Spacer(),
+              ],
+            );
+          },
         ),
         actions: [
           // Active User Badge (Clickable to edit profile)

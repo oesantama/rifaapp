@@ -32,6 +32,12 @@ class AuthViewModel extends ChangeNotifier {
   String _selectedCompanyId = 'comp-1';
   String get selectedCompanyId => _selectedCompanyId;
 
+  String _companyName = 'Empresa Principal';
+  String get companyName {
+    if (isSuperAdmin) return '🏢 Panel Multitenant (Todas las Empresas)';
+    return _companyName.isNotEmpty ? _companyName : '🏢 Empresa Principal';
+  }
+
   String _loginErrorMessage = '';
   String get loginErrorMessage => _loginErrorMessage;
 
@@ -110,6 +116,7 @@ class AuthViewModel extends ChangeNotifier {
         _adminEmail = matchedCompany.adminEmail;
         _adminUsername = matchedCompany.adminUsername;
         _selectedCompanyId = matchedCompany.id;
+        _companyName = matchedCompany.name;
         _activeAdvisor = null;
         notifyListeners();
         return true;
@@ -163,6 +170,18 @@ class AuthViewModel extends ChangeNotifier {
         _isLoggedIn = true;
         _role = UserRole.asesor;
         _activeAdvisor = matched;
+
+        try {
+          final companies = await _repository.fetchCompanies();
+          final matchedComp = companies.firstWhere(
+            (c) => c.id == matched.companyId,
+            orElse: () => Company(id: '', name: 'Empresa Principal', code: '', status: '', adminUsername: '', adminPassword: '', adminName: '', adminEmail: '', createdAt: ''),
+          );
+          if (matchedComp.name.isNotEmpty) {
+            _companyName = matchedComp.name;
+          }
+        } catch (_) {}
+
         notifyListeners();
         return true;
       }

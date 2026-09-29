@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/date_formatter.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 class RaffleCreateDialog extends StatefulWidget {
@@ -22,6 +23,9 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
   final _totalTicketsController = TextEditingController(text: '2500');
   final _commissionValueController = TextEditingController(text: '10');
 
+  late TextEditingController _mainDrawDateController;
+  late TextEditingController _weeklyPrizesStartDateController;
+
   int _digits = 4;
   String _generationMode = 'SECUENCIAL'; // SECUENCIAL, ALEATORIO, EXCEL
   String _commissionType = 'PORCENTAJE'; // PORCENTAJE or VALOR_FIJO
@@ -33,12 +37,25 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
   String? _preSoldFileName;
 
   @override
+  void initState() {
+    super.initState();
+    _mainDrawDateController = TextEditingController(
+      text: DateFormatterColombia.formatShort(DateTime.now().add(const Duration(days: 90)).toIso8601String()),
+    );
+    _weeklyPrizesStartDateController = TextEditingController(
+      text: DateFormatterColombia.formatShort(DateTime.now().toIso8601String()),
+    );
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
     _totalTicketsController.dispose();
     _commissionValueController.dispose();
+    _mainDrawDateController.dispose();
+    _weeklyPrizesStartDateController.dispose();
     super.dispose();
   }
 
@@ -169,6 +186,48 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 TextFormField(
                   controller: _descriptionController,
                   decoration: const InputDecoration(labelText: 'Descripción / Asunto del Sorteo', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _mainDrawDateController,
+                        readOnly: true,
+                        onTap: () => DateFormatterColombia.selectDate(context, _mainDrawDateController),
+                        decoration: InputDecoration(
+                          labelText: '📅 Fecha Sorteo Principal (Colombia) *',
+                          hintText: 'dd/mm/aaaa',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.event),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryBlue),
+                            onPressed: () => DateFormatterColombia.selectDate(context, _mainDrawDateController),
+                          ),
+                        ),
+                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Seleccione fecha' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _weeklyPrizesStartDateController,
+                        readOnly: true,
+                        onTap: () => DateFormatterColombia.selectDate(context, _weeklyPrizesStartDateController),
+                        decoration: InputDecoration(
+                          labelText: '🗓️ Fecha Inicio Premios Semanales *',
+                          hintText: 'dd/mm/aaaa',
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.date_range),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryBlue),
+                            onPressed: () => DateFormatterColombia.selectDate(context, _weeklyPrizesStartDateController),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 
@@ -612,6 +671,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                           bool success = await raffleVM.createRaffle({
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
+                            'mainDrawDate': DateFormatterColombia.toIsoString(_mainDrawDateController.text),
+                            'weeklyPrizesStartDate': DateFormatterColombia.toIsoString(_weeklyPrizesStartDateController.text),
                             'digits': _digits,
                             'totalTickets': int.parse(_totalTicketsController.text),
                             'ticketPrice': double.parse(_priceController.text),
