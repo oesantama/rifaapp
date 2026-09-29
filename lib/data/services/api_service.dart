@@ -9,7 +9,12 @@ import '../models/company.dart';
 class ApiService {
   final String baseUrl;
 
-  ApiService({this.baseUrl = 'http://localhost:3000/api'});
+  ApiService({String? baseUrl})
+      : baseUrl = baseUrl ??
+            const String.fromEnvironment(
+              'API_URL',
+              defaultValue: 'http://localhost:3000/api',
+            );
 
   bool _useLocalFallback = false;
   

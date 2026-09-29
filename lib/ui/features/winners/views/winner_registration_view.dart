@@ -10,7 +10,6 @@ import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/winners/view_models/winner_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
-import 'package:rifaapp/ui/core/utils/url_helper.dart';
 import 'package:rifaapp/ui/core/widgets/evidence_url_viewer.dart';
 
 class WinnerRegistrationView extends StatefulWidget {
