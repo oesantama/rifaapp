@@ -174,6 +174,11 @@ function loadDB() {
   db.raffles.forEach(r => {
     if (!r.companyId) r.companyId = 'comp-1';
   });
+
+  if (!db.advisors) db.advisors = [];
+  db.advisors.forEach(a => {
+    if (!a.companyId) a.companyId = 'comp-1';
+  });
 }
 
 function saveDB() {
@@ -389,7 +394,7 @@ app.put('/api/raffles/:id', (req, res) => {
 
 // POST Create Raffle
 app.post('/api/raffles', (req, res) => {
-  const { title, description, mainDrawDate, weeklyPrizesStartDate, digits, totalTickets, ticketPrice, weeklyPrizes, generationMode, customNumbers, preSoldTickets, commissionType, commissionValue } = req.body;
+  const { title, description, mainDrawDate, weeklyPrizesStartDate, digits, totalTickets, ticketPrice, weeklyPrizes, generationMode, customNumbers, preSoldTickets, commissionType, commissionValue, companyId } = req.body;
   
   const numDigits = parseInt(digits) || 4;
   const numTickets = parseInt(totalTickets) || 2500;
@@ -398,6 +403,7 @@ app.post('/api/raffles', (req, res) => {
 
   const newRaffle = {
     id: `raf-${Date.now()}`,
+    companyId: companyId || 'comp-1',
     title: title || 'Nuevo Sorteo',
     description: description || '',
     mainDrawDate: mainDrawDate || new Date(Date.now() + 90*86400000).toISOString(),
@@ -706,9 +712,10 @@ app.get('/api/advisors', (req, res) => {
 
 // POST Create Advisor
 app.post('/api/advisors', (req, res) => {
-  const { name, email, username, password, status, phone, code, mode, assignedTicketRanges } = req.body;
+  const { name, email, username, password, status, phone, code, mode, assignedTicketRanges, companyId } = req.body;
   const newAdvisor = {
     id: `adv-${Date.now()}`,
+    companyId: companyId || 'comp-1',
     name: name || 'Nuevo Asesor',
     email: email || '',
     username: username || code || `ADV${Math.floor(10 + Math.random()*90)}`,
