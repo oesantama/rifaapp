@@ -4,7 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 Future<Uint8List?> _getFileBytes(PlatformFile file) async {
-  if (file.bytes != null) return file.bytes;
+  try {
+    return await file.readAsBytes();
+  } catch (_) {}
   if (file.path != null) {
     try {
       return await File(file.path!).readAsBytes();

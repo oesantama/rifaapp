@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/company.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -64,11 +63,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
       builder: (context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
+          title: Row(
+            children: const [
               Icon(Icons.business_rounded, color: AppTheme.primaryBlue),
               SizedBox(width: 10),
-              Expanded(Text('Registrar Nueva Empresa / Grupo')),
+              Expanded(child: Text('Registrar Nueva Empresa / Grupo')),
             ],
           ),
           content: SingleChildScrollView(
@@ -127,7 +126,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                     ),
                     const SizedBox(height: 12),
                     _responsivePair(
-                      child: TextFormField(
+                      TextFormField(
                         controller: adminUsernameController,
                         decoration: const InputDecoration(
                           labelText: 'Usuario Admin *',
@@ -136,7 +135,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         ),
                         validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
                       ),
-                      child: TextFormField(
+                      TextFormField(
                         controller: adminPasswordController,
                         decoration: const InputDecoration(
                           labelText: 'Contraseña *',
@@ -206,11 +205,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Row(
-                children: [
+              title: Row(
+                children: const [
                   Icon(Icons.edit_square, color: AppTheme.primaryBlue),
                   SizedBox(width: 10),
-                  Expanded(Text('Editar Empresa / Grupo')),
+                  Expanded(child: Text('Editar Empresa / Grupo')),
                 ],
               ),
               content: SingleChildScrollView(
@@ -232,14 +231,14 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         ),
                         const SizedBox(height: 12),
                         _responsivePair(
-                          child: TextFormField(
+                          TextFormField(
                             controller: codeController,
                             decoration: const InputDecoration(
                               labelText: 'Código Identificador',
                               prefixIcon: Icon(Icons.qr_code),
                             ),
                           ),
-                          child: DropdownButtonFormField<String>(
+                          DropdownButtonFormField<String>(
                             value: selectedStatus,
                             decoration: const InputDecoration(
                               labelText: 'Estado',
@@ -281,7 +280,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         ),
                         const SizedBox(height: 12),
                         _responsivePair(
-                          child: TextFormField(
+                          TextFormField(
                             controller: adminUsernameController,
                             decoration: const InputDecoration(
                               labelText: 'Usuario Admin *',
@@ -289,7 +288,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                             ),
                             validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
                           ),
-                          child: TextFormField(
+                          TextFormField(
                             controller: adminPasswordController,
                             decoration: const InputDecoration(
                               labelText: 'Contraseña *',
