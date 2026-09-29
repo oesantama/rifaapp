@@ -10,6 +10,8 @@ import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/winners/view_models/winner_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/core/utils/url_helper.dart';
+import 'package:rifaapp/ui/core/widgets/evidence_url_viewer.dart';
 
 class WinnerRegistrationView extends StatefulWidget {
   const WinnerRegistrationView({super.key});
@@ -29,6 +31,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
   @override
   void initState() {
     super.initState();
+    _photoUrlController.addListener(() {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<WinnerViewModel>(context, listen: false).loadWinners();
       Provider.of<TicketViewModel>(context, listen: false).loadTickets();
@@ -423,48 +428,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
 
                 if (_photoUrlController.text.trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: const [
-                            Icon(Icons.camera_alt, size: 16, color: AppTheme.primaryBlue),
-                            SizedBox(width: 6),
-                            Text('Evidencia / URL Foto de Entrega Adjunta:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppTheme.primaryBlue)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        SelectableText(
-                          _photoUrlController.text.trim(),
-                          style: const TextStyle(fontSize: 11, color: Colors.blue, decoration: TextDecoration.underline),
-                        ),
-                        if (_photoUrlController.text.trim().startsWith('http')) ...[
-                          const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: Image.network(
-                              _photoUrlController.text.trim(),
-                              height: 120,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (ctx, err, stack) => Padding(
-                                padding: const EdgeInsets.all(6),
-                                child: Text('📷 Enlace de Evidencia: ${_photoUrlController.text.trim()}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
-                              ),
-                            ),
-                          ),
-                        ]
-                      ],
-                    ),
-                  ),
+                  EvidencePreviewTile(url: _photoUrlController.text.trim()),
                 ],
               ],
             ),
@@ -638,13 +602,23 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: TextField(
-                                controller: _photoUrlController,
-                                decoration: const InputDecoration(
-                                  labelText: 'URL / Foto Entregas (Opcional)',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.photo_camera),
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TextField(
+                                    controller: _photoUrlController,
+                                    decoration: const InputDecoration(
+                                      labelText: 'URL / Foto Entregas (Google Drive, Photos, OneDrive...)',
+                                      hintText: 'https://photos.app.goo.gl/... o https://drive.google.com/...',
+                                      border: OutlineInputBorder(),
+                                      prefixIcon: Icon(Icons.photo_camera),
+                                    ),
+                                  ),
+                                  if (_photoUrlController.text.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    EvidencePreviewTile(url: _photoUrlController.text.trim(), compact: true),
+                                  ],
+                                ],
                               ),
                             ),
                           ],
@@ -872,66 +846,12 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 ],
                                 if (w.photoUrl != null && w.photoUrl!.trim().isNotEmpty) ...[
                                   const SizedBox(height: 8),
-                                  InkWell(
-                                    onTap: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => AlertDialog(
-                                          title: const Text('Evidencia / Foto de Entrega de Premio'),
-                                          content: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              SelectableText('Link: ${w.photoUrl!}'),
-                                              const SizedBox(height: 10),
-                                              if (w.photoUrl!.startsWith('http'))
-                                                ClipRRect(
-                                                  borderRadius: BorderRadius.circular(8),
-                                                  child: Image.network(
-                                                    w.photoUrl!,
-                                                    height: 220,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (c, e, s) => const Text('📷 No se pudo cargar la vista previa directa de la imagen.'),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context),
-                                              child: const Text('Cerrar'),
-                                            )
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primaryBlue.withOpacity(0.08),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.3)),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.photo_library, size: 15, color: AppTheme.primaryBlue),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              '📷 Ver Foto de Entrega / Evidencia: ${w.photoUrl}',
-                                              style: const TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.bold),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        );
+                                  EvidencePreviewTile(url: w.photoUrl!.trim()),
+                                 ],
+                               ],
+                             ),
+                           ),
+                         );
                       },
                     )
             ],
