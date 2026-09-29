@@ -243,6 +243,73 @@ app.put('/api/companies/:id', (req, res) => {
   res.json(company);
 });
 
+// Backup & Database Management Routes (SuperAdmin)
+app.get('/api/backup', (req, res) => {
+  let stats = {};
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const fileStat = fs.statSync(DB_FILE);
+      stats = {
+        fileSizeBytes: fileStat.size,
+        lastModified: fileStat.mtime.toISOString(),
+      };
+    }
+  } catch (_) {}
+
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    stats: {
+      companiesCount: (db.companies || []).length,
+      rafflesCount: (db.raffles || []).length,
+      ticketsCount: (db.tickets || []).length,
+      advisorsCount: (db.advisors || []).length,
+      winnersCount: (db.winners || []).length,
+      auditLogsCount: (db.auditLogs || []).length,
+      ...stats
+    },
+    database: db
+  });
+});
+
+app.get('/api/backup/download', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename=backup_rifamaster_${Date.now()}.json`);
+  res.send(JSON.stringify(db, null, 2));
+});
+
+app.post('/api/backup/restore', (req, res) => {
+  try {
+    const backupData = req.body;
+    if (!backupData || typeof backupData !== 'object') {
+      return res.status(400).json({ error: 'Formato de copia de seguridad inválido' });
+    }
+
+    db = {
+      auditLogs: backupData.auditLogs || [],
+      companies: backupData.companies || [],
+      raffles: backupData.raffles || [],
+      advisors: backupData.advisors || [],
+      tickets: backupData.tickets || [],
+      winners: backupData.winners || [],
+      commissionPayouts: backupData.commissionPayouts || []
+    };
+
+    saveDB();
+    res.json({
+      message: 'Base de datos restaurada exitosamente.',
+      timestamp: new Date().toISOString(),
+      stats: {
+        companiesCount: db.companies.length,
+        rafflesCount: db.raffles.length,
+        ticketsCount: db.tickets.length
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: `Error al restaurar base de datos: ${err.message}` });
+  }
+});
+
 // GET Raffles
 app.get('/api/raffles', (req, res) => {
   const { advisorId, role, companyId } = req.query;

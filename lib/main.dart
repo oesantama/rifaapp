@@ -15,6 +15,7 @@ import 'ui/features/advisors/views/advisor_management_view.dart';
 import 'ui/features/admin_cash/views/admin_cash_view.dart';
 import 'ui/features/winners/views/winner_registration_view.dart';
 import 'ui/features/company/views/company_management_view.dart';
+import 'ui/features/backup/views/database_backup_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
@@ -103,12 +104,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
     // Filter pages and destinations based on Role
     final List<Widget> pages = authVM.isSuperAdmin
         ? [
-            DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
-            const TicketGridView(),
-            const AdvisorManagementView(),
-            const AdminCashView(),
-            const WinnerRegistrationView(),
             const CompanyManagementView(),
+            const DatabaseBackupView(),
           ]
         : authVM.isAdmin
             ? [
@@ -137,7 +134,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const SizedBox(width: 8),
             const Text('RIFA MASTER', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1, fontSize: 18)),
             const SizedBox(width: 16),
-            if (raffleVM.raffles.isNotEmpty)
+            if (!authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty)
               Flexible(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -185,10 +182,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
         actions: [
           // Active User Badge (Clickable to edit profile)
           Tooltip(
-            message: authVM.isAdmin ? 'Clic para Editar Mi Perfil Administrador' : 'Usuario Asesor',
+            message: (authVM.isAdmin && !authVM.isSuperAdmin)
+                ? 'Clic para Editar Mi Perfil Administrador'
+                : (authVM.isSuperAdmin ? 'SuperAdministrador Master' : 'Usuario Asesor'),
             child: InkWell(
               onTap: () {
-                if (authVM.isAdmin) {
+                if (authVM.isAdmin && !authVM.isSuperAdmin) {
                   showDialog(
                     context: context,
                     builder: (_) => const AdminProfileDialog(),
@@ -199,25 +198,42 @@ class _MainShellScreenState extends State<MainShellScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2),
+                  color: authVM.isSuperAdmin
+                      ? Colors.purple.withValues(alpha: 0.2)
+                      : (authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2)),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: authVM.isAdmin ? Colors.amber : Colors.blue, width: 1.5),
+                  border: Border.all(
+                    color: authVM.isSuperAdmin
+                        ? Colors.purpleAccent
+                        : (authVM.isAdmin ? Colors.amber : Colors.blue),
+                    width: 1.5,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      authVM.isAdmin ? Icons.admin_panel_settings : Icons.person,
+                      authVM.isSuperAdmin
+                          ? Icons.verified_user
+                          : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
                       size: 16,
-                      color: authVM.isAdmin ? Colors.amber : Colors.blue,
+                      color: authVM.isSuperAdmin
+                          ? Colors.purpleAccent
+                          : (authVM.isAdmin ? Colors.amber : Colors.blue),
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      authVM.isAdmin ? '${authVM.currentUserName} ✏️' : '${authVM.currentUserName} (${authVM.currentUserCode})',
+                      authVM.isSuperAdmin
+                          ? authVM.currentUserName
+                          : (authVM.isAdmin
+                              ? '${authVM.currentUserName} ✏️'
+                              : '${authVM.currentUserName} (${authVM.currentUserCode})'),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: authVM.isAdmin ? Colors.amber : Colors.white,
+                        color: authVM.isSuperAdmin
+                            ? Colors.purpleAccent
+                            : (authVM.isAdmin ? Colors.amber : Colors.white),
                       ),
                     ),
                   ],
@@ -233,7 +249,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             tooltip: 'Cambiar Modo Oscuro/Claro',
           ),
 
-          if (authVM.isAdmin)
+          if (authVM.isAdmin && !authVM.isSuperAdmin)
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
               onPressed: () {
@@ -283,34 +299,14 @@ class _MainShellScreenState extends State<MainShellScreen> {
               destinations: authVM.isSuperAdmin
                   ? const [
                       NavigationRailDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        selectedIcon: Icon(Icons.dashboard),
-                        label: Text('Dashboard'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.grid_on_outlined),
-                        selectedIcon: Icon(Icons.grid_on),
-                        label: Text('Boletas'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.people_outline),
-                        selectedIcon: Icon(Icons.people),
-                        label: Text('Asesores'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.point_of_sale_outlined),
-                        selectedIcon: Icon(Icons.point_of_sale),
-                        label: Text('Caja Admin'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.emoji_events_outlined),
-                        selectedIcon: Icon(Icons.emoji_events),
-                        label: Text('Ganadores'),
-                      ),
-                      NavigationRailDestination(
                         icon: Icon(Icons.apartment_outlined),
                         selectedIcon: Icon(Icons.apartment),
                         label: Text('Empresas'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.backup_outlined),
+                        selectedIcon: Icon(Icons.backup),
+                        label: Text('Backup BD'),
                       ),
                     ]
                   : authVM.isAdmin
@@ -372,12 +368,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
               selectedItemColor: AppTheme.primaryBlue,
               items: authVM.isSuperAdmin
                   ? const [
-                      BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                      BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                      BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
-                      BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
-                      BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                       BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),
+                      BottomNavigationBarItem(icon: Icon(Icons.backup), label: 'Backup BD'),
                     ]
                   : authVM.isAdmin
                       ? const [
