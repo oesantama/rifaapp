@@ -1,5 +1,6 @@
 class Advisor {
   final String id;
+  final String companyId;
   final String name;
   final String email;
   final String username;
@@ -19,6 +20,7 @@ class Advisor {
 
   Advisor({
     required this.id,
+    this.companyId = 'comp-1',
     required this.name,
     this.email = '',
     this.username = '',
@@ -44,6 +46,7 @@ class Advisor {
     String codeVal = json['code'] ?? '';
     return Advisor(
       id: json['id'] ?? '',
+      companyId: json['companyId'] ?? 'comp-1',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       username: json['username'] ?? codeVal,
@@ -65,6 +68,7 @@ class Advisor {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'companyId': companyId,
         'name': name,
         'email': email,
         'username': username.isNotEmpty ? username : code,

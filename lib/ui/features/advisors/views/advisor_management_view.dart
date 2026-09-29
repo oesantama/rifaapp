@@ -272,12 +272,14 @@ class AdvisorManagementView extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () async {
                     if (nameCtrl.text.trim().isNotEmpty && codeCtrl.text.trim().isNotEmpty) {
+                      final authVM = Provider.of<AuthViewModel>(context, listen: false);
                       final advVM = Provider.of<AdvisorViewModel>(context, listen: false);
                       List<String> ranges = rangeCtrl.text.isNotEmpty
                           ? rangeCtrl.text.split(',').map((e) => e.trim()).toList()
                           : [];
                       
                       Map<String, dynamic> data = {
+                        'companyId': authVM.selectedCompanyId,
                         'name': nameCtrl.text.trim(),
                         'email': emailCtrl.text.trim(),
                         'username': usernameCtrl.text.trim().isNotEmpty ? usernameCtrl.text.trim() : codeCtrl.text.trim(),
