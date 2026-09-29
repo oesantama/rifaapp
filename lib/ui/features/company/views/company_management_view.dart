@@ -59,7 +59,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
           ),
           content: SingleChildScrollView(
             child: Container(
-              width: 500,
+              width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
               padding: const EdgeInsets.all(8),
               child: Form(
                 key: formKey,
@@ -205,7 +205,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
               ),
               content: SingleChildScrollView(
                 child: Container(
-                  width: 500,
+                  width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
                   padding: const EdgeInsets.all(8),
                   child: Form(
                     key: formKey,
@@ -380,7 +380,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
               ],
             ),
             content: SizedBox(
-              width: 650,
+              width: MediaQuery.of(context).size.width > 700 ? 650 : MediaQuery.of(context).size.width * 0.9,
               height: 480,
               child: Column(
                 children: [
