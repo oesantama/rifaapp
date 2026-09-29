@@ -126,9 +126,8 @@ class _EvidenceUrlViewerDialogState extends State<EvidenceUrlViewerDialog> {
                         color: Colors.grey.shade100,
                         child: Center(
                           child: CircularProgressIndicator(
-                            value: progress.expectedTotalBytes != null
-                                ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                                : null,
+                            value:
+                                progress.expectedTotalBytes != null ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes! : null,
                           ),
                         ),
                       );

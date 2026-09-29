@@ -132,7 +132,8 @@ class PdfReportGenerator {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('DATOS DEL GANADOR DE LA BOLETA', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.green900)),
+                      pw.Text('DATOS DEL GANADOR DE LA BOLETA',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.green900)),
                       pw.Divider(thickness: 0.5),
                       pw.Text('• Boleta Ganadora N°: #${det.ticketNumber}'),
                       pw.Text('• Comprador: ${det.buyerName} (Tel: ${det.buyerPhone})'),
@@ -144,7 +145,8 @@ class PdfReportGenerator {
                         pw.Text('  • Fecha de Venta: ${det.assignedDate ?? "N/A"}')
                       else
                         ...det.abonosSummary.map(
-                          (a) => pw.Text('  • ${a['date']}: ${currency.format(a['amount'])} (${a['note'] ?? "Abono"}) — Asesor: ${a['sellerName'] ?? det.advisorName}'),
+                          (a) => pw.Text(
+                              '  • ${a['date']}: ${currency.format(a['amount'])} (${a['note'] ?? "Abono"}) — Asesor: ${a['sellerName'] ?? det.advisorName}'),
                         ),
                     ],
                   ),
@@ -163,7 +165,8 @@ class PdfReportGenerator {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('MOTIVO Y REGISTRO DE ELIMINACIÓN', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.red900)),
+                    pw.Text('MOTIVO Y REGISTRO DE ELIMINACIÓN',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11, color: PdfColors.red900)),
                     pw.Divider(thickness: 0.5),
                     pw.Text('• Administrador Responsable: $adminUser'),
                     pw.Text('• Motivo de Eliminación Especificado: "$reason"', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),

@@ -35,6 +35,10 @@ class AppTheme {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
+    dialogTheme: const DialogThemeData(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    ),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: primaryBlue,
@@ -74,6 +78,10 @@ class AppTheme {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
+    dialogTheme: const DialogThemeData(
+      insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+    ),
+    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
         backgroundColor: primaryBlue,

@@ -36,6 +36,20 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     }
   }
 
+  /// Places two form fields side by side on wide screens and stacked on phones.
+  Widget _responsivePair(Widget first, Widget second) {
+    if (MediaQuery.of(context).size.width < 600) {
+      return Column(children: [first, const SizedBox(height: 12), second]);
+    }
+    return Row(
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: 10),
+        Expanded(child: second),
+      ],
+    );
+  }
+
   void _showCreateCompanyDialog() {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
@@ -50,11 +64,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
       builder: (context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: const [
+          title: const Row(
+            children: [
               Icon(Icons.business_rounded, color: AppTheme.primaryBlue),
               SizedBox(width: 10),
-              Text('Registrar Nueva Empresa / Grupo'),
+              Expanded(Text('Registrar Nueva Empresa / Grupo')),
             ],
           ),
           content: SingleChildScrollView(
@@ -88,7 +102,10 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                     const Divider(),
                     const Text(
                       '👤 Credenciales para el Administrador de la Empresa:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryDark),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -109,31 +126,24 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: adminUsernameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Usuario Admin *',
-                              hintText: 'ej: admin_sanmartin',
-                              prefixIcon: Icon(Icons.account_circle),
-                            ),
-                            validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
-                          ),
+                    _responsivePair(
+                      child: TextFormField(
+                        controller: adminUsernameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Usuario Admin *',
+                          hintText: 'ej: admin_sanmartin',
+                          prefixIcon: Icon(Icons.account_circle),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextFormField(
-                            controller: adminPasswordController,
-                            decoration: const InputDecoration(
-                              labelText: 'Contraseña *',
-                              prefixIcon: Icon(Icons.lock),
-                            ),
-                            validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
-                          ),
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                      ),
+                      child: TextFormField(
+                        controller: adminPasswordController,
+                        decoration: const InputDecoration(
+                          labelText: 'Contraseña *',
+                          prefixIcon: Icon(Icons.lock),
                         ),
-                      ],
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
+                      ),
                     ),
                   ],
                 ),
@@ -196,11 +206,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: const [
+              title: const Row(
+                children: [
                   Icon(Icons.edit_square, color: AppTheme.primaryBlue),
                   SizedBox(width: 10),
-                  Text('Editar Empresa / Grupo'),
+                  Expanded(Text('Editar Empresa / Grupo')),
                 ],
               ),
               content: SingleChildScrollView(
@@ -221,41 +231,37 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: codeController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Código Identificador',
-                                  prefixIcon: Icon(Icons.qr_code),
-                                ),
-                              ),
+                        _responsivePair(
+                          child: TextFormField(
+                            controller: codeController,
+                            decoration: const InputDecoration(
+                              labelText: 'Código Identificador',
+                              prefixIcon: Icon(Icons.qr_code),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: selectedStatus,
-                                decoration: const InputDecoration(
-                                  labelText: 'Estado',
-                                  prefixIcon: Icon(Icons.toggle_on),
-                                ),
-                                items: const [
-                                  DropdownMenuItem(value: 'ACTIVA', child: Text('🟢 ACTIVA')),
-                                  DropdownMenuItem(value: 'INACTIVA', child: Text('🔴 INACTIVA')),
-                                ],
-                                onChanged: (val) {
-                                  if (val != null) setDialogState(() => selectedStatus = val);
-                                },
-                              ),
+                          ),
+                          child: DropdownButtonFormField<String>(
+                            value: selectedStatus,
+                            decoration: const InputDecoration(
+                              labelText: 'Estado',
+                              prefixIcon: Icon(Icons.toggle_on),
                             ),
-                          ],
+                            items: const [
+                              DropdownMenuItem(value: 'ACTIVA', child: Text('🟢 ACTIVA')),
+                              DropdownMenuItem(value: 'INACTIVA', child: Text('🔴 INACTIVA')),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) setDialogState(() => selectedStatus = val);
+                            },
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const Divider(),
                         const Text(
                           '👤 Credenciales del Administrador:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryDark),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
@@ -274,30 +280,23 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: adminUsernameController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Usuario Admin *',
-                                  prefixIcon: Icon(Icons.account_circle),
-                                ),
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
-                              ),
+                        _responsivePair(
+                          child: TextFormField(
+                            controller: adminUsernameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Usuario Admin *',
+                              prefixIcon: Icon(Icons.account_circle),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextFormField(
-                                controller: adminPasswordController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Contraseña *',
-                                  prefixIcon: Icon(Icons.lock),
-                                ),
-                                validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
-                              ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                          ),
+                          child: TextFormField(
+                            controller: adminPasswordController,
+                            decoration: const InputDecoration(
+                              labelText: 'Contraseña *',
+                              prefixIcon: Icon(Icons.lock),
                             ),
-                          ],
+                            validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
+                          ),
                         ),
                       ],
                     ),
@@ -381,7 +380,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
             ),
             content: SizedBox(
               width: MediaQuery.of(context).size.width > 700 ? 650 : MediaQuery.of(context).size.width * 0.9,
-              height: 480,
+              height: MediaQuery.of(context).size.height * 0.6 > 480 ? 480 : MediaQuery.of(context).size.height * 0.6,
               child: Column(
                 children: [
                   // KPI Cards Header
@@ -391,11 +390,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         child: _buildKpiCard(
                           icon: Icons.admin_panel_settings,
                           color: Colors.purple,
-                          title: 'Administradores',
+                          title: 'Admins',
                           value: '${company.adminsCount}',
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: _buildKpiCard(
                           icon: Icons.people,
@@ -404,12 +403,12 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           value: '${company.advisorsCount}',
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: _buildKpiCard(
                           icon: Icons.confirmation_number,
                           color: Colors.amber.shade800,
-                          title: 'Eventos Rifa',
+                          title: 'Rifas',
                           value: '${company.rafflesCount}',
                         ),
                       ),
@@ -419,6 +418,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
 
                   // Tab Bar
                   const TabBar(
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
                     labelColor: AppTheme.primaryBlue,
                     unselectedLabelColor: Colors.grey,
                     indicatorColor: AppTheme.primaryBlue,
@@ -453,10 +454,9 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                         adm['name'] ?? 'Administrador',
                                         style: const TextStyle(fontWeight: FontWeight.bold),
                                       ),
-                                      subtitle: Text('Usuario: ${adm['username']} • Clave: ${adm['password']}'),
-                                      trailing: Text(
-                                        adm['email'] ?? '',
-                                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                      subtitle: Text(
+                                        'Usuario: ${adm['username']} • Clave: ${adm['password']}'
+                                        '${(adm['email'] ?? '').toString().isNotEmpty ? '\n${adm['email']}' : ''}',
                                       ),
                                     ),
                                   );
@@ -571,31 +571,168 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     required String value,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w500),
-              ),
-              Text(
-                value,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
-              ),
-            ],
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+                ),
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInfoLine(IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(text, style: TextStyle(fontSize: 13, color: Colors.grey[700]), overflow: TextOverflow.ellipsis, maxLines: 2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricBadge(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompanyCard(Company comp) {
+    final isActive = comp.status == 'ACTIVA';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  child: Text(
+                    comp.name.isNotEmpty ? comp.name[0].toUpperCase() : 'E',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 18),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        comp.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Text(
+                              comp.code,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isActive ? AppTheme.secondaryEmerald : Colors.grey,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              comp.status,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.analytics_rounded, color: AppTheme.primaryBlue),
+                  tooltip: 'Ver Resumen Profesional (Admins, Asesores, Rifas)',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _showCompanySummaryDialog(comp),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_note_rounded, color: Colors.orange),
+                  tooltip: 'Editar Empresa y Admin',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _showEditCompanyDialog(comp),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            _buildInfoLine(Icons.person_outline, 'Admin: ${comp.adminName} (${comp.adminUsername})'),
+            _buildInfoLine(Icons.key, 'Clave: ${comp.adminPassword}'),
+            if (comp.adminEmail.isNotEmpty) _buildInfoLine(Icons.email_outlined, comp.adminEmail),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _buildMetricBadge(Icons.shield_outlined, 'Admins: ${comp.adminsCount}', Colors.purple),
+                _buildMetricBadge(Icons.badge_outlined, 'Asesores: ${comp.advisorsCount}', Colors.blue),
+                _buildMetricBadge(Icons.confirmation_number_outlined, 'Sorteos: ${comp.rafflesCount}', Colors.amber.shade900),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -608,242 +745,105 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
           c.adminUsername.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // TITLE & BAR
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Gestión de Empresas / Grupos (SuperAdmin)',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryDark,
-                        ),
-                  ),
-                  Text(
-                    'Administración multitenant de empresas, grupos y usuarios administradores asociados.',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                ],
-              ),
-              ElevatedButton.icon(
-                onPressed: _showCreateCompanyDialog,
-                icon: const Icon(Icons.add_business_rounded),
-                label: const Text('Nueva Empresa / Grupo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.secondaryEmerald,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
-          // SEARCH BAR
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Buscar por nombre de empresa, código o usuario admin...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            ),
-            onChanged: (val) => setState(() => _searchQuery = val),
-          ),
-          const SizedBox(height: 16),
-
-          // LIST / TABLE
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : filteredCompanies.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.apartment, size: 64, color: Colors.grey),
-                            SizedBox(height: 12),
-                            Text('No hay empresas registradas.'),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: filteredCompanies.length,
-                        itemBuilder: (context, index) {
-                          final comp = filteredCompanies[index];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.all(16),
-                              leading: CircleAvatar(
-                                radius: 24,
-                                backgroundColor: AppTheme.primaryBlue.withOpacity(0.15),
-                                child: Text(
-                                  comp.name.isNotEmpty ? comp.name[0].toUpperCase() : 'E',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 18),
-                                ),
-                              ),
-                              title: Row(
-                                children: [
-                                  Text(
-                                    comp.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.blue.shade200),
-                                    ),
-                                    child: Text(
-                                      comp.code,
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      spacing: 20,
-                                      runSpacing: 6,
-                                      children: [
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.person_outline, size: 16, color: Colors.grey),
-                                            const SizedBox(width: 4),
-                                            Text('Admin: ${comp.adminName} (${comp.adminUsername})'),
-                                          ],
-                                        ),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(Icons.key, size: 16, color: Colors.grey),
-                                            const SizedBox(width: 4),
-                                            Text('Clave: ${comp.adminPassword}'),
-                                          ],
-                                        ),
-                                        if (comp.adminEmail.isNotEmpty)
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.email_outlined, size: 16, color: Colors.grey),
-                                              const SizedBox(width: 4),
-                                              Text(comp.adminEmail),
-                                            ],
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-
-                                    // Executive Summary Metrics Badges
-                                    Wrap(
-                                      spacing: 12,
-                                      runSpacing: 6,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.purple.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.purple.shade200),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.shield_outlined, size: 14, color: Colors.purple),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Admins: ${comp.adminsCount}',
-                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.blue.shade200),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.badge_outlined, size: 14, color: Colors.blue),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Asesores: ${comp.advisorsCount}',
-                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber.shade50,
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: Colors.amber.shade300),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.confirmation_number_outlined, size: 14, color: Colors.amber.shade900),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Sorteos: ${comp.rafflesCount}',
-                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Chip(
-                                    label: Text(comp.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                                    backgroundColor: comp.status == 'ACTIVA' ? AppTheme.secondaryEmerald : Colors.grey,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    icon: const Icon(Icons.analytics_rounded, color: AppTheme.primaryBlue, size: 24),
-                                    tooltip: 'Ver Resumen Profesional (Admins, Asesores, Rifas)',
-                                    onPressed: () => _showCompanySummaryDialog(comp),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_note_rounded, color: Colors.orange, size: 24),
-                                    tooltip: 'Editar Empresa y Admin',
-                                    onPressed: () => _showEditCompanyDialog(comp),
-                                  ),
-                                ],
-                              ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: isMobile
+          ? FloatingActionButton.extended(
+              onPressed: _showCreateCompanyDialog,
+              backgroundColor: AppTheme.secondaryEmerald,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_business_rounded),
+              label: const Text('Nueva Empresa'),
+            )
+          : null,
+      body: Padding(
+        padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, isMobile ? 12 : 20, isMobile ? 12 : 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // TITLE & BAR
+            Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isMobile ? 'Empresas / Grupos' : 'Gestión de Empresas / Grupos (SuperAdmin)',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              fontSize: isMobile ? 20 : null,
                             ),
-                          );
-                        },
                       ),
-          ),
-        ],
+                      const SizedBox(height: 2),
+                      Text(
+                        'Administración multitenant de empresas, grupos y usuarios administradores asociados.',
+                        style: TextStyle(color: Colors.grey[600], fontSize: isMobile ? 12 : 13),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isMobile)
+                  ElevatedButton.icon(
+                    onPressed: _showCreateCompanyDialog,
+                    icon: const Icon(Icons.add_business_rounded),
+                    label: const Text('Nueva Empresa / Grupo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.secondaryEmerald,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(height: isMobile ? 12 : 20),
+
+            // SEARCH BAR
+            TextField(
+              decoration: InputDecoration(
+                hintText: isMobile ? 'Buscar empresa, código o usuario...' : 'Buscar por nombre de empresa, código o usuario admin...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                isDense: isMobile,
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+            const SizedBox(height: 12),
+
+            // LIST / TABLE
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : filteredCompanies.isEmpty
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.apartment, size: 64, color: Colors.grey),
+                              SizedBox(height: 12),
+                              Text('No hay empresas registradas.'),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadCompanies,
+                          child: ListView.builder(
+                            padding: EdgeInsets.only(bottom: isMobile ? 88 : 16),
+                            itemCount: filteredCompanies.length,
+                            itemBuilder: (context, index) => _buildCompanyCard(filteredCompanies[index]),
+                          ),
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }

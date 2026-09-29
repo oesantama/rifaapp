@@ -42,7 +42,11 @@ class UrlHelper {
       return 'dropbox';
     } else if (lower.contains('imgur.com')) {
       return 'imgur';
-    } else if (lower.contains('.jpg') || lower.contains('.jpeg') || lower.contains('.png') || lower.contains('.webp') || lower.contains('.gif')) {
+    } else if (lower.contains('.jpg') ||
+        lower.contains('.jpeg') ||
+        lower.contains('.png') ||
+        lower.contains('.webp') ||
+        lower.contains('.gif')) {
       return 'direct_image';
     }
     return 'generic_web';

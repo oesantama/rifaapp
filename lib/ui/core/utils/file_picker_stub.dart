@@ -1,14 +1,25 @@
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+Future<Uint8List?> _getFileBytes(PlatformFile file) async {
+  if (file.bytes != null) return file.bytes;
+  if (file.path != null) {
+    try {
+      return await File(file.path!).readAsBytes();
+    } catch (_) {}
+  }
+  return null;
+}
 
 Future<String?> pickCsvTextContent() async {
-  FilePickerResult? result = await FilePicker.platform.pickFiles(
+  final files = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['csv', 'txt', 'xlsx', 'xls'],
-    withData: true,
   );
-  if (result != null && result.files.isNotEmpty) {
-    final bytes = result.files.first.bytes;
+  if (files.isNotEmpty) {
+    final bytes = await _getFileBytes(files.first);
     if (bytes != null) {
       try {
         return utf8.decode(bytes);
@@ -21,26 +32,24 @@ Future<String?> pickCsvTextContent() async {
 }
 
 Future<List<int>?> pickFileBytes({List<String> allowedExtensions = const ['xlsx', 'xls', 'csv', 'txt']}) async {
-  FilePickerResult? result = await FilePicker.platform.pickFiles(
+  final files = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: allowedExtensions,
-    withData: true,
   );
-  if (result != null && result.files.isNotEmpty) {
-    return result.files.first.bytes;
+  if (files.isNotEmpty) {
+    return await _getFileBytes(files.first);
   }
   return null;
 }
 
 Future<String?> pickImageBase64() async {
-  FilePickerResult? result = await FilePicker.platform.pickFiles(
+  final files = await FilePicker.pickFiles(
     type: FileType.image,
-    withData: true,
   );
-  if (result != null && result.files.isNotEmpty) {
-    final bytes = result.files.first.bytes;
+  if (files.isNotEmpty) {
+    final bytes = await _getFileBytes(files.first);
     if (bytes != null) {
-      String ext = result.files.first.extension?.toLowerCase() ?? 'png';
+      String ext = files.first.extension?.toLowerCase() ?? 'png';
       String base64Str = base64Encode(bytes);
       return 'data:image/$ext;base64,$base64Str';
     }

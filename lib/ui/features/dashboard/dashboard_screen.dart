@@ -20,6 +20,7 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final authVM = Provider.of<AuthViewModel>(context);
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Consumer3<RaffleViewModel, TicketViewModel, WinnerViewModel>(
       builder: (context, raffleVM, ticketVM, winnerVM, _) {
@@ -79,14 +80,15 @@ class DashboardScreen extends StatelessWidget {
             await winnerVM.loadWinners();
           },
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.all(isMobile ? 12 : 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (currentRaffle != null)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(isMobile ? 16 : 20),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF1E3A8A), Color(0xFF2563EB)],
@@ -105,8 +107,11 @@ class DashboardScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          alignment: WrapAlignment.spaceBetween,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -128,9 +133,9 @@ class DashboardScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         Text(
                           currentRaffle.title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
-                            fontSize: 22,
+                            fontSize: isMobile ? 20 : 22,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -144,12 +149,20 @@ class DashboardScreen extends StatelessWidget {
                           children: [
                             const Icon(Icons.stars, color: AppTheme.accentAmber, size: 20),
                             const SizedBox(width: 8),
-                            Text(
-                              'Precio por Boleta: ${currency.format(currentRaffle.ticketPrice)}',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            Flexible(
+                              child: Text(
+                                'Precio por Boleta: ${currency.format(currentRaffle.ticketPrice)}',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                            const Spacer(),
-                            if (authVM.isAdmin) ...[
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (authVM.isAdmin)
                               OutlinedButton.icon(
                                 onPressed: () {
                                   showDialog(
@@ -163,8 +176,6 @@ class DashboardScreen extends StatelessWidget {
                                   side: const BorderSide(color: Colors.white54),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                            ],
                             ElevatedButton.icon(
                               onPressed: () => onNavigateTab(1),
                               icon: const Icon(Icons.confirmation_number),
@@ -172,88 +183,87 @@ class DashboardScreen extends StatelessWidget {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.secondaryEmerald,
                                 foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               ),
-                            )
+                            ),
                           ],
-                        )
+                        ),
                       ],
                     ),
                   ),
-
-                const SizedBox(height: 24),
-
+                SizedBox(height: isMobile ? 16 : 24),
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    int crossAxisCount = constraints.maxWidth > 1000 ? 3 : (constraints.maxWidth > 600 ? 2 : 1);
-                    return GridView.count(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      shrinkWrap: true,
-                      childAspectRatio: 1.7,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        StatCard(
-                          title: authVM.isAsesor ? 'Mi Recaudo Total' : 'Total Recaudado Global',
-                          value: currency.format(totalCollected),
-                          subtitle: authVM.isAsesor ? 'Abonos y ventas mías' : 'Abonos y pagos de todos los asesores',
-                          icon: Icons.attach_money,
-                          iconColor: AppTheme.secondaryEmerald,
-                        ),
-                        StatCard(
-                          title: authVM.isAsesor ? 'Mi Dinero Confirmado' : 'Confirmado por Admin',
-                          value: currency.format(totalConfirmed),
-                          subtitle: authVM.isAsesor ? 'Recibido en caja admin' : 'Dinero auditado en caja',
-                          icon: Icons.verified,
-                          iconColor: AppTheme.primaryBlue,
-                        ),
-                        StatCard(
-                          title: authVM.isAsesor ? 'Mi Saldo por Entregar' : 'Pendiente Entrega Total',
-                          value: currency.format(pendingTurnIn),
-                          subtitle: authVM.isAsesor ? 'Por rendir al administrador' : 'En manos de asesores',
-                          icon: Icons.account_balance_wallet,
-                          iconColor: AppTheme.accentAmber,
-                        ),
-                        StatCard(
-                          title: 'Valor Pagado en Premios',
-                          value: currency.format(winnerVM.totalPrizesPaid),
-                          subtitle: '${winnerVM.totalWinnersCount} Ganadores oficiales',
-                          icon: Icons.card_giftcard,
-                          iconColor: AppTheme.secondaryEmerald,
-                        ),
-                        StatCard(
-                          title: authVM.isAsesor ? 'Mis Ganancias Generadas' : 'Comisiones Pagadas a Asesores',
-                          value: currency.format(totalAdvisorsCommission),
-                          subtitle: authVM.isAsesor ? 'Ganancia por mi gestión' : 'Comisiones totales liquidadas',
-                          icon: Icons.workspace_premium,
-                          iconColor: Colors.purple,
-                        ),
-                        StatCard(
-                          title: 'Pozo Acumulado',
-                          value: currency.format(winnerVM.totalAccumulatedAmount),
-                          subtitle: '${winnerVM.accumulatedCount} Sorteos sin ganador',
-                          icon: Icons.emoji_events,
-                          iconColor: AppTheme.dangerRose,
-                        ),
-                      ],
+                    const spacing = 12.0;
+                    int crossAxisCount = constraints.maxWidth > 1000 ? 3 : (constraints.maxWidth > 340 ? 2 : 1);
+                    final itemWidth = (constraints.maxWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
+                    final cards = <Widget>[
+                      StatCard(
+                        title: authVM.isAsesor ? 'Mi Recaudo Total' : 'Total Recaudado Global',
+                        value: currency.format(totalCollected),
+                        subtitle: authVM.isAsesor ? 'Abonos y ventas mías' : 'Abonos y pagos de todos los asesores',
+                        icon: Icons.attach_money,
+                        iconColor: AppTheme.secondaryEmerald,
+                      ),
+                      StatCard(
+                        title: authVM.isAsesor ? 'Mi Dinero Confirmado' : 'Confirmado por Admin',
+                        value: currency.format(totalConfirmed),
+                        subtitle: authVM.isAsesor ? 'Recibido en caja admin' : 'Dinero auditado en caja',
+                        icon: Icons.verified,
+                        iconColor: AppTheme.primaryBlue,
+                      ),
+                      StatCard(
+                        title: authVM.isAsesor ? 'Mi Saldo por Entregar' : 'Pendiente Entrega Total',
+                        value: currency.format(pendingTurnIn),
+                        subtitle: authVM.isAsesor ? 'Por rendir al administrador' : 'En manos de asesores',
+                        icon: Icons.account_balance_wallet,
+                        iconColor: AppTheme.accentAmber,
+                      ),
+                      StatCard(
+                        title: 'Valor Pagado en Premios',
+                        value: currency.format(winnerVM.totalPrizesPaid),
+                        subtitle: '${winnerVM.totalWinnersCount} Ganadores oficiales',
+                        icon: Icons.card_giftcard,
+                        iconColor: AppTheme.secondaryEmerald,
+                      ),
+                      StatCard(
+                        title: authVM.isAsesor ? 'Mis Ganancias Generadas' : 'Comisiones Pagadas a Asesores',
+                        value: currency.format(totalAdvisorsCommission),
+                        subtitle: authVM.isAsesor ? 'Ganancia por mi gestión' : 'Comisiones totales liquidadas',
+                        icon: Icons.workspace_premium,
+                        iconColor: Colors.purple,
+                      ),
+                      StatCard(
+                        title: 'Pozo Acumulado',
+                        value: currency.format(winnerVM.totalAccumulatedAmount),
+                        subtitle: '${winnerVM.accumulatedCount} Sorteos sin ganador',
+                        icon: Icons.emoji_events,
+                        iconColor: AppTheme.dangerRose,
+                      ),
+                    ];
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
+                      children: cards.map((c) => SizedBox(width: itemWidth, child: c)).toList(),
                     );
                   },
                 ),
-
-                const SizedBox(height: 24),
-
+                SizedBox(height: isMobile ? 16 : 24),
                 Card(
+                  margin: EdgeInsets.zero,
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(isMobile ? 16 : 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              authVM.isAsesor ? 'Mi Avance de Ventas' : 'Avance de Ventas Global',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            Flexible(
+                              child: Text(
+                                authVM.isAsesor ? 'Mi Avance de Ventas' : 'Avance de Ventas Global',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
                             ),
                             Text(
                               '${(progress * 100).toStringAsFixed(1)}%',
@@ -272,8 +282,10 @@ class DashboardScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        Wrap(
+                          alignment: WrapAlignment.spaceAround,
+                          spacing: 16,
+                          runSpacing: 10,
                           children: [
                             _buildProgressLegend('Disponibles', countDisponibles, Colors.grey),
                             _buildProgressLegend('Apartadas', countReservadas, Colors.purple),
@@ -286,9 +298,7 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 24),
-
+                SizedBox(height: isMobile ? 16 : 24),
                 Row(
                   children: [
                     if (authVM.isAdmin)
@@ -296,8 +306,8 @@ class DashboardScreen extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: () => onNavigateTab(2),
                           icon: const Icon(Icons.people),
-                          label: const Text('Gestionar Asesores'),
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                          label: const Text('Gestionar Asesores', textAlign: TextAlign.center),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8)),
                         ),
                       )
                     else
@@ -305,8 +315,8 @@ class DashboardScreen extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: () => onNavigateTab(1),
                           icon: const Icon(Icons.grid_on),
-                          label: const Text('Ver Mis Boletas'),
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                          label: const Text('Ver Mis Boletas', textAlign: TextAlign.center),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8)),
                         ),
                       ),
                     const SizedBox(width: 12),
@@ -314,13 +324,13 @@ class DashboardScreen extends StatelessWidget {
                       child: OutlinedButton.icon(
                         onPressed: () => onNavigateTab(authVM.isAdmin ? 4 : 2),
                         icon: const Icon(Icons.emoji_events),
-                        label: const Text('Consultar Ganadores'),
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                        label: const Text('Consultar Ganadores', textAlign: TextAlign.center),
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8)),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                SizedBox(height: isMobile ? 16 : 24),
                 const CommissionDashboardView(),
               ],
             ),
@@ -334,6 +344,7 @@ class DashboardScreen extends StatelessWidget {
     return Column(
       children: [
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
             const SizedBox(width: 6),

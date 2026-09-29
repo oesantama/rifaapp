@@ -70,7 +70,8 @@ class ExcelCsvHelper {
       Sheet instSheet = excel['Instrucciones_Uso'];
       instSheet.appendRow([TextCellValue('Parametro'), TextCellValue('Detalle')]);
       instSheet.appendRow([TextCellValue('NumeroBoleta'), TextCellValue('Número consecutivo de la boleta (1, 2, 3...)')]);
-      instSheet.appendRow([TextCellValue('Numero_1..$opps'), TextCellValue('Números de oportunidad asignados a esa boleta (formato de $digits dígitos).')]);
+      instSheet.appendRow(
+          [TextCellValue('Numero_1..$opps'), TextCellValue('Números de oportunidad asignados a esa boleta (formato de $digits dígitos).')]);
 
       var fileBytes = excel.save();
       if (fileBytes != null) {
@@ -158,16 +159,9 @@ class ExcelCsvHelper {
 
       // HOJA 2: Estados_Permitidos (Maestra de Estados)
       Sheet statesSheet = excel['Estados_Permitidos'];
-      statesSheet.appendRow([
-        TextCellValue('Estado'),
-        TextCellValue('Etiqueta'),
-        TextCellValue('Descripción / Cuándo Usar')
-      ]);
-      statesSheet.appendRow([
-        TextCellValue('PAGADA'),
-        TextCellValue('Pagada Total'),
-        TextCellValue('La boleta ha sido cancelada al 100% por el comprador.')
-      ]);
+      statesSheet.appendRow([TextCellValue('Estado'), TextCellValue('Etiqueta'), TextCellValue('Descripción / Cuándo Usar')]);
+      statesSheet.appendRow(
+          [TextCellValue('PAGADA'), TextCellValue('Pagada Total'), TextCellValue('La boleta ha sido cancelada al 100% por el comprador.')]);
       statesSheet.appendRow([
         TextCellValue('ABONO_PARCIAL'),
         TextCellValue('Abono Parcial'),
@@ -181,12 +175,8 @@ class ExcelCsvHelper {
 
       // HOJA 3: Asesores_Registrados (Maestra de Asesores)
       Sheet advSheet = excel['Asesores_Registrados'];
-      advSheet.appendRow([
-        TextCellValue('CedulaAsesor'),
-        TextCellValue('NombreAsesor'),
-        TextCellValue('Telefono'),
-        TextCellValue('ModoTrabajo')
-      ]);
+      advSheet.appendRow(
+          [TextCellValue('CedulaAsesor'), TextCellValue('NombreAsesor'), TextCellValue('Telefono'), TextCellValue('ModoTrabajo')]);
 
       if (advisors != null && advisors.isNotEmpty) {
         for (var adv in advisors) {
@@ -198,18 +188,10 @@ class ExcelCsvHelper {
           ]);
         }
       } else {
-        advSheet.appendRow([
-          TextCellValue('ADV01'),
-          TextCellValue('Carlos Mendoza'),
-          TextCellValue('3001234567'),
-          TextCellValue('Pool General')
-        ]);
-        advSheet.appendRow([
-          TextCellValue('ADV02'),
-          TextCellValue('Maria Fernanda Gomez'),
-          TextCellValue('3159876543'),
-          TextCellValue('Asignación Fija')
-        ]);
+        advSheet.appendRow(
+            [TextCellValue('ADV01'), TextCellValue('Carlos Mendoza'), TextCellValue('3001234567'), TextCellValue('Pool General')]);
+        advSheet.appendRow(
+            [TextCellValue('ADV02'), TextCellValue('Maria Fernanda Gomez'), TextCellValue('3159876543'), TextCellValue('Asignación Fija')]);
       }
 
       var fileBytes = excel.save();
@@ -224,46 +206,10 @@ class ExcelCsvHelper {
 
   static String _generateSoldTicketsTemplateCsvString() {
     List<List<dynamic>> rows = [
-      [
-        'NumeroBoleta',
-        'NombreComprador',
-        'TelefonoComprador',
-        'MontoAbonado',
-        'NombreAsesor',
-        'CedulaAsesor',
-        'Estado',
-        'Observaciones'
-      ],
-      [
-        1,
-        'Juan Pérez',
-        '3114445566',
-        50000,
-        'Carlos Mendoza',
-        'ADV01',
-        'PAGADA',
-        'Pago completo boleta 1'
-      ],
-      [
-        2,
-        'María Rodríguez',
-        '3009876543',
-        10000,
-        'Carlos Mendoza',
-        'ADV01',
-        'ABONO_PARCIAL',
-        'Abono inicial 10 mil pesos'
-      ],
-      [
-        3,
-        'Pedro Gómez',
-        '3201112233',
-        0,
-        'María Gomez',
-        'ADV02',
-        'RESERVADA',
-        'Boleta apartada sin abono'
-      ],
+      ['NumeroBoleta', 'NombreComprador', 'TelefonoComprador', 'MontoAbonado', 'NombreAsesor', 'CedulaAsesor', 'Estado', 'Observaciones'],
+      [1, 'Juan Pérez', '3114445566', 50000, 'Carlos Mendoza', 'ADV01', 'PAGADA', 'Pago completo boleta 1'],
+      [2, 'María Rodríguez', '3009876543', 10000, 'Carlos Mendoza', 'ADV01', 'ABONO_PARCIAL', 'Abono inicial 10 mil pesos'],
+      [3, 'Pedro Gómez', '3201112233', 0, 'María Gomez', 'ADV02', 'RESERVADA', 'Boleta apartada sin abono'],
     ];
     return _rowsToCsv(rows);
   }

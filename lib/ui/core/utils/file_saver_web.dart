@@ -13,7 +13,7 @@ void saveAndDownloadBytes(String filename, List<int> bytes, {String? mimeType}) 
   final anchor = html.AnchorElement(href: url)
     ..setAttribute('download', filename)
     ..style.display = 'none';
-  
+
   html.document.body?.children.add(anchor);
   anchor.click();
   anchor.remove();

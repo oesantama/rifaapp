@@ -60,11 +60,11 @@ class _LoginViewState extends State<LoginView> {
       builder: (ctx) {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: const [
+          title: const Row(
+            children: [
               Icon(Icons.lock_reset, color: AppTheme.primaryBlue),
               SizedBox(width: 10),
-              Text('Recuperar Contraseña', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Expanded(child: Text('Recuperar Contraseña', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
             ],
           ),
           content: Column(
@@ -73,7 +73,7 @@ class _LoginViewState extends State<LoginView> {
             children: [
               const Text(
                 'Ingrese su usuario o correo electrónico registrado. El sistema le enviará instrucciones de restablecimiento.',
-                style: TextStyle(fontSize: 13, color: Colors.black87),
+                style: TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -114,249 +114,273 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 420;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 460),
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 35,
-                  offset: const Offset(0, 15),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Professional Header Logo / Badge
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppTheme.primaryBlue, Colors.indigo.shade800],
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.primaryBlue.withValues(alpha: 0.4),
-                          blurRadius: 15,
-                          offset: const Offset(0, 6),
-                        )
-                      ],
-                    ),
-                    child: const Icon(Icons.confirmation_number, size: 42, color: Colors.white),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'RIFA MASTER',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Sistema Profesional de Control de Rifas, Juegos y Espectáculos',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w400),
-                ),
-                const SizedBox(height: 28),
-
-                // Role selector toggle
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedRole = UserRole.admin;
-                              _userController.text = 'admin';
-                              _passwordController.text = '1234';
-                              _errorMessage = null;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == UserRole.admin ? AppTheme.primaryBlue : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.admin_panel_settings, size: 18, color: _selectedRole == UserRole.admin ? Colors.white : Colors.grey),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Administrador',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: _selectedRole == UserRole.admin ? Colors.white : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedRole = UserRole.asesor;
-                              _userController.text = 'ADV01';
-                              _passwordController.text = '1234';
-                              _errorMessage = null;
-                            });
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == UserRole.asesor ? AppTheme.primaryBlue : Colors.transparent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.person, size: 18, color: _selectedRole == UserRole.asesor ? Colors.white : Colors.grey),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Asesor / Vendedor',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: _selectedRole == UserRole.asesor ? Colors.white : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Username / Email Input Field
-                Text(
-                  _selectedRole == UserRole.admin ? 'Usuario o Correo (Admin):' : 'Usuario / Cédula / Correo (Asesor):',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _userController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(_selectedRole == UserRole.admin ? Icons.admin_panel_settings_outlined : Icons.person_outline, color: Colors.grey),
-                    hintText: _selectedRole == UserRole.admin ? 'Ej: admin o admin@rifamaster.com' : 'Ej: ADV01 o correo',
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Password Input Field
-                const Text(
-                  'Contraseña / Clave de Acceso:',
-                  style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
-                    ),
-                    hintText: 'Ingrese su contraseña',
-                    filled: true,
-                    fillColor: const Color(0xFF0F172A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  ),
-                  onSubmitted: (_) => _handleLogin(),
-                ),
-
-                // Password Recovery Link
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _showPasswordRecoveryDialog,
-                    child: const Text(
-                      '¿Olvidó su contraseña?',
-                      style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ),
-
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.dangerRose.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.dangerRose.withValues(alpha: 0.5)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.dangerRose, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(_errorMessage!, style: const TextStyle(color: AppTheme.dangerRose, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: isCompact ? 16 : 24, vertical: 24),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 460),
+              padding: EdgeInsets.symmetric(horizontal: isCompact ? 20 : 32, vertical: isCompact ? 28 : 32),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 35,
+                    offset: const Offset(0, 15),
                   ),
                 ],
-
-                const SizedBox(height: 20),
-
-                // Submit button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleLogin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text(
-                          _selectedRole == UserRole.admin ? 'INGRESAR COMO ADMINISTRADOR' : 'INGRESAR COMO ASESOR',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Professional Header Logo / Badge
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppTheme.primaryBlue, Colors.indigo.shade800],
                         ),
-                ),
-              ],
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.4),
+                            blurRadius: 15,
+                            offset: const Offset(0, 6),
+                          )
+                        ],
+                      ),
+                      child: const Icon(Icons.confirmation_number, size: 42, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'RIFA MASTER',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Sistema Profesional de Control de Rifas, Juegos y Espectáculos',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w400),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Role selector toggle
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedRole = UserRole.admin;
+                                _userController.text = 'admin';
+                                _passwordController.text = '1234';
+                                _errorMessage = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                              decoration: BoxDecoration(
+                                color: _selectedRole == UserRole.admin ? AppTheme.primaryBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.admin_panel_settings,
+                                      size: 18, color: _selectedRole == UserRole.admin ? Colors.white : Colors.grey),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'Administrador',
+                                        maxLines: 1,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: _selectedRole == UserRole.admin ? Colors.white : Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _selectedRole = UserRole.asesor;
+                                _userController.text = 'ADV01';
+                                _passwordController.text = '1234';
+                                _errorMessage = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+                              decoration: BoxDecoration(
+                                color: _selectedRole == UserRole.asesor ? AppTheme.primaryBlue : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.person, size: 18, color: _selectedRole == UserRole.asesor ? Colors.white : Colors.grey),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'Asesor / Vendedor',
+                                        maxLines: 1,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: _selectedRole == UserRole.asesor ? Colors.white : Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Username / Email Input Field
+                  Text(
+                    _selectedRole == UserRole.admin ? 'Usuario o Correo (Admin):' : 'Usuario / Cédula / Correo (Asesor):',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _userController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(_selectedRole == UserRole.admin ? Icons.admin_panel_settings_outlined : Icons.person_outline,
+                          color: Colors.grey),
+                      hintText: _selectedRole == UserRole.admin ? 'Ej: admin o admin@rifamaster.com' : 'Ej: ADV01 o correo',
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password Input Field
+                  const Text(
+                    'Contraseña / Clave de Acceso:',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      hintText: 'Ingrese su contraseña',
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                    onSubmitted: (_) => _handleLogin(),
+                  ),
+
+                  // Password Recovery Link
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _showPasswordRecoveryDialog,
+                      child: const Text(
+                        '¿Olvidó su contraseña?',
+                        style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.dangerRose.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.dangerRose.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: AppTheme.dangerRose, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_errorMessage!,
+                                style: const TextStyle(color: AppTheme.dangerRose, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 20),
+
+                  // Submit button
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              _selectedRole == UserRole.admin ? 'INGRESAR COMO ADMINISTRADOR' : 'INGRESAR COMO ASESOR',
+                              maxLines: 1,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

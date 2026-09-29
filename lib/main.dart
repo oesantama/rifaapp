@@ -126,9 +126,13 @@ class _MainShellScreenState extends State<MainShellScreen> {
       _selectedIndex = 0;
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final showMobileContextBar = screenWidth < 700 && !authVM.isSuperAdmin;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 8,
+        bottom: showMobileContextBar ? _buildMobileContextBar(context, authVM, raffleVM) : null,
         title: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
@@ -171,7 +175,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   ),
                 ],
                 if (isWide) const Spacer(),
-                if (isMedium) ...[
+                if (isMedium && (isWide || authVM.isSuperAdmin)) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -239,9 +243,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                             : (authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2)),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: authVM.isSuperAdmin
-                              ? Colors.purpleAccent
-                              : (authVM.isAdmin ? Colors.amber : Colors.blue),
+                          color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.blue),
                           width: 1,
                         ),
                       ),
@@ -249,28 +251,20 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            authVM.isSuperAdmin
-                                ? Icons.verified_user
-                                : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
+                            authVM.isSuperAdmin ? Icons.verified_user : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
                             size: 14,
-                            color: authVM.isSuperAdmin
-                                ? Colors.purpleAccent
-                                : (authVM.isAdmin ? Colors.amber : Colors.blue),
+                            color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.blue),
                           ),
                           if (!isMobile) ...[
                             const SizedBox(width: 4),
                             Text(
                               authVM.isSuperAdmin
                                   ? authVM.currentUserName
-                                  : (authVM.isAdmin
-                                      ? authVM.currentUserName
-                                      : authVM.currentUserName),
+                                  : (authVM.isAdmin ? authVM.currentUserName : authVM.currentUserName),
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: authVM.isSuperAdmin
-                                    ? Colors.purpleAccent
-                                    : (authVM.isAdmin ? Colors.amber : Colors.white),
+                                color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.white),
                               ),
                             ),
                           ],
@@ -424,6 +418,73 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         ],
             )
           : null,
+    );
+  }
+
+  /// Compact bar shown under the AppBar on phones so the company and the
+  /// active raffle selector stay reachable (on wide screens they live in the title).
+  PreferredSizeWidget _buildMobileContextBar(BuildContext context, AuthViewModel authVM, RaffleViewModel raffleVM) {
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(44),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.apartment_rounded, color: Colors.amber.shade300, size: 16),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.3),
+              child: Text(
+                authVM.companyName.toUpperCase(),
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Container(
+              width: 1,
+              height: 20,
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              color: Colors.white24,
+            ),
+            const Icon(Icons.confirmation_number_outlined, color: Colors.white70, size: 16),
+            const SizedBox(width: 6),
+            Expanded(
+              child: raffleVM.raffles.isEmpty
+                  ? const Text(
+                      'Sin sorteos',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        value: raffleVM.selectedRaffle?.id,
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
+                        items: raffleVM.raffles.map((r) {
+                          String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴]' : '';
+                          return DropdownMenuItem(
+                            value: r.id,
+                            child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
+                            raffleVM.selectRaffle(selected);
+                            Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
+                          }
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
