@@ -49,6 +49,10 @@ const staticDir = fs.existsSync(publicDir) ? publicDir : (fs.existsSync(webDir) 
 
 if (staticDir) {
   app.use(express.static(staticDir));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
 }
 
 // Initial Database structure
