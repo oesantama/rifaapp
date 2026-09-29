@@ -145,37 +145,43 @@ function loadDB() {
       const data = fs.readFileSync(DB_FILE, 'utf8');
       db = JSON.parse(data);
     } else {
-      generateInitialTickets();
+      db = {
+        companies: [],
+        raffles: [],
+        tickets: [],
+        advisors: [],
+        winners: [],
+        cashTransactions: [],
+        logs: []
+      };
       saveDB();
     }
   } catch (err) {
     console.error('Error loading DB:', err);
-    generateInitialTickets();
+    db = {
+      companies: [],
+      raffles: [],
+      tickets: [],
+      advisors: [],
+      winners: [],
+      cashTransactions: [],
+      logs: []
+    };
   }
 
   // Ensure DB arrays exist
-  if (!db.companies) {
-    db.companies = [
-      {
-        id: 'comp-1',
-        name: 'Empresa Principal (San Martín)',
-        code: 'EMP01',
-        status: 'ACTIVA',
-        adminUsername: 'ADMIN',
-        adminPassword: '123',
-        adminName: 'Administrador General',
-        adminEmail: 'admin@rifas.com',
-        createdAt: new Date().toISOString()
-      }
-    ];
-  }
-
+  if (!db.companies) db.companies = [];
   if (!db.raffles) db.raffles = [];
+  if (!db.tickets) db.tickets = [];
+  if (!db.advisors) db.advisors = [];
+  if (!db.winners) db.winners = [];
+  if (!db.cashTransactions) db.cashTransactions = [];
+  if (!db.logs) db.logs = [];
+
   db.raffles.forEach(r => {
     if (!r.companyId) r.companyId = 'comp-1';
   });
 
-  if (!db.advisors) db.advisors = [];
   db.advisors.forEach(a => {
     if (!a.companyId) a.companyId = 'comp-1';
   });
