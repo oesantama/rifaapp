@@ -10,6 +10,7 @@ import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/utils/file_saver_web.dart' if (dart.library.io) 'package:rifaapp/ui/core/utils/file_saver_stub.dart';
 import 'dart:html' if (dart.library.io) 'file_saver_stub.dart' as html_shim;
@@ -48,6 +49,8 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   final ScrollController _scrollController = ScrollController();
 
+  List<Ticket> _allRaffleTickets = [];
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +64,20 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       _fontSize = (config['fontSize'] as num?)?.toDouble() ?? 10.0;
       _dotScale = (config['dotScale'] as num?)?.toDouble() ?? 1.0;
     }
+
+    _loadRaffleTickets();
+  }
+
+  void _loadRaffleTickets() async {
+    try {
+      final repo = RaffleRepository();
+      final fetched = await repo.fetchTickets(raffleId: widget.raffle.id);
+      if (mounted) {
+        setState(() {
+          _allRaffleTickets = fetched;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -180,16 +197,35 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     }
   }
 
-  /// Check if a 2-digit number ("00" to "99") is sold/taken (FIADO, ABONADO, PAGADO, CONFIRMADO, RESERVADO)
-  bool _isNumberSold(String numStr, List<Ticket> tickets) {
+  /// Check if a 2-digit number ("00" to "99") is sold/taken (FIADO, APARTADO, ABONADO, PAGADO, CONFIRMADO, RESERVADO)
+  Ticket? _getTicketForNumber(String numStr, List<Ticket> ticketsList) {
+    final tickets = _allRaffleTickets.isNotEmpty ? _allRaffleTickets : ticketsList;
+    final cleanTarget = numStr.trim();
+    final targetInt = int.tryParse(cleanTarget);
+
     for (var ticket in tickets) {
-      if (ticket.status != 'DISPONIBLE') {
-        if (ticket.numbers.contains(numStr)) {
-          return true;
+      if (ticket.status != 'DISPONIBLE' && ticket.status.isNotEmpty) {
+        for (var n in ticket.numbers) {
+          final cleanN = n.trim();
+          // 1. Exact string match (e.g. '58' == '58')
+          if (cleanN == cleanTarget) return ticket;
+          // 2. Padded 2-digit match (e.g. '8' -> '08')
+          if (cleanN.padLeft(2, '0') == cleanTarget) return ticket;
+          // 3. Last 2 digits match (e.g. '0058' -> '58', '2558' -> '58')
+          if (cleanN.length >= 2 && cleanN.substring(cleanN.length - 2) == cleanTarget) return ticket;
+          // 4. Integer numeric match (e.g. 58 == 58 or 2558 % 100 == 58)
+          final nInt = int.tryParse(cleanN);
+          if (targetInt != null && nInt != null) {
+            if (nInt == targetInt || nInt % 100 == targetInt) return ticket;
+          }
         }
       }
     }
-    return false;
+    return null;
+  }
+
+  bool _isNumberSold(String numStr, List<Ticket> tickets) {
+    return _getTicketForNumber(numStr, tickets) != null;
   }
 
   @override
@@ -789,6 +825,8 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   /// 10x10 Grid representation of 100 numbers (00 to 99)
   Widget _build10x10NumbersGrid(List<Ticket> tickets, {required bool isDarkTheme}) {
+    final activeTickets = _allRaffleTickets.isNotEmpty ? _allRaffleTickets : tickets;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(10, (rowIndex) {
@@ -797,7 +835,8 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
           children: List.generate(10, (colIndex) {
             int numInt = rowIndex * 10 + colIndex;
             String numStr = numInt.toString().padLeft(2, '0');
-            bool isSold = _isNumberSold(numStr, tickets);
+            Ticket? matchedTicket = _getTicketForNumber(numStr, activeTickets);
+            bool isSold = matchedTicket != null;
 
             return Expanded(
               child: Container(
@@ -821,19 +860,20 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                       ),
                     ),
 
-                    // Red Circle Overlay for SOLD numbers (Fiado, Abonado, Pagado, Reservado)
+                    // Red Circle Overlay for TAKEN numbers (Fiadas, Apartadas, Abonadas, Pagadas, Reservadas)
                     if (isSold)
                       Transform.scale(
                         scale: _dotScale,
                         child: Container(
-                          width: _cellHeight * 0.75,
-                          height: _cellHeight * 0.75,
+                          width: _cellHeight * 0.78,
+                          height: _cellHeight * 0.78,
                           decoration: BoxDecoration(
-                            color: Colors.red.shade600.withOpacity(0.92),
+                            color: Colors.red.shade600.withOpacity(0.95),
                             shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.red.withOpacity(0.4),
+                                color: Colors.black.withOpacity(0.4),
                                 blurRadius: 3,
                                 offset: const Offset(0, 1),
                               ),
@@ -843,7 +883,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                             child: Icon(
                               Icons.close,
                               color: Colors.white,
-                              size: _cellHeight * 0.45,
+                              size: _cellHeight * 0.50,
                             ),
                           ),
                         ),
