@@ -2,6 +2,8 @@
 node_modules/
 backend/node_modules/
 *.env
+serviceAccountKey.json
+backend/serviceAccountKey.json
 
 # Miscellaneous
 *.class
