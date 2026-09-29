@@ -1,5 +1,8 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/raffle.dart';
@@ -8,6 +11,7 @@ import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
+import 'package:rifaapp/ui/core/utils/file_saver_web.dart' if (dart.library.io) 'package:rifaapp/ui/core/utils/file_saver_stub.dart';
 import 'dart:html' if (dart.library.io) 'file_saver_stub.dart' as html_shim;
 
 const Color goldAccent = Color(0xFFD4AF37);
@@ -25,8 +29,10 @@ class RafflePoster2dDialog extends StatefulWidget {
 }
 
 class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
+  final GlobalKey _posterKey = GlobalKey();
   String? _bgImageBase64;
   bool _showCustomControls = true;
+  bool _isExportingImage = false;
 
   // Custom positioning & sizing controls for background & grid
   double _gridTopPercent = 0.50; // vertical position (0.10 to 0.85)
@@ -125,6 +131,44 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     }
   }
 
+  void _downloadPosterAsImage() async {
+    setState(() => _isExportingImage = true);
+    try {
+      await Future.delayed(const Duration(milliseconds: 150));
+      RenderRepaintBoundary? boundary = _posterKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary != null) {
+        ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+        ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) {
+          Uint8List pngBytes = byteData.buffer.asUint8List();
+          saveAndDownloadBytes(
+            'afiche_rifa_2d_${widget.raffle.id}.png',
+            pngBytes,
+            mimeType: 'image/png',
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                backgroundColor: AppTheme.secondaryEmerald,
+                content: Text('✓ Afiche ajustado descargado exitosamente como imagen PNG (Alta Definición).'),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('Error al descargar imagen: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExportingImage = false);
+      }
+    }
+  }
+
   void _triggerPrint() {
     try {
       // ignore: undefined_prefix_name
@@ -156,7 +200,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 980,
+        width: 1020,
         height: MediaQuery.of(context).size.height * 0.95,
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -254,16 +298,35 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                     ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: _triggerPrint,
-                  icon: const Icon(Icons.print, size: 18),
-                  label: const Text('Imprimir / Guardar PDF'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.secondaryEmerald,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _isExportingImage ? null : _downloadPosterAsImage,
+                      icon: _isExportingImage
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.download, size: 18),
+                      label: const Text('Descargar Imagen PNG (HD)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6), // Purple accent
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _triggerPrint,
+                      icon: const Icon(Icons.print, size: 18),
+                      label: const Text('Imprimir / Guardar PDF'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.secondaryEmerald,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -429,7 +492,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
             const SizedBox(height: 10),
 
-            // CANVAS / POSTER DISPLAY (SCROLLABLE & ZOOMABLE)
+            // CANVAS / POSTER DISPLAY (SCROLLABLE & ZOOMABLE WITH REPAINTBOUNDARY)
             Expanded(
               child: Consumer<TicketViewModel>(
                 builder: (context, ticketVM, _) {
@@ -454,9 +517,12 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                           child: Transform.scale(
                             scale: _posterScale,
                             alignment: Alignment.topCenter,
-                            child: _bgImageBase64 != null
-                                ? _buildCustomTemplatePoster(context, tickets)
-                                : _buildDefaultLuxuryPoster(context, tickets, currency),
+                            child: RepaintBoundary(
+                              key: _posterKey,
+                              child: _bgImageBase64 != null
+                                  ? _buildCustomTemplatePoster(context, tickets)
+                                  : _buildDefaultLuxuryPoster(context, tickets, currency),
+                            ),
                           ),
                         ),
                       ),
