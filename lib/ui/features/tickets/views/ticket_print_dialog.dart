@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
-import 'dart:html' if (dart.library.io) 'file_saver_stub.dart' as html_shim;
+import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
 class TicketPrintDialog extends StatefulWidget {
   final Ticket ticket;
@@ -52,8 +52,7 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
 
   void _triggerPrint() {
     try {
-      // ignore: undefined_prefix_name
-      html_shim.window.print();
+      web_launcher.printPage();
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Para imprimir, presione Ctrl+P en su navegador.')),

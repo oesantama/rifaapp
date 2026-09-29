@@ -12,8 +12,8 @@ class LoginView extends StatefulWidget {
 
 class _LoginViewState extends State<LoginView> {
   UserRole _selectedRole = UserRole.admin;
-  final TextEditingController _userController = TextEditingController(text: 'admin');
-  final TextEditingController _passwordController = TextEditingController(text: '1234');
+  final TextEditingController _userController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String? _errorMessage;
   bool _isLoading = false;
