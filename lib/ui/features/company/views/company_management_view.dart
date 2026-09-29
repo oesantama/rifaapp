@@ -179,6 +179,175 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     );
   }
 
+  void _showEditCompanyDialog(Company company) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: company.name);
+    final codeController = TextEditingController(text: company.code);
+    final adminNameController = TextEditingController(text: company.adminName);
+    final adminEmailController = TextEditingController(text: company.adminEmail);
+    final adminUsernameController = TextEditingController(text: company.adminUsername);
+    final adminPasswordController = TextEditingController(text: company.adminPassword);
+    String selectedStatus = company.status;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.edit_square, color: AppTheme.primaryBlue),
+                  SizedBox(width: 10),
+                  Text('Editar Empresa / Grupo'),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Container(
+                  width: 500,
+                  padding: const EdgeInsets.all(8),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre de la Empresa / Grupo *',
+                            prefixIcon: Icon(Icons.apartment),
+                          ),
+                          validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: codeController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Código Identificador',
+                                  prefixIcon: Icon(Icons.qr_code),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                value: selectedStatus,
+                                decoration: const InputDecoration(
+                                  labelText: 'Estado',
+                                  prefixIcon: Icon(Icons.toggle_on),
+                                ),
+                                items: const [
+                                  DropdownMenuItem(value: 'ACTIVA', child: Text('🟢 ACTIVA')),
+                                  DropdownMenuItem(value: 'INACTIVA', child: Text('🔴 INACTIVA')),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) setDialogState(() => selectedStatus = val);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const Text(
+                          '👤 Credenciales del Administrador:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryDark),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: adminNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre Completo del Admin',
+                            prefixIcon: Icon(Icons.person),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: adminEmailController,
+                          decoration: const InputDecoration(
+                            labelText: 'Correo Electrónico',
+                            prefixIcon: Icon(Icons.email),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: adminUsernameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Usuario Admin *',
+                                  prefixIcon: Icon(Icons.account_circle),
+                                ),
+                                validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: adminPasswordController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Contraseña *',
+                                  prefixIcon: Icon(Icons.lock),
+                                ),
+                                validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      final updateData = {
+                        'name': nameController.text.trim(),
+                        'code': codeController.text.trim(),
+                        'status': selectedStatus,
+                        'adminName': adminNameController.text.trim(),
+                        'adminEmail': adminEmailController.text.trim(),
+                        'adminUsername': adminUsernameController.text.trim(),
+                        'adminPassword': adminPasswordController.text.trim(),
+                      };
+                      Navigator.pop(context);
+                      Company? updated = await _apiService.updateCompany(company.id, updateData);
+                      if (updated != null) {
+                        _loadCompanies();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.secondaryEmerald,
+                              content: Text('✓ Empresa "${updated.name}" actualizada correctamente.'),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.save),
+                  label: const Text('Guardar Cambios'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredCompanies = _companies.where((c) {
@@ -326,9 +495,20 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                   ],
                                 ),
                               ),
-                              trailing: Chip(
-                                label: Text(comp.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
-                                backgroundColor: comp.status == 'ACTIVA' ? AppTheme.secondaryEmerald : Colors.grey,
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Chip(
+                                    label: Text(comp.status, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                                    backgroundColor: comp.status == 'ACTIVA' ? AppTheme.secondaryEmerald : Colors.grey,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryBlue, size: 24),
+                                    tooltip: 'Editar Empresa y Admin',
+                                    onPressed: () => _showEditCompanyDialog(comp),
+                                  ),
+                                ],
                               ),
                             ),
                           );
