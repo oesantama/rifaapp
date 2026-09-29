@@ -2,10 +2,42 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+let admin;
+try {
+  admin = require('firebase-admin');
+} catch (e) {
+  admin = null;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'data.json');
+
+// Initialize Firebase Admin if credentials present
+let firestore = null;
+try {
+  let serviceAccount = null;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  } else {
+    const keyPath = path.join(__dirname, 'serviceAccountKey.json');
+    if (fs.existsSync(keyPath)) {
+      serviceAccount = require(keyPath);
+    }
+  }
+
+  if (serviceAccount && admin) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    firestore = admin.firestore();
+    console.log('✅ Conectado exitosamente a Google Cloud Firestore (100% Gratis)');
+  } else {
+    console.log('ℹ️ Firebase no configurado. Usando almacenamiento local data.json');
+  }
+} catch (err) {
+  console.warn('⚠️ No se pudo conectar a Firebase, usando data.json local:', err.message);
+}
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -139,22 +171,38 @@ function generateInitialTickets() {
 }
 
 // File persistence helpers
-function loadDB() {
+async function loadDB() {
+  if (firestore) {
+    try {
+      const doc = await firestore.collection('rifaapp').doc('database').get();
+      if (doc.exists) {
+        db = doc.data();
+        console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
+      } else {
+        console.log('ℹ️ No hay datos previos en Firestore, inicializando base de datos...');
+      }
+    } catch (e) {
+      console.error('Error cargando datos desde Firestore:', e.message);
+    }
+  }
+
   try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf8');
-      db = JSON.parse(data);
-    } else {
-      db = {
-        companies: [],
-        raffles: [],
-        tickets: [],
-        advisors: [],
-        winners: [],
-        cashTransactions: [],
-        logs: []
-      };
-      saveDB();
+    if (!db || (!db.raffles && !db.tickets)) {
+      if (fs.existsSync(DB_FILE)) {
+        const data = fs.readFileSync(DB_FILE, 'utf8');
+        db = JSON.parse(data);
+      } else {
+        db = {
+          companies: [],
+          raffles: [],
+          tickets: [],
+          advisors: [],
+          winners: [],
+          cashTransactions: [],
+          logs: []
+        };
+        saveDB();
+      }
     }
   } catch (err) {
     console.error('Error loading DB:', err);
@@ -191,10 +239,17 @@ function saveDB() {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
   } catch (err) {
-    console.error('Error saving DB:', err);
+    console.error('Error saving local DB:', err);
+  }
+
+  if (firestore) {
+    firestore.collection('rifaapp').doc('database').set(db).catch(err => {
+      console.error('Error respaldando datos en Cloud Firestore:', err.message);
+    });
   }
 }
 
+// Initial DB load
 loadDB();
 
 // API Routes
