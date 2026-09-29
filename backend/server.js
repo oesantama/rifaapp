@@ -1160,4 +1160,22 @@ app.post('/api/commissions/payout', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
+
+  // Keep-Alive Self-Ping Interval (Mantiene el servidor despiazado 24/7 en Render gratis)
+  const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://rifaapp-backend.onrender.com';
+  const https = require('https');
+  const http = require('http');
+
+  setInterval(() => {
+    try {
+      const client = RENDER_EXTERNAL_URL.startsWith('https') ? https : http;
+      client.get(`${RENDER_EXTERNAL_URL}/api/health`, (res) => {
+        console.log(`[Keep-Alive] Ping 24/7 enviado a ${RENDER_EXTERNAL_URL}/api/health (Estado: ${res.statusCode})`);
+      }).on('error', (err) => {
+        console.warn(`[Keep-Alive] Advertencia ping: ${err.message}`);
+      });
+    } catch (err) {
+      // Ignore
+    }
+  }, 8 * 60 * 1000); // Enviar ping cada 8 minutos (evita que entre en reposo tras 15 min)
 });
