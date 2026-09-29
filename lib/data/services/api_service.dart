@@ -13,59 +13,9 @@ class ApiService {
 
   bool _useLocalFallback = false;
   
-  final List<Raffle> _localRaffles = [
-    Raffle(
-      id: 'raf-1',
-      title: 'Gran Rifa Casa Campestre & Auto Okm',
-      description: 'Sorteo Principal de Fin de Año con Premios Semanales de \$1.000.000 COP',
-      mainDrawDate: '2026-12-31T20:00:00.000Z',
-      digits: 4,
-      totalTickets: 2500,
-      totalNumbers: 10000,
-      opportunitiesPerTicket: 4,
-      ticketPrice: 50000.0,
-      weeklyPrizes: [
-        WeeklyPrize(id: 'wp-1', name: 'Sorteo Semanal 1', amount: 1000000, drawDate: '2026-10-15'),
-        WeeklyPrize(id: 'wp-2', name: 'Sorteo Semanal 2', amount: 1000000, drawDate: '2026-10-22'),
-      ],
-      status: 'ACTIVA',
-      createdAt: DateTime.now().toIso8601String(),
-    )
-  ];
-
-  late final List<Ticket> _localTickets = _generateFallbackTickets(_localRaffles[0]);
-
-  final List<Advisor> _localAdvisors = [
-    Advisor(
-      id: 'adv-1',
-      name: 'Carlos Mendoza',
-      phone: '3001234567',
-      code: 'ADV01',
-      mode: 'POOL_GENERAL',
-      assignedTicketRanges: ['1-500'],
-      totalTicketsCount: 500,
-      totalSold: 2,
-      totalCollected: 70000,
-      totalConfirmed: 50000,
-      pendingTurnIn: 20000,
-      createdAt: DateTime.now().toIso8601String(),
-    ),
-    Advisor(
-      id: 'adv-2',
-      name: 'Maria Fernanda Gomez',
-      phone: '3159876543',
-      code: 'ADV02',
-      mode: 'ASSIGNED',
-      assignedTicketRanges: ['501-1000'],
-      totalTicketsCount: 500,
-      totalSold: 0,
-      totalCollected: 0,
-      totalConfirmed: 0,
-      pendingTurnIn: 0,
-      createdAt: DateTime.now().toIso8601String(),
-    ),
-  ];
-
+  final List<Raffle> _localRaffles = [];
+  late final List<Ticket> _localTickets = [];
+  final List<Advisor> _localAdvisors = [];
   final List<WinnerRecord> _localWinners = [];
 
   List<Ticket> _generateFallbackTickets(Raffle raffle) {
@@ -977,19 +927,7 @@ class ApiService {
         return data.map((c) => Company.fromJson(c)).toList();
       }
     } catch (_) {}
-    return [
-      Company(
-        id: 'comp-1',
-        name: 'Empresa Principal (San Martín)',
-        code: 'EMP01',
-        status: 'ACTIVA',
-        adminUsername: 'ADMIN',
-        adminPassword: '123',
-        adminName: 'Administrador General',
-        adminEmail: 'admin@rifas.com',
-        createdAt: DateTime.now().toIso8601String(),
-      )
-    ];
+    return [];
   }
 
   Future<Company?> createCompany(Map<String, dynamic> data) async {

@@ -61,17 +61,7 @@ class AuthViewModel extends ChangeNotifier {
     return _activeAdvisor?.code ?? '';
   }
 
-  final List<Map<String, String>> _adminUsers = [
-    {
-      'id': 'adm-1',
-      'name': 'Administrador General',
-      'email': 'admin@rifamaster.com',
-      'username': 'admin',
-      'phone': '3000000000',
-      'password': '1234',
-      'status': 'ACTIVO',
-    }
-  ];
+  final List<Map<String, String>> _adminUsers = [];
   List<Map<String, String>> get adminUsers => _adminUsers;
 
   Future<bool> loginAsAdmin(String userOrEmail, String password) async {
@@ -97,42 +87,33 @@ class AuthViewModel extends ChangeNotifier {
       return true;
     }
 
-    // Default admin check
-    if ((inputUser == 'admin' || inputUser == 'admin@rifamaster.com') && (inputPass == '1234' || inputPass == 'admin' || inputPass == '123')) {
-      _isLoggedIn = true;
-      _role = UserRole.admin;
-      _adminName = 'Administrador General';
-      _adminEmail = 'admin@rifamaster.com';
-      _adminUsername = 'admin';
-      _activeAdvisor = null;
-      notifyListeners();
-      return true;
-    }
+    // Check dynamic Company Admin accounts registered by SuperAdmin
+    try {
+      final companies = await _repository.fetchCompanies();
+      final matchedCompany = companies.firstWhere(
+        (c) => (c.adminUsername.trim().toLowerCase() == inputUser || c.adminEmail.trim().toLowerCase() == inputUser) &&
+            c.adminPassword.trim() == inputPass,
+        orElse: () => Company(id: '', name: '', code: '', status: '', adminUsername: '', adminPassword: '', adminName: '', adminEmail: '', createdAt: ''),
+      );
 
-    // Search in _adminUsers list
-    final matched = _adminUsers.firstWhere(
-      (a) =>
-          (a['username']?.toLowerCase() == inputUser || a['email']?.toLowerCase() == inputUser) &&
-          a['password'] == inputPass,
-      orElse: () => {},
-    );
+      if (matchedCompany.id.isNotEmpty) {
+        if (matchedCompany.status == 'INACTIVA') {
+          _loginErrorMessage = '⚠️ Su empresa "${matchedCompany.name}" se encuentra INACTIVA. Contacte al superadministrador.';
+          notifyListeners();
+          return false;
+        }
 
-    if (matched.isNotEmpty) {
-      if (matched['status'] == 'INHABILITADO') {
-        _loginErrorMessage = '⚠️ Su cuenta de administrador se encuentra INHABILITADA. Contacte al superadministrador.';
+        _isLoggedIn = true;
+        _role = UserRole.admin;
+        _adminName = matchedCompany.adminName;
+        _adminEmail = matchedCompany.adminEmail;
+        _adminUsername = matchedCompany.adminUsername;
+        _selectedCompanyId = matchedCompany.id;
+        _activeAdvisor = null;
         notifyListeners();
-        return false;
+        return true;
       }
-
-      _isLoggedIn = true;
-      _role = UserRole.admin;
-      _adminName = matched['name'] ?? 'Administrador';
-      _adminEmail = matched['email'] ?? '';
-      _adminUsername = matched['username'] ?? 'admin';
-      _activeAdvisor = null;
-      notifyListeners();
-      return true;
-    }
+    } catch (_) {}
 
     _loginErrorMessage = 'Usuario o contraseña de administrador incorrectos.';
     notifyListeners();
