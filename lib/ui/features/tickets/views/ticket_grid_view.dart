@@ -13,6 +13,7 @@ import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'ticket_detail_dialog.dart';
 import 'ticket_print_dialog.dart';
 import 'import_sold_tickets_dialog.dart';
+import 'raffle_poster_2d_dialog.dart';
 
 class TicketGridView extends StatefulWidget {
   const TicketGridView({super.key});
@@ -122,6 +123,17 @@ class _TicketGridViewState extends State<TicketGridView> {
                             ),
                           ),
                           tooltip: 'Importar Boletas Vendidas desde Excel (.xlsx)',
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (currentRaffle != null) ...[
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.grid_on_rounded, color: AppTheme.accentAmber),
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => RafflePoster2dDialog(raffle: currentRaffle),
+                          ),
+                          tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
                         ),
                         const SizedBox(width: 8),
                       ],

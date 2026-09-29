@@ -43,6 +43,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   late List<WeeklyPrize> _weeklyPrizes;
 
   List<Map<String, dynamic>>? _importedRecords;
+  String? _importedFileName;
 
   @override
   void initState() {

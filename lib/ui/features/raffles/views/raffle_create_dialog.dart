@@ -27,8 +27,10 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
   String _commissionType = 'PORCENTAJE'; // PORCENTAJE or VALOR_FIJO
 
   Map<int, List<String>>? _customNumbersMap;
+  String? _customNumbersFileName;
 
   List<Map<String, dynamic>>? _preSoldTicketsList;
+  String? _preSoldFileName;
 
   @override
   void dispose() {
