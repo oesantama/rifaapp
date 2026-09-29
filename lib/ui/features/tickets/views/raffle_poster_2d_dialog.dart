@@ -25,15 +25,24 @@ class RafflePoster2dDialog extends StatefulWidget {
 
 class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   String? _bgImageBase64;
-  bool _showCustomControls = false;
+  bool _showCustomControls = true;
 
   // Custom positioning controls for custom uploaded background
-  double _gridTopPercent = 0.42; // vertical position (0.0 to 1.0)
+  double _gridTopPercent = 0.54; // vertical position (0.0 to 1.0)
   double _gridWidthPercent = 0.90; // width relative to poster
   double _dotScale = 1.0; // scale for red dots
+  double _posterScale = 0.75; // Zoom scale for poster preview (0.4 to 1.2)
   final double _fontSize = 11.0;
   final bool _fillCellBg = true;
   final Color _cellBgColor = Colors.white.withOpacity(0.92);
+
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _pickBgImage() async {
     try {
@@ -89,12 +98,12 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 900,
-        height: MediaQuery.of(context).size.height * 0.92,
-        padding: const EdgeInsets.all(20),
+        width: 960,
+        height: MediaQuery.of(context).size.height * 0.95,
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             // HEADER DIALOG
@@ -109,7 +118,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                         color: goldAccent.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.grid_on_rounded, color: goldAccent, size: 28),
+                      child: const Icon(Icons.grid_on_rounded, color: goldAccent, size: 26),
                     ),
                     const SizedBox(width: 12),
                     Column(
@@ -139,106 +148,148 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                 ),
               ],
             ),
-            const Divider(height: 24),
+            const Divider(height: 16),
 
             // TOOLBAR ACTIONS
             Wrap(
-              spacing: 12,
-              runSpacing: 10,
+              spacing: 10,
+              runSpacing: 8,
               alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                ElevatedButton.icon(
-                  onPressed: _pickBgImage,
-                  icon: const Icon(Icons.upload_file, size: 20),
-                  label: Text(_bgImageBase64 == null ? 'Subir Imagen de Plantilla' : 'Cambiar Imagen de Plantilla'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                if (_bgImageBase64 != null)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _showCustomControls = !_showCustomControls;
-                      });
-                    },
-                    icon: Icon(_showCustomControls ? Icons.tune : Icons.settings_suggest, size: 20),
-                    label: Text(_showCustomControls ? 'Ocultar Ajustes Grilla' : 'Ajustar Grilla en Plantilla'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _pickBgImage,
+                      icon: const Icon(Icons.upload_file, size: 18),
+                      label: Text(_bgImageBase64 == null ? 'Subir Imagen de Plantilla' : 'Cambiar Plantilla'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _showCustomControls = !_showCustomControls;
+                        });
+                      },
+                      icon: Icon(_showCustomControls ? Icons.expand_less : Icons.tune, size: 18),
+                      label: Text(_showCustomControls ? 'Ocultar Controles' : 'Ajustar Grilla y Zoom'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
                 ElevatedButton.icon(
                   onPressed: _triggerPrint,
-                  icon: const Icon(Icons.print, size: 20),
+                  icon: const Icon(Icons.print, size: 18),
                   label: const Text('Imprimir / Guardar PDF'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.secondaryEmerald,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
               ],
             ),
 
-            // OPTIONAL CONTROLS PANEL
-            if (_showCustomControls && _bgImageBase64 != null) ...[
-              const SizedBox(height: 12),
+            // CONTROLS PANEL (COLLAPSIBLE)
+            if (_showCustomControls) ...[
+              const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.amber.shade300),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '⚙️ Ajuste de Posición y Tamaño de la Grilla sobre tu Afiche:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.brown),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '⚙️ Controles de Posición y Zoom de Vista:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.brown),
+                        ),
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => setState(() => _posterScale = 0.55),
+                              icon: const Icon(Icons.fit_screen, size: 16),
+                              label: const Text('Encajar en Pantalla', style: TextStyle(fontSize: 12)),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => setState(() => _posterScale = 1.0),
+                              icon: const Icon(Icons.zoom_in, size: 16),
+                              label: const Text('Tamaño Real (100%)', style: TextStyle(fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
+                        // Zoom Scale Slider
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Posición Vertical (Top): ${(_gridTopPercent * 100).toInt()}%'),
+                              Text('🔍 Zoom Vista: ${(_posterScale * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                               Slider(
-                                value: _gridTopPercent,
-                                min: 0.10,
-                                max: 0.80,
-                                onChanged: (v) => setState(() => _gridTopPercent = v),
+                                value: _posterScale,
+                                min: 0.40,
+                                max: 1.20,
+                                onChanged: (v) => setState(() => _posterScale = v),
                               ),
                             ],
                           ),
                         ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Ancho de Grilla: ${(_gridWidthPercent * 100).toInt()}%'),
-                              Slider(
-                                value: _gridWidthPercent,
-                                min: 0.50,
-                                max: 0.98,
-                                onChanged: (v) => setState(() => _gridWidthPercent = v),
-                              ),
-                            ],
+                        if (_bgImageBase64 != null) ...[
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('↕️ Posición Vertical: ${(_gridTopPercent * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                Slider(
+                                  value: _gridTopPercent,
+                                  min: 0.10,
+                                  max: 0.85,
+                                  onChanged: (v) => setState(() => _gridTopPercent = v),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('↔️ Ancho Grilla: ${(_gridWidthPercent * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                Slider(
+                                  value: _gridWidthPercent,
+                                  min: 0.50,
+                                  max: 0.98,
+                                  onChanged: (v) => setState(() => _gridWidthPercent = v),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Tamaño Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x'),
+                              Text('🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                               Slider(
                                 value: _dotScale,
                                 min: 0.6,
@@ -255,31 +306,38 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
               ),
             ],
 
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
-            // CANVAS / POSTER DISPLAY
+            // CANVAS / POSTER DISPLAY (SCROLLABLE & ZOOMABLE)
             Expanded(
               child: Consumer<TicketViewModel>(
                 builder: (context, ticketVM, _) {
                   final tickets = ticketVM.tickets;
 
                   return Container(
+                    width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
+                      color: Colors.grey[300],
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      border: Border.all(color: Colors.grey.shade400),
                     ),
-                    child: Center(
+                    child: Scrollbar(
+                      controller: _scrollController,
+                      thumbVisibility: true,
+                      trackVisibility: true,
                       child: SingleChildScrollView(
-                        child: _bgImageBase64 != null
-                            ? _buildCustomTemplatePoster(context, tickets)
-                            : _buildDefaultLuxuryPoster(context, tickets, currency),
+                        controller: _scrollController,
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                        child: Center(
+                          child: Transform.scale(
+                            scale: _posterScale,
+                            alignment: Alignment.topCenter,
+                            child: _bgImageBase64 != null
+                                ? _buildCustomTemplatePoster(context, tickets)
+                                : _buildDefaultLuxuryPoster(context, tickets, currency),
+                          ),
+                        ),
                       ),
                     ),
                   );
@@ -309,10 +367,9 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
         return Container(
           width: posterWidth,
           height: posterHeight,
-          margin: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 12)],
+            boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 16, offset: Offset(0, 8))],
             image: DecorationImage(
               image: imgProvider,
               fit: BoxFit.cover,
@@ -340,7 +397,6 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     return Container(
       width: 580,
       padding: const EdgeInsets.all(24),
-      margin: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -354,6 +410,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
         border: Border.all(color: goldAccent.withOpacity(0.6), width: 2),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // BANNER CORONA Y TITULO
           Row(
