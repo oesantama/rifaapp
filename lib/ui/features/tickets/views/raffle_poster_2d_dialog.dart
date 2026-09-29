@@ -539,41 +539,64 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   /// Builds custom template background with dynamic grid overlay
   Widget _buildCustomTemplatePoster(BuildContext context, List<Ticket> tickets) {
-    ImageProvider imgProvider;
-    if (_bgImageBase64!.startsWith('data:image')) {
-      imgProvider = MemoryImage(base64Decode(_bgImageBase64!.split(',').last));
-    } else {
-      imgProvider = NetworkImage(_bgImageBase64!);
+    Uint8List? bgBytes;
+    if (_bgImageBase64 != null) {
+      if (_bgImageBase64!.startsWith('data:image')) {
+        try {
+          bgBytes = base64Decode(_bgImageBase64!.split(',').last);
+        } catch (_) {}
+      } else {
+        try {
+          bgBytes = base64Decode(_bgImageBase64!);
+        } catch (_) {}
+      }
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        double posterWidth = 600;
-        double posterHeight = 900;
+    double posterWidth = 600;
+    double posterHeight = 900;
 
-        return Container(
-          width: posterWidth,
-          height: posterHeight,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 16, offset: Offset(0, 8))],
-            image: DecorationImage(
-              image: imgProvider,
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                top: posterHeight * _gridTopPercent,
-                left: posterWidth * _gridLeftPercent,
-                width: posterWidth * _gridWidthPercent,
-                child: _build10x10NumbersGrid(tickets, isDarkTheme: false),
+    return Container(
+      width: posterWidth,
+      height: posterHeight,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 16, offset: Offset(0, 8))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            // 1. Background Image Widget (explicit RenderImage for RepaintBoundary PNG capture)
+            if (bgBytes != null)
+              Positioned.fill(
+                child: Image.memory(
+                  bgBytes,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (ctx, err, stack) => Container(color: Colors.grey.shade400),
+                ),
+              )
+            else if (_bgImageBase64 != null)
+              Positioned.fill(
+                child: Image.network(
+                  _bgImageBase64!,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (ctx, err, stack) => Container(color: Colors.grey.shade400),
+                ),
               ),
-            ],
-          ),
-        );
-      },
+
+            // 2. Grid Overlay
+            Positioned(
+              top: posterHeight * _gridTopPercent,
+              left: posterWidth * _gridLeftPercent,
+              width: posterWidth * _gridWidthPercent,
+              child: _build10x10NumbersGrid(tickets, isDarkTheme: false),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
