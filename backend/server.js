@@ -42,6 +42,15 @@ try {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
+// Serve static Flutter Web SPA if present
+const publicDir = path.join(__dirname, 'public');
+const webDir = path.join(__dirname, '../build/web');
+const staticDir = fs.existsSync(publicDir) ? publicDir : (fs.existsSync(webDir) ? webDir : null);
+
+if (staticDir) {
+  app.use(express.static(staticDir));
+}
+
 // Initial Database structure
 let db = {
   auditLogs: [],
