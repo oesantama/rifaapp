@@ -152,6 +152,28 @@ function loadDB() {
     console.error('Error loading DB:', err);
     generateInitialTickets();
   }
+
+  // Ensure DB arrays exist
+  if (!db.companies) {
+    db.companies = [
+      {
+        id: 'comp-1',
+        name: 'Empresa Principal (San Martín)',
+        code: 'EMP01',
+        status: 'ACTIVA',
+        adminUsername: 'ADMIN',
+        adminPassword: '123',
+        adminName: 'Administrador General',
+        adminEmail: 'admin@rifas.com',
+        createdAt: new Date().toISOString()
+      }
+    ];
+  }
+
+  if (!db.raffles) db.raffles = [];
+  db.raffles.forEach(r => {
+    if (!r.companyId) r.companyId = 'comp-1';
+  });
 }
 
 function saveDB() {
@@ -168,13 +190,66 @@ loadDB();
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), rafflesCount: db.raffles.length, ticketsCount: db.tickets.length });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), companiesCount: (db.companies || []).length, rafflesCount: db.raffles.length, ticketsCount: db.tickets.length });
+});
+
+// GET Companies (SuperAdmin)
+app.get('/api/companies', (req, res) => {
+  res.json(db.companies || []);
+});
+
+// POST Create Company
+app.post('/api/companies', (req, res) => {
+  const { name, code, adminUsername, adminPassword, adminName, adminEmail } = req.body;
+  if (!name) {
+    return res.status(400).json({ error: 'El nombre de la empresa es obligatorio' });
+  }
+
+  const newCompany = {
+    id: `comp-${Date.now()}`,
+    name: name.trim(),
+    code: code ? code.trim().toUpperCase() : `EMP${(db.companies || []).length + 1}`,
+    status: 'ACTIVA',
+    adminUsername: adminUsername ? adminUsername.trim() : `admin_${Date.now().toString().slice(-4)}`,
+    adminPassword: adminPassword || '123',
+    adminName: adminName || 'Admin Empresa',
+    adminEmail: adminEmail || '',
+    createdAt: new Date().toISOString()
+  };
+
+  if (!db.companies) db.companies = [];
+  db.companies.push(newCompany);
+  saveDB();
+  res.status(201).json(newCompany);
+});
+
+// PUT Update Company
+app.put('/api/companies/:id', (req, res) => {
+  const { id } = req.params;
+  const company = (db.companies || []).find(c => c.id === id);
+  if (!company) {
+    return res.status(404).json({ error: 'Empresa no encontrada' });
+  }
+
+  if (req.body.name !== undefined) company.name = req.body.name;
+  if (req.body.code !== undefined) company.code = req.body.code;
+  if (req.body.status !== undefined) company.status = req.body.status;
+  if (req.body.adminUsername !== undefined) company.adminUsername = req.body.adminUsername;
+  if (req.body.adminPassword !== undefined) company.adminPassword = req.body.adminPassword;
+  if (req.body.adminName !== undefined) company.adminName = req.body.adminName;
+  if (req.body.adminEmail !== undefined) company.adminEmail = req.body.adminEmail;
+
+  saveDB();
+  res.json(company);
 });
 
 // GET Raffles
 app.get('/api/raffles', (req, res) => {
-  const { advisorId, role } = req.query;
+  const { advisorId, role, companyId } = req.query;
   let raffles = db.raffles;
+  if (companyId) {
+    raffles = raffles.filter(r => !r.companyId || r.companyId === companyId);
+  }
   if (role === 'asesor' && advisorId) {
     raffles = raffles.filter(r => r.status === 'ACTIVA' && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(advisorId)));
   }
@@ -197,6 +272,7 @@ app.put('/api/raffles/:id', (req, res) => {
   if (req.body.assignedAdvisorIds !== undefined) raffle.assignedAdvisorIds = req.body.assignedAdvisorIds;
   if (req.body.commissionType !== undefined) raffle.commissionType = req.body.commissionType;
   if (req.body.commissionValue !== undefined) raffle.commissionValue = parseFloat(req.body.commissionValue) || 0;
+  if (req.body.templateConfig !== undefined) raffle.templateConfig = req.body.templateConfig;
 
   saveDB();
   res.json(raffle);

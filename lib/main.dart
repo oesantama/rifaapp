@@ -14,6 +14,7 @@ import 'ui/features/tickets/views/ticket_grid_view.dart';
 import 'ui/features/advisors/views/advisor_management_view.dart';
 import 'ui/features/admin_cash/views/admin_cash_view.dart';
 import 'ui/features/winners/views/winner_registration_view.dart';
+import 'ui/features/company/views/company_management_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
@@ -100,19 +101,28 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final authVM = Provider.of<AuthViewModel>(context);
 
     // Filter pages and destinations based on Role
-    final List<Widget> pages = authVM.isAdmin
+    final List<Widget> pages = authVM.isSuperAdmin
         ? [
             DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
             const TicketGridView(),
             const AdvisorManagementView(),
             const AdminCashView(),
             const WinnerRegistrationView(),
+            const CompanyManagementView(),
           ]
-        : [
-            DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
-            const TicketGridView(),
-            const WinnerRegistrationView(),
-          ];
+        : authVM.isAdmin
+            ? [
+                DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                const TicketGridView(),
+                const AdvisorManagementView(),
+                const AdminCashView(),
+                const WinnerRegistrationView(),
+              ]
+            : [
+                DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                const TicketGridView(),
+                const WinnerRegistrationView(),
+              ];
 
     // Ensure selected index is valid
     if (_selectedIndex >= pages.length) {
@@ -270,7 +280,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               selectedIndex: _selectedIndex,
               onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
               labelType: NavigationRailLabelType.all,
-              destinations: authVM.isAdmin
+              destinations: authVM.isSuperAdmin
                   ? const [
                       NavigationRailDestination(
                         icon: Icon(Icons.dashboard_outlined),
@@ -297,24 +307,57 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.emoji_events),
                         label: Text('Ganadores'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.apartment_outlined),
+                        selectedIcon: Icon(Icons.apartment),
+                        label: Text('Empresas'),
+                      ),
                     ]
-                  : const [
-                      NavigationRailDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        selectedIcon: Icon(Icons.dashboard),
-                        label: Text('Dashboard'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.grid_on_outlined),
-                        selectedIcon: Icon(Icons.grid_on),
-                        label: Text('Mis Boletas'),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.emoji_events_outlined),
-                        selectedIcon: Icon(Icons.emoji_events),
-                        label: Text('Premios'),
-                      ),
-                    ],
+                  : authVM.isAdmin
+                      ? const [
+                          NavigationRailDestination(
+                            icon: Icon(Icons.dashboard_outlined),
+                            selectedIcon: Icon(Icons.dashboard),
+                            label: Text('Dashboard'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.grid_on_outlined),
+                            selectedIcon: Icon(Icons.grid_on),
+                            label: Text('Boletas'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.people_outline),
+                            selectedIcon: Icon(Icons.people),
+                            label: Text('Asesores'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.point_of_sale_outlined),
+                            selectedIcon: Icon(Icons.point_of_sale),
+                            label: Text('Caja Admin'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.emoji_events_outlined),
+                            selectedIcon: Icon(Icons.emoji_events),
+                            label: Text('Ganadores'),
+                          ),
+                        ]
+                      : const [
+                          NavigationRailDestination(
+                            icon: Icon(Icons.dashboard_outlined),
+                            selectedIcon: Icon(Icons.dashboard),
+                            label: Text('Dashboard'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.grid_on_outlined),
+                            selectedIcon: Icon(Icons.grid_on),
+                            label: Text('Mis Boletas'),
+                          ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.emoji_events_outlined),
+                            selectedIcon: Icon(Icons.emoji_events),
+                            label: Text('Premios'),
+                          ),
+                        ],
             ),
           const VerticalDivider(thickness: 1, width: 1),
           // Main Body
@@ -327,19 +370,28 @@ class _MainShellScreenState extends State<MainShellScreen> {
               onTap: (idx) => setState(() => _selectedIndex = idx),
               type: BottomNavigationBarType.fixed,
               selectedItemColor: AppTheme.primaryBlue,
-              items: authVM.isAdmin
+              items: authVM.isSuperAdmin
                   ? const [
                       BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
                       BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
                       BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
                       BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
                       BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                      BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),
                     ]
-                  : const [
-                      BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                      BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                      BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
-                    ],
+                  : authVM.isAdmin
+                      ? const [
+                          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
+                          BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
+                          BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
+                          BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                        ]
+                      : const [
+                          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
+                          BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                          BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                        ],
             )
           : null,
     );

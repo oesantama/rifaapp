@@ -7,6 +7,7 @@ import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'dart:html' if (dart.library.io) 'file_saver_stub.dart' as html_shim;
 
 const Color goldAccent = Color(0xFFD4AF37);
@@ -42,9 +43,56 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    final config = widget.raffle.templateConfig;
+    if (config != null) {
+      _bgImageBase64 = config['templateImageBase64'];
+      _gridTopPercent = (config['gridTopPercent'] as num?)?.toDouble() ?? 0.50;
+      _gridLeftPercent = (config['gridLeftPercent'] as num?)?.toDouble() ?? 0.05;
+      _gridWidthPercent = (config['gridWidthPercent'] as num?)?.toDouble() ?? 0.90;
+      _cellHeight = (config['cellHeight'] as num?)?.toDouble() ?? 24.0;
+      _fontSize = (config['fontSize'] as num?)?.toDouble() ?? 10.0;
+      _dotScale = (config['dotScale'] as num?)?.toDouble() ?? 1.0;
+    }
+  }
+
+  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _saveTemplateConfig() async {
+    final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+    final newConfig = {
+      'templateImageBase64': _bgImageBase64,
+      'gridTopPercent': _gridTopPercent,
+      'gridLeftPercent': _gridLeftPercent,
+      'gridWidthPercent': _gridWidthPercent,
+      'cellHeight': _cellHeight,
+      'fontSize': _fontSize,
+      'dotScale': _dotScale,
+    };
+
+    bool ok = await raffleVM.updateRaffleTemplateConfig(widget.raffle.id, newConfig);
+    if (mounted) {
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppTheme.secondaryEmerald,
+            content: Text('✓ Configuración e imagen de plantilla guardadas con éxito en la rifa.'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.red,
+            content: Text(raffleVM.errorMessage ?? 'Error al guardar la plantilla.'),
+          ),
+        );
+      }
+    }
   }
 
   void _pickBgImage() async {
@@ -189,6 +237,18 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                       label: Text(_showCustomControls ? 'Ocultar Ajustes' : 'Ajustar Grilla (Alto/Ancho) y Zoom'),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _saveTemplateConfig,
+                      icon: const Icon(Icons.save, size: 18),
+                      label: const Text('Guardar Plantilla'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentAmber,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),

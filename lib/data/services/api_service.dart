@@ -4,6 +4,7 @@ import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
 import '../models/winner.dart';
+import '../models/company.dart';
 
 class ApiService {
   final String baseUrl;
@@ -965,5 +966,57 @@ class ApiService {
       }
     }
     return true;
+  }
+
+  // Company / Group methods (SuperAdmin)
+  Future<List<Company>> fetchCompanies() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/companies')).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        List data = jsonDecode(response.body);
+        return data.map((c) => Company.fromJson(c)).toList();
+      }
+    } catch (_) {}
+    return [
+      Company(
+        id: 'comp-1',
+        name: 'Empresa Principal (San Martín)',
+        code: 'EMP01',
+        status: 'ACTIVA',
+        adminUsername: 'ADMIN',
+        adminPassword: '123',
+        adminName: 'Administrador General',
+        adminEmail: 'admin@rifas.com',
+        createdAt: DateTime.now().toIso8601String(),
+      )
+    ];
+  }
+
+  Future<Company?> createCompany(Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/companies'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return Company.fromJson(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Company?> updateCompany(String id, Map<String, dynamic> data) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/companies/$id'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(data),
+      ).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        return Company.fromJson(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return null;
   }
 }

@@ -91,4 +91,8 @@ class RaffleViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<bool> updateRaffleTemplateConfig(String raffleId, Map<String, dynamic> templateConfig) async {
+    return await updateRaffle(raffleId, {'templateConfig': templateConfig});
+  }
 }

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:rifaapp/data/models/advisor.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 
-enum UserRole { admin, asesor }
+enum UserRole { superadmin, admin, asesor }
 
 class AuthViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
@@ -28,23 +28,35 @@ class AuthViewModel extends ChangeNotifier {
   String _adminUsername = 'admin';
   String get adminUsername => _adminUsername;
 
+  String _selectedCompanyId = 'comp-1';
+  String get selectedCompanyId => _selectedCompanyId;
+
   String _loginErrorMessage = '';
   String get loginErrorMessage => _loginErrorMessage;
 
-  bool get isAdmin => _role == UserRole.admin;
+  bool get isSuperAdmin => _role == UserRole.superadmin;
+  bool get isAdmin => _role == UserRole.admin || _role == UserRole.superadmin;
   bool get isAsesor => _role == UserRole.asesor;
 
+  void setSelectedCompanyId(String companyId) {
+    _selectedCompanyId = companyId;
+    notifyListeners();
+  }
+
   String get currentUserName {
+    if (isSuperAdmin) return 'SuperAdministrador Master';
     if (isAdmin) return _adminName;
     return _activeAdvisor?.name ?? 'Asesor';
   }
 
   String get currentUserEmail {
+    if (isSuperAdmin) return 'superadmin@rifamaster.com';
     if (isAdmin) return _adminEmail;
     return _activeAdvisor?.email ?? '';
   }
 
   String get currentUserCode {
+    if (isSuperAdmin) return 'SUPERADMIN';
     if (isAdmin) return _adminUsername.toUpperCase();
     return _activeAdvisor?.code ?? '';
   }
@@ -73,8 +85,20 @@ class AuthViewModel extends ChangeNotifier {
       return false;
     }
 
+    // SuperAdmin check
+    if ((inputUser == 'superadmin' || inputUser == 'superadmin@rifamaster.com') && (inputPass == '123' || inputPass == '1234')) {
+      _isLoggedIn = true;
+      _role = UserRole.superadmin;
+      _adminName = 'SuperAdministrador Master';
+      _adminEmail = 'superadmin@rifamaster.com';
+      _adminUsername = 'superadmin';
+      _activeAdvisor = null;
+      notifyListeners();
+      return true;
+    }
+
     // Default admin check
-    if ((inputUser == 'admin' || inputUser == 'admin@rifamaster.com') && (inputPass == '1234' || inputPass == 'admin')) {
+    if ((inputUser == 'admin' || inputUser == 'admin@rifamaster.com') && (inputPass == '1234' || inputPass == 'admin' || inputPass == '123')) {
       _isLoggedIn = true;
       _role = UserRole.admin;
       _adminName = 'Administrador General';

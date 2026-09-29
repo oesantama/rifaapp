@@ -78,6 +78,8 @@ class Raffle {
   final String weeklyPrizesStartDate;
   final String status;
   final List<String> assignedAdvisorIds;
+  final String companyId;
+  final Map<String, dynamic>? templateConfig;
   final String createdAt;
 
   Raffle({
@@ -102,6 +104,8 @@ class Raffle {
     this.commissionValue = 10.0,
     required this.status,
     this.assignedAdvisorIds = const [],
+    this.companyId = 'comp-1',
+    this.templateConfig,
     required this.createdAt,
   });
 
@@ -134,6 +138,8 @@ class Raffle {
       commissionValue: (json['commissionValue'] as num?)?.toDouble() ?? 10.0,
       status: json['status'] ?? 'ACTIVA',
       assignedAdvisorIds: advsList,
+      companyId: json['companyId'] ?? 'comp-1',
+      templateConfig: json['templateConfig'] != null ? Map<String, dynamic>.from(json['templateConfig']) : null,
       createdAt: json['createdAt'] ?? '',
     );
   }
@@ -160,6 +166,8 @@ class Raffle {
         'commissionValue': commissionValue,
         'status': status,
         'assignedAdvisorIds': assignedAdvisorIds,
+        'companyId': companyId,
+        'templateConfig': templateConfig,
         'createdAt': createdAt,
       };
 }
