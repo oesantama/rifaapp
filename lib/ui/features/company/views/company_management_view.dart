@@ -348,6 +348,258 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     );
   }
 
+  void _showCompanySummaryDialog(Company company) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return DefaultTabController(
+          length: 3,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.analytics_rounded, color: AppTheme.primaryBlue, size: 28),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        company.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Código: ${company.code} • Estado: ${company.status}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 650,
+              height: 480,
+              child: Column(
+                children: [
+                  // KPI Cards Header
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildKpiCard(
+                          icon: Icons.admin_panel_settings,
+                          color: Colors.purple,
+                          title: 'Administradores',
+                          value: '${company.adminsCount}',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildKpiCard(
+                          icon: Icons.people,
+                          color: Colors.blue,
+                          title: 'Asesores',
+                          value: '${company.advisorsCount}',
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildKpiCard(
+                          icon: Icons.confirmation_number,
+                          color: Colors.amber.shade800,
+                          title: 'Eventos Rifa',
+                          value: '${company.rafflesCount}',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Tab Bar
+                  const TabBar(
+                    labelColor: AppTheme.primaryBlue,
+                    unselectedLabelColor: Colors.grey,
+                    indicatorColor: AppTheme.primaryBlue,
+                    tabs: [
+                      Tab(icon: Icon(Icons.shield_outlined, size: 18), text: 'Admins'),
+                      Tab(icon: Icon(Icons.badge_outlined, size: 18), text: 'Asesores'),
+                      Tab(icon: Icon(Icons.event_note_outlined, size: 18), text: 'Rifas / Sorteos'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Tab Views
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        // TAB 1: ADMINS
+                        company.admins.isEmpty
+                            ? const Center(child: Text('No hay administradores registrados.'))
+                            : ListView.builder(
+                                itemCount: company.admins.length,
+                                itemBuilder: (ctx, idx) {
+                                  final adm = company.admins[idx];
+                                  return Card(
+                                    elevation: 1,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: ListTile(
+                                      leading: const CircleAvatar(
+                                        backgroundColor: Colors.purpleAccent,
+                                        child: Icon(Icons.person, color: Colors.white),
+                                      ),
+                                      title: Text(
+                                        adm['name'] ?? 'Administrador',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      subtitle: Text('Usuario: ${adm['username']} • Clave: ${adm['password']}'),
+                                      trailing: Text(
+                                        adm['email'] ?? '',
+                                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                        // TAB 2: ASESORES
+                        company.advisors.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.people_outline, size: 48, color: Colors.grey),
+                                    SizedBox(height: 8),
+                                    Text('No hay asesores asignados a esta empresa.'),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: company.advisors.length,
+                                itemBuilder: (ctx, idx) {
+                                  final adv = company.advisors[idx];
+                                  return Card(
+                                    elevation: 1,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: Colors.blue.shade100,
+                                        child: Text(
+                                          adv['code'] ?? 'ADV',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.blue),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        adv['name'] ?? 'Asesor',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      subtitle: Text('Teléfono: ${adv['phone'] ?? 'N/A'} • Modo: ${adv['mode'] ?? 'POOL_GENERAL'}'),
+                                      trailing: Chip(
+                                        label: Text('Vendidas: ${adv['totalSold'] ?? 0}'),
+                                        backgroundColor: Colors.green.shade50,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                        // TAB 3: RIFAS / EVENTOS
+                        company.raffles.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.confirmation_number_outlined, size: 48, color: Colors.grey),
+                                    SizedBox(height: 8),
+                                    Text('No hay eventos de rifa registrados para esta empresa.'),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: company.raffles.length,
+                                itemBuilder: (ctx, idx) {
+                                  final raf = company.raffles[idx];
+                                  return Card(
+                                    elevation: 1,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: ListTile(
+                                      leading: const CircleAvatar(
+                                        backgroundColor: AppTheme.accentAmber,
+                                        child: Icon(Icons.confirmation_number, color: Colors.white),
+                                      ),
+                                      title: Text(
+                                        raf['title'] ?? 'Rifa',
+                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                      subtitle: Text(
+                                        'Boletas: ${raf['totalTickets']} • Precio: \$${raf['ticketPrice']} COP • Fecha: ${raf['mainDrawDate'] != null ? raf['mainDrawDate'].toString().split('T')[0] : 'S/D'}',
+                                      ),
+                                      trailing: Chip(
+                                        label: Text(
+                                          raf['status'] ?? 'ACTIVA',
+                                          style: const TextStyle(color: Colors.white, fontSize: 10),
+                                        ),
+                                        backgroundColor: raf['status'] == 'ACTIVA' ? AppTheme.secondaryEmerald : Colors.grey,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildKpiCard({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w500),
+              ),
+              Text(
+                value,
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredCompanies = _companies.where((c) {
@@ -463,35 +715,106 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                               ),
                               subtitle: Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: Wrap(
-                                  spacing: 20,
-                                  runSpacing: 6,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    Wrap(
+                                      spacing: 20,
+                                      runSpacing: 6,
                                       children: [
-                                        const Icon(Icons.person_outline, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 4),
-                                        Text('Admin: ${comp.adminName} (${comp.adminUsername})'),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.person_outline, size: 16, color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text('Admin: ${comp.adminName} (${comp.adminUsername})'),
+                                          ],
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.key, size: 16, color: Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text('Clave: ${comp.adminPassword}'),
+                                          ],
+                                        ),
+                                        if (comp.adminEmail.isNotEmpty)
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.email_outlined, size: 16, color: Colors.grey),
+                                              const SizedBox(width: 4),
+                                              Text(comp.adminEmail),
+                                            ],
+                                          ),
                                       ],
                                     ),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                    const SizedBox(height: 10),
+
+                                    // Executive Summary Metrics Badges
+                                    Wrap(
+                                      spacing: 12,
+                                      runSpacing: 6,
                                       children: [
-                                        const Icon(Icons.key, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 4),
-                                        Text('Clave: ${comp.adminPassword}'),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple.shade50,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.purple.shade200),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.shield_outlined, size: 14, color: Colors.purple),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Admins: ${comp.adminsCount}',
+                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blue.shade50,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.blue.shade200),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.badge_outlined, size: 14, color: Colors.blue),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Asesores: ${comp.advisorsCount}',
+                                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade50,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.amber.shade300),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.confirmation_number_outlined, size: 14, color: Colors.amber.shade900),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Sorteos: ${comp.rafflesCount}',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ],
                                     ),
-                                    if (comp.adminEmail.isNotEmpty)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.email_outlined, size: 16, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Text(comp.adminEmail),
-                                        ],
-                                      ),
                                   ],
                                 ),
                               ),
@@ -504,7 +827,12 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                   ),
                                   const SizedBox(width: 8),
                                   IconButton(
-                                    icon: const Icon(Icons.edit_note_rounded, color: AppTheme.primaryBlue, size: 24),
+                                    icon: const Icon(Icons.analytics_rounded, color: AppTheme.primaryBlue, size: 24),
+                                    tooltip: 'Ver Resumen Profesional (Admins, Asesores, Rifas)',
+                                    onPressed: () => _showCompanySummaryDialog(comp),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_note_rounded, color: Colors.orange, size: 24),
                                     tooltip: 'Editar Empresa y Admin',
                                     onPressed: () => _showEditCompanyDialog(comp),
                                   ),

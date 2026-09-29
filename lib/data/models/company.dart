@@ -8,6 +8,12 @@ class Company {
   final String adminName;
   final String adminEmail;
   final String createdAt;
+  final int adminsCount;
+  final List<Map<String, dynamic>> admins;
+  final int rafflesCount;
+  final List<Map<String, dynamic>> raffles;
+  final int advisorsCount;
+  final List<Map<String, dynamic>> advisors;
 
   Company({
     required this.id,
@@ -19,9 +25,25 @@ class Company {
     required this.adminName,
     required this.adminEmail,
     required this.createdAt,
+    this.adminsCount = 1,
+    this.admins = const [],
+    this.rafflesCount = 0,
+    this.raffles = const [],
+    this.advisorsCount = 0,
+    this.advisors = const [],
   });
 
   factory Company.fromJson(Map<String, dynamic> json) {
+    final rawAdmins = json['admins'] is List
+        ? List<Map<String, dynamic>>.from((json['admins'] as List).map((x) => Map<String, dynamic>.from(x)))
+        : <Map<String, dynamic>>[];
+    final rawRaffles = json['raffles'] is List
+        ? List<Map<String, dynamic>>.from((json['raffles'] as List).map((x) => Map<String, dynamic>.from(x)))
+        : <Map<String, dynamic>>[];
+    final rawAdvisors = json['advisors'] is List
+        ? List<Map<String, dynamic>>.from((json['advisors'] as List).map((x) => Map<String, dynamic>.from(x)))
+        : <Map<String, dynamic>>[];
+
     return Company(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
@@ -32,6 +54,22 @@ class Company {
       adminName: json['adminName'] ?? 'Administrador',
       adminEmail: json['adminEmail'] ?? '',
       createdAt: json['createdAt'] ?? '',
+      adminsCount: json['adminsCount'] ?? (rawAdmins.isNotEmpty ? rawAdmins.length : 1),
+      admins: rawAdmins.isNotEmpty
+          ? rawAdmins
+          : [
+              {
+                'name': json['adminName'] ?? 'Administrador General',
+                'username': json['adminUsername'] ?? 'ADMIN',
+                'email': json['adminEmail'] ?? '',
+                'password': json['adminPassword'] ?? '123',
+                'status': 'ACTIVO',
+              }
+            ],
+      rafflesCount: json['rafflesCount'] ?? rawRaffles.length,
+      raffles: rawRaffles,
+      advisorsCount: json['advisorsCount'] ?? rawAdvisors.length,
+      advisors: rawAdvisors,
     );
   }
 
@@ -45,5 +83,11 @@ class Company {
         'adminName': adminName,
         'adminEmail': adminEmail,
         'createdAt': createdAt,
+        'adminsCount': adminsCount,
+        'admins': admins,
+        'rafflesCount': rafflesCount,
+        'raffles': raffles,
+        'advisorsCount': advisorsCount,
+        'advisors': advisors,
       };
 }

@@ -193,9 +193,51 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), companiesCount: (db.companies || []).length, rafflesCount: db.raffles.length, ticketsCount: db.tickets.length });
 });
 
-// GET Companies (SuperAdmin)
+// GET Companies (SuperAdmin) - Enriched with Admins, Raffles and Advisors stats
 app.get('/api/companies', (req, res) => {
-  res.json(db.companies || []);
+  const companiesList = db.companies || [];
+  const enriched = companiesList.map(comp => {
+    // Company Raffles
+    const raffles = (db.raffles || []).filter(r => !r.companyId || r.companyId === comp.id);
+    // Company Advisors
+    const advisors = (db.advisors || []).filter(a => !a.companyId || a.companyId === comp.id);
+    // Company Admins
+    const admins = [
+      {
+        name: comp.adminName || 'Administrador General',
+        username: comp.adminUsername || 'ADMIN',
+        email: comp.adminEmail || 'admin@empresa.com',
+        password: comp.adminPassword || '123',
+        status: 'ACTIVO'
+      }
+    ];
+
+    return {
+      ...comp,
+      adminsCount: admins.length,
+      admins: admins,
+      rafflesCount: raffles.length,
+      raffles: raffles.map(r => ({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        totalTickets: r.totalTickets,
+        ticketPrice: r.ticketPrice,
+        mainDrawDate: r.mainDrawDate
+      })),
+      advisorsCount: advisors.length,
+      advisors: advisors.map(a => ({
+        id: a.id,
+        name: a.name,
+        code: a.code,
+        phone: a.phone,
+        mode: a.mode,
+        totalSold: a.totalSold || 0,
+        totalTicketsCount: a.totalTicketsCount || 0
+      }))
+    };
+  });
+  res.json(enriched);
 });
 
 // POST Create Company
