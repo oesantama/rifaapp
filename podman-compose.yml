@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  rifaapp-backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile
+    container_name: rifaapp-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    restart: always
