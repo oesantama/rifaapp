@@ -2,12 +2,12 @@ import 'dart:html' as html;
 import 'dart:async';
 import 'dart:convert';
 
-void saveAndDownloadFile(String filename, String content, {String? mimeType}) {
+Future<void> saveAndDownloadFile(String filename, String content, {String? mimeType}) async {
   final bytes = utf8.encode(content);
-  saveAndDownloadBytes(filename, bytes, mimeType: mimeType ?? 'text/csv;charset=utf-8');
+  await saveAndDownloadBytes(filename, bytes, mimeType: mimeType ?? 'text/csv;charset=utf-8');
 }
 
-void saveAndDownloadBytes(String filename, List<int> bytes, {String? mimeType}) {
+Future<void> saveAndDownloadBytes(String filename, List<int> bytes, {String? mimeType}) async {
   final type = mimeType ?? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   final blob = html.Blob([bytes], type);
   final url = html.Url.createObjectUrlFromBlob(blob);
@@ -24,4 +24,3 @@ void saveAndDownloadBytes(String filename, List<int> bytes, {String? mimeType}) 
     html.Url.revokeObjectUrl(url);
   });
 }
-

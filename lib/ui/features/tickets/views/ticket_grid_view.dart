@@ -27,6 +27,22 @@ class _TicketGridViewState extends State<TicketGridView> {
   final TextEditingController _searchController = TextEditingController();
   bool _isGridView = true;
 
+  bool _isRefreshing = false;
+
+  /// Reloads the raffle's tickets from the server so sold / available reflect other users' sales.
+  Future<void> _refreshTickets(TicketViewModel ticketVM, String? raffleId, {bool showSummary = true}) async {
+    setState(() => _isRefreshing = true);
+    await ticketVM.loadTickets(raffleId: raffleId);
+    if (!mounted) return;
+    setState(() => _isRefreshing = false);
+    if (!showSummary) return;
+    final sold = ticketVM.tickets.where((t) => t.status != 'DISPONIBLE').length;
+    final available = ticketVM.tickets.length - sold;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Lista actualizada: $sold vendidas • $available disponibles')),
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -106,6 +122,14 @@ class _TicketGridViewState extends State<TicketGridView> {
                         },
                       );
                       final actionButtons = <Widget>[
+                        IconButton.filledTonal(
+                          icon: _isRefreshing
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.refresh_rounded),
+                          onPressed: _isRefreshing ? null : () => _refreshTickets(ticketVM, currentRaffle?.id),
+                          tooltip: 'Actualizar lista (vendidas y disponibles)',
+                        ),
+                        const SizedBox(width: 8),
                         if (authVM.isAdmin && currentRaffle != null) ...[
                           IconButton.filledTonal(
                             icon: const Icon(Icons.settings),
@@ -229,9 +253,13 @@ class _TicketGridViewState extends State<TicketGridView> {
                             ],
                           ),
                         )
-                      : _isGridView
-                          ? _buildGrid(context, displayTickets, currentRaffle?.title, currency)
-                          : _buildList(context, displayTickets, currentRaffle?.title, currency),
+                      : RefreshIndicator(
+                          // Pull down to reload sold / available tickets from the server
+                          onRefresh: () => _refreshTickets(ticketVM, currentRaffle?.id, showSummary: false),
+                          child: _isGridView
+                              ? _buildGrid(context, displayTickets, currentRaffle?.title, currency)
+                              : _buildList(context, displayTickets, currentRaffle?.title, currency),
+                        ),
             ),
           ],
         );
@@ -258,6 +286,7 @@ class _TicketGridViewState extends State<TicketGridView> {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return GridView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 260,
@@ -398,6 +427,7 @@ class _TicketGridViewState extends State<TicketGridView> {
 
   Widget _buildList(BuildContext context, List<Ticket> tickets, String? raffleTitle, NumberFormat currency) {
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
       itemCount: tickets.length,
       itemBuilder: (context, i) {

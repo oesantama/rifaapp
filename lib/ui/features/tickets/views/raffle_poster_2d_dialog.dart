@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
@@ -410,16 +411,18 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
         ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
         if (byteData != null) {
           Uint8List pngBytes = byteData.buffer.asUint8List();
-          saveAndDownloadBytes(
+          await saveAndDownloadBytes(
             'afiche_rifa_2d_${widget.raffle.id}.png',
             pngBytes,
             mimeType: 'image/png',
           );
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+              SnackBar(
                 backgroundColor: AppTheme.secondaryEmerald,
-                content: Text('✓ Afiche ajustado descargado exitosamente como imagen PNG (Alta Definición).'),
+                content: Text(kIsWeb
+                    ? '✓ Afiche ajustado descargado exitosamente como imagen PNG (Alta Definición).'
+                    : '✓ Afiche listo: elija dónde guardarlo o a quién enviarlo.'),
               ),
             );
           }
@@ -439,6 +442,12 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   }
 
   void _triggerPrint() {
+    // Printing from the page only exists in the browser; in the app the poster goes to the
+    // share sheet, from where it can be printed, saved as a file or sent.
+    if (!kIsWeb) {
+      _downloadPosterAsImage();
+      return;
+    }
     try {
       web_launcher.printPage();
     } catch (_) {
