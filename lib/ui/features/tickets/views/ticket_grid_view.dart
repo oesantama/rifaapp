@@ -10,6 +10,7 @@ import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 
 import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
+import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'ticket_detail_dialog.dart';
 import 'ticket_print_dialog.dart';
 import 'import_sold_tickets_dialog.dart';
@@ -134,6 +135,30 @@ class _TicketGridViewState extends State<TicketGridView> {
                           ),
                           const SizedBox(width: 8),
                         ],
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.file_download_outlined, color: Colors.green),
+                          onPressed: () {
+                            final ticketsToExport = ticketVM.tickets;
+                            if (ticketsToExport.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No hay boletas disponibles para exportar.')),
+                              );
+                              return;
+                            }
+                            ExcelCsvHelper.exportTicketsToExcel(
+                              ticketsToExport,
+                              title: 'Boletas_${currentRaffle?.title ?? "Rifa"}',
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: AppTheme.secondaryEmerald,
+                                content: Text('✓ Descargando ${ticketsToExport.length} boletas en Excel (.xlsx)...'),
+                              ),
+                            );
+                          },
+                          tooltip: 'Descargar Información de Boletas a Excel (.xlsx)',
+                        ),
+                        const SizedBox(width: 8),
                         IconButton.filledTonal(
                           icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
                           onPressed: () => setState(() => _isGridView = !_isGridView),
@@ -296,11 +321,50 @@ class _TicketGridViewState extends State<TicketGridView> {
                   ),
                   const SizedBox(height: 4),
                   if (ticket.buyerName.isNotEmpty)
-                    Text(
-                      'Comprador: ${ticket.buyerName}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                            ? AppTheme.secondaryEmerald.withValues(alpha: 0.12)
+                            : (ticket.status == 'ABONO_PARCIAL'
+                                ? AppTheme.accentAmber.withValues(alpha: 0.15)
+                                : Colors.purple.withValues(alpha: 0.12)),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                              ? AppTheme.secondaryEmerald.withValues(alpha: 0.4)
+                              : (ticket.status == 'ABONO_PARCIAL'
+                                  ? AppTheme.accentAmber.withValues(alpha: 0.5)
+                                  : Colors.purple.withValues(alpha: 0.3)),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.person_rounded,
+                            size: 13,
+                            color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                ? AppTheme.secondaryEmerald
+                                : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade700),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              ticket.buyerName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                    ? Colors.green.shade900
+                                    : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade900),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     )
                   else
                     const Text('Disponible para venta', style: TextStyle(fontSize: 11, color: Colors.grey)),
@@ -360,12 +424,58 @@ class _TicketGridViewState extends State<TicketGridView> {
               ),
             ),
             title: Text('Números: ${ticket.numbers.join(', ')}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              ticket.buyerName.isNotEmpty
-                  ? 'Comprador: ${ticket.buyerName} • Tel: ${ticket.buyerPhone}'
-                  : 'Sin Vender • Asesor: ${ticket.advisorName.isNotEmpty ? ticket.advisorName : "General"}',
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: ticket.buyerName.isNotEmpty
+                  ? Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                ? AppTheme.secondaryEmerald.withValues(alpha: 0.12)
+                                : (ticket.status == 'ABONO_PARCIAL'
+                                    ? AppTheme.accentAmber.withValues(alpha: 0.15)
+                                    : Colors.purple.withValues(alpha: 0.12)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person_rounded,
+                                size: 13,
+                                color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                    ? AppTheme.secondaryEmerald
+                                    : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade700),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                ticket.buyerName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                      ? Colors.green.shade900
+                                      : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade900),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (ticket.buyerPhone.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            '• Tel: ${ticket.buyerPhone}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                          ),
+                        ]
+                      ],
+                    )
+                  : Text(
+                      'Sin Vender • Asesor: ${ticket.advisorName.isNotEmpty ? ticket.advisorName : "General"}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
             ),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,

@@ -1,5 +1,6 @@
 import 'package:excel/excel.dart';
 import '../../../data/models/advisor.dart';
+import '../../../data/models/ticket.dart';
 import 'file_saver.dart';
 
 class ExcelCsvHelper {
@@ -432,5 +433,68 @@ class ExcelCsvHelper {
     }
 
     return records;
+  }
+
+  /// Exports a list of [Ticket] objects to an Excel (.xlsx) file with fallback to CSV
+  static void exportTicketsToExcel(List<Ticket> tickets, {String title = 'Reporte_Boletas'}) {
+    try {
+      var excel = Excel.createExcel();
+      String defaultSheet = excel.getDefaultSheet() ?? 'Sheet1';
+      excel.rename(defaultSheet, 'Boletas');
+      Sheet sheet = excel['Boletas'];
+
+      List<CellValue> header = [
+        TextCellValue('N° Boleta'),
+        TextCellValue('Números Oportunidad'),
+        TextCellValue('Estado'),
+        TextCellValue('Comprador'),
+        TextCellValue('Teléfono'),
+        TextCellValue('Precio Boleta'),
+        TextCellValue('Total Abonado'),
+        TextCellValue('Saldo Pendiente'),
+        TextCellValue('Asesor / Vendedor'),
+        TextCellValue('Confirmada Admin'),
+      ];
+      sheet.appendRow(header);
+
+      for (var t in tickets) {
+        sheet.appendRow([
+          IntCellValue(t.ticketNumber),
+          TextCellValue(t.numbers.join(', ')),
+          TextCellValue(t.status),
+          TextCellValue(t.buyerName.isNotEmpty ? t.buyerName : 'N/A'),
+          TextCellValue(t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A'),
+          DoubleCellValue(t.price),
+          DoubleCellValue(t.totalPaid),
+          DoubleCellValue(t.balancePending),
+          TextCellValue(t.advisorName.isNotEmpty ? t.advisorName : 'N/A'),
+          TextCellValue(t.confirmedByAdmin ? 'SI' : 'NO'),
+        ]);
+      }
+
+      var fileBytes = excel.save();
+      if (fileBytes != null) {
+        String cleanTitle = title.replaceAll(RegExp(r'[^\w\-]'), '_');
+        saveAndDownloadBytes('${cleanTitle}_${DateTime.now().millisecondsSinceEpoch}.xlsx', fileBytes);
+      }
+    } catch (_) {
+      List<List<dynamic>> rows = [
+        ['N° Boleta', 'Números Oportunidad', 'Estado', 'Comprador', 'Teléfono', 'Precio Boleta', 'Total Abonado', 'Saldo Pendiente', 'Asesor', 'Confirmada Admin'],
+        ...tickets.map((t) => [
+              t.ticketNumber,
+              t.numbers.join(', '),
+              t.status,
+              t.buyerName.isNotEmpty ? t.buyerName : 'N/A',
+              t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A',
+              t.price,
+              t.totalPaid,
+              t.balancePending,
+              t.advisorName.isNotEmpty ? t.advisorName : 'N/A',
+              t.confirmedByAdmin ? 'SI' : 'NO',
+            ]),
+      ];
+      String cleanTitle = title.replaceAll(RegExp(r'[^\w\-]'), '_');
+      saveAndDownloadFile('${cleanTitle}_${DateTime.now().millisecondsSinceEpoch}.csv', _rowsToCsv(rows));
+    }
   }
 }

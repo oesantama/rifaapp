@@ -70,98 +70,113 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: const [
-              Icon(Icons.business_rounded, color: AppTheme.primaryBlue),
-              SizedBox(width: 10),
-              Expanded(child: Text('Registrar Nueva Empresa / Grupo')),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Container(
-              width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
-              padding: const EdgeInsets.all(8),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre de la Empresa / Grupo *',
-                        hintText: 'Ej: Rifas San Martín S.A.S.',
-                        prefixIcon: Icon(Icons.apartment),
-                      ),
-                      validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: codeController,
-                      decoration: const InputDecoration(
-                        labelText: 'Código Identificador',
-                        hintText: 'Ej: EMP02 (Opcional)',
-                        prefixIcon: Icon(Icons.qr_code),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const Text(
-                      '👤 Credenciales para el Administrador de la Empresa:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: adminNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre Completo del Admin',
-                        hintText: 'Ej: Carlos Pérez',
-                        prefixIcon: Icon(Icons.person),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: adminEmailController,
-                      decoration: const InputDecoration(
-                        labelText: 'Correo Electrónico',
-                        hintText: 'admin@empresa.com',
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _responsivePair(
-                      TextFormField(
-                        controller: adminUsernameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Usuario Admin *',
-                          hintText: 'ej: admin_sanmartin',
-                          prefixIcon: Icon(Icons.account_circle),
+        bool obscurePassword = true;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.business_rounded, color: AppTheme.primaryBlue),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Registrar Nueva Empresa / Grupo')),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Container(
+                  width: MediaQuery.of(context).size.width > 550 ? 500 : MediaQuery.of(context).size.width * 0.9,
+                  padding: const EdgeInsets.all(8),
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre de la Empresa / Grupo *',
+                            hintText: 'Ej: Rifas San Martín S.A.S.',
+                            prefixIcon: Icon(Icons.apartment),
+                          ),
+                          validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
                         ),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
-                      ),
-                      TextFormField(
-                        controller: adminPasswordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Contraseña temporal *',
-                          helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
-                          helperMaxLines: 2,
-                          prefixIcon: Icon(Icons.lock),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: codeController,
+                          decoration: const InputDecoration(
+                            labelText: 'Código Identificador',
+                            hintText: 'Ej: EMP02 (Opcional)',
+                            prefixIcon: Icon(Icons.qr_code),
+                          ),
                         ),
-                        obscureText: true,
-                        validator: validateNewPassword,
-                      ),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const Text(
+                          '👤 Credenciales para el Administrador de la Empresa:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: adminNameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nombre Completo del Admin',
+                            hintText: 'Ej: Carlos Pérez',
+                            prefixIcon: Icon(Icons.person),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: adminEmailController,
+                          decoration: const InputDecoration(
+                            labelText: 'Correo Electrónico',
+                            hintText: 'admin@empresa.com',
+                            prefixIcon: Icon(Icons.email),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _responsivePair(
+                          TextFormField(
+                            controller: adminUsernameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Usuario Admin *',
+                              hintText: 'ej: admin_sanmartin',
+                              prefixIcon: Icon(Icons.account_circle),
+                            ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                          ),
+                          TextFormField(
+                            controller: adminPasswordController,
+                            decoration: InputDecoration(
+                              labelText: 'Contraseña temporal *',
+                              helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
+                              helperMaxLines: 2,
+                              prefixIcon: const Icon(Icons.lock),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  color: Colors.grey,
+                                ),
+                                tooltip: obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                                onPressed: () {
+                                  setDialogState(() {
+                                    obscurePassword = !obscurePassword;
+                                  });
+                                },
+                              ),
+                            ),
+                            obscureText: obscurePassword,
+                            validator: validateNewPassword,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          actions: [
+              actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancelar'),
@@ -201,6 +216,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
               child: const Text('Crear Empresa y Admin'),
             ),
           ],
+            );
+          },
         );
       },
     );
@@ -219,6 +236,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     showDialog(
       context: context,
       builder: (context) {
+        bool obscurePassword = true;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -309,12 +327,24 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                           TextFormField(
                             controller: adminPasswordController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Nueva contraseña (opcional)',
                               helperText: 'Déjela vacía para no cambiarla.',
-                              prefixIcon: Icon(Icons.lock_reset),
+                              prefixIcon: const Icon(Icons.lock_reset),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  color: Colors.grey,
+                                ),
+                                tooltip: obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                                onPressed: () {
+                                  setDialogState(() {
+                                    obscurePassword = !obscurePassword;
+                                  });
+                                },
+                              ),
                             ),
-                            obscureText: true,
+                            obscureText: obscurePassword,
                             validator: (val) => (val == null || val.isEmpty) ? null : validateNewPassword(val),
                           ),
                         ),

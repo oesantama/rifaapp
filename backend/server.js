@@ -1181,8 +1181,8 @@ app.post('/api/tickets/:id/abono', (req, res) => {
     return res.status(400).json({ error: 'Monto de abono inválido' });
   }
 
-  ticket.buyerName = buyerName || ticket.buyerName || 'Sin Nombre';
-  ticket.buyerPhone = buyerPhone || ticket.buyerPhone || '';
+  if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();
+  if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
   if (sellerId) ticket.advisorId = sellerId;
   if (sellerName) ticket.advisorName = sellerName;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();

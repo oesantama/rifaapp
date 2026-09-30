@@ -224,75 +224,81 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                 ],
               ),
               const SizedBox(height: 20),
-              if (widget.ticket.balancePending > 0) ...[
-                Text(
-                  isDisponible
-                      ? 'Apartar o Registrar Pago'
-                      : isApartada
-                          ? 'Boleta Apartada - Registrar Abono / Pago'
-                          : 'Boleta con Abonos - Registrar Nuevo Abono',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
+              Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '👤 Datos del Comprador:',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _buyerNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre del Comprador *',
+                        prefixIcon: Icon(Icons.person),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese nombre' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _buyerPhoneController,
+                      decoration: const InputDecoration(
+                        labelText: 'Teléfono / WhatsApp *',
+                        prefixIcon: Icon(Icons.phone),
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese teléfono' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    if (authVM.isAsesor)
                       TextFormField(
-                        controller: _buyerNameController,
+                        initialValue: '${authVM.currentUserName} (${authVM.currentUserCode})',
+                        readOnly: true,
                         decoration: const InputDecoration(
-                          labelText: 'Nombre del Comprador *',
-                          prefixIcon: Icon(Icons.person),
+                          labelText: 'Asesor / Vendedor (Asignado Automáticamente)',
+                          prefixIcon: Icon(Icons.badge),
+                          border: OutlineInputBorder(),
+                          filled: true,
+                        ),
+                      )
+                    else
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _selectedSellerId,
+                        decoration: const InputDecoration(
+                          labelText: 'Asesor / Vendedor',
+                          prefixIcon: Icon(Icons.badge),
                           border: OutlineInputBorder(),
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese nombre' : null,
+                        items: advisorVM.advisors.map((adv) {
+                          return DropdownMenuItem(
+                            value: adv.id,
+                            child: Text('${adv.name} (${adv.code})'),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            _selectedSellerId = val;
+                            _selectedSellerName = advisorVM.advisors.firstWhere((a) => a.id == val).name;
+                          });
+                        },
                       ),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: _buyerPhoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Teléfono / WhatsApp *',
-                          prefixIcon: Icon(Icons.phone),
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese teléfono' : null,
+                    const SizedBox(height: 12),
+                    if (widget.ticket.balancePending > 0) ...[
+                      Text(
+                        isDisponible
+                            ? 'Apartar o Registrar Pago'
+                            : isApartada
+                                ? 'Boleta Apartada - Registrar Abono / Pago'
+                                : 'Boleta con Abonos - Registrar Nuevo Abono',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 10),
-                      if (authVM.isAsesor)
-                        TextFormField(
-                          initialValue: '${authVM.currentUserName} (${authVM.currentUserCode})',
-                          readOnly: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Asesor / Vendedor (Asignado Automáticamente)',
-                            prefixIcon: Icon(Icons.badge),
-                            border: OutlineInputBorder(),
-                            filled: true,
-                          ),
-                        )
-                      else
-                        DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _selectedSellerId,
-                          decoration: const InputDecoration(
-                            labelText: 'Asesor / Vendedor',
-                            prefixIcon: Icon(Icons.badge),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: advisorVM.advisors.map((adv) {
-                            return DropdownMenuItem(
-                              value: adv.id,
-                              child: Text('${adv.name} (${adv.code})'),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            setState(() {
-                              _selectedSellerId = val;
-                              _selectedSellerName = advisorVM.advisors.firstWhere((a) => a.id == val).name;
-                            });
-                          },
-                        ),
                       const SizedBox(height: 10),
                       TextFormField(
                         controller: _amountController,
@@ -318,86 +324,95 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         },
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
-                        controller: _noteController,
-                        decoration: const InputDecoration(
-                          labelText: 'Observaciones / Nota',
-                          prefixIcon: Icon(Icons.notes),
-                          border: OutlineInputBorder(),
+                    ] else ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondaryEmerald.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.check_circle, color: AppTheme.secondaryEmerald),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Esta boleta ya se encuentra pagada en su totalidad.',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            if (_formKey.currentState!.validate()) {
-                              final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
-                              final isChangingSeller =
-                                  (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
+                    ],
+                    TextFormField(
+                      controller: _noteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Observaciones / Nota',
+                        prefixIcon: Icon(Icons.notes),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          if (_formKey.currentState!.validate()) {
+                            final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
+                            final isChangingSeller =
+                                (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
 
-                              if (isChangingSeller && _noteController.text.trim().isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    backgroundColor: Colors.red,
-                                    content: Text(
-                                        '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
-                                  ),
-                                );
-                                return;
-                              }
-
-                              final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
-                              bool success = await ticketVM.addAbono(
-                                widget.ticket.id,
-                                {
-                                  'amount': amt,
-                                  'buyerName': _buyerNameController.text.trim(),
-                                  'buyerPhone': _buyerPhoneController.text.trim(),
-                                  'sellerId': newSellerId,
-                                  'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
-                                  'note': _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : defaultNoteText,
-                                },
-                                raffleId: widget.ticket.raffleId,
+                            if (isChangingSeller && _noteController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: Colors.red,
+                                  content: Text(
+                                      '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
+                                ),
                               );
-                              if (success && mounted) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(snackbarSuccessText),
-                                  ),
-                                );
-                              }
+                              return;
                             }
-                          },
-                          icon: Icon(buttonIcon),
-                          label: Text(buttonLabel),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: buttonColor,
-                          ),
+
+                            final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+                            bool success = await ticketVM.addAbono(
+                              widget.ticket.id,
+                              {
+                                'amount': amt,
+                                'buyerName': _buyerNameController.text.trim(),
+                                'buyerPhone': _buyerPhoneController.text.trim(),
+                                'sellerId': newSellerId,
+                                'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
+                                'note': _noteController.text.trim().isNotEmpty
+                                    ? _noteController.text.trim()
+                                    : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
+                              },
+                              raffleId: widget.ticket.raffleId,
+                            );
+                            if (success && mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(widget.ticket.balancePending == 0
+                                      ? '✓ Datos del comprador actualizados correctamente.'
+                                      : snackbarSuccessText),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        icon: Icon(widget.ticket.balancePending == 0 ? Icons.save_outlined : buttonIcon),
+                        label: Text(widget.ticket.balancePending == 0 ? 'GUARDAR / ACTUALIZAR DATOS DEL COMPRADOR' : buttonLabel),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: widget.ticket.balancePending == 0 ? AppTheme.primaryBlue : buttonColor,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                      )
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
-              ] else ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.secondaryEmerald.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: AppTheme.secondaryEmerald),
-                      SizedBox(width: 8),
-                      Expanded(
-                          child:
-                              Text('Esta boleta ya se encuentra pagada en su totalidad.', style: TextStyle(fontWeight: FontWeight.bold))),
-                    ],
-                  ),
-                ),
-              ],
+              ),
               const SizedBox(height: 20),
               if (widget.ticket.abonos.isNotEmpty) ...[
                 const Text('Historial de Abonos:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),

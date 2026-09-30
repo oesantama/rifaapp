@@ -51,6 +51,8 @@ class AdvisorManagementView extends StatelessWidget {
     String mode = advisor?.mode ?? 'POOL_GENERAL';
     String status = advisor?.status ?? 'ACTIVO';
 
+    bool obscurePassword = true;
+
     showDialog(
       context: context,
       builder: (ctx) {
@@ -103,10 +105,23 @@ class AdvisorManagementView extends StatelessWidget {
                     const SizedBox(height: 10),
                     TextField(
                       controller: passwordCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña de Acceso *',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.lock),
+                      obscureText: obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: isEditing ? 'Nueva Contraseña (opcional)' : 'Contraseña de Acceso *',
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.lock),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePassword ? Icons.visibility_off : Icons.visibility,
+                            color: Colors.grey,
+                          ),
+                          tooltip: obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                          onPressed: () {
+                            setState(() {
+                              obscurePassword = !obscurePassword;
+                            });
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
