@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/winner.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:rifaapp/ui/core/utils/pdf_report_generator.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/winners/view_models/winner_view_model.dart';
@@ -88,7 +89,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                       const SizedBox(height: 4),
                       Text(
                         'Antes de eliminar el sorteo "${winner.drawName}" (Número #${winner.winningNumber}), el sistema descargará un informe en PDF de todo lo ocurrido para conservar la trazabilidad contable.',
-                        style: const TextStyle(fontSize: 11, color: Colors.black87),
+                        style: const TextStyle(fontSize: 11),
                       ),
                     ],
                   ),
@@ -233,7 +234,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.08),
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -244,10 +245,13 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Sorteo: $drawName', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            Text('Premio Base Sorteo: ${currency.format(basePrizeAmount)} COP', style: const TextStyle(fontSize: 11, color: Colors.black87)),
+                            Text('Premio Base Sorteo: ${currency.format(basePrizeAmount)} COP',
+                                style: const TextStyle(fontSize: 11, color: Colors.black87)),
                             if (prevAccumulatedPot > 0)
-                              Text('🔥 Pozo Acumulado Anterior: ${currency.format(prevAccumulatedPot)} COP', style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade800, fontWeight: FontWeight.bold)),
-                            Text('💰 TOTAL EN JUEGO: ${currency.format(basePrizeAmount + prevAccumulatedPot)} COP', style: const TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.bold)),
+                              Text('🔥 Pozo Acumulado Anterior: ${currency.format(prevAccumulatedPot)} COP',
+                                  style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade800, fontWeight: FontWeight.bold)),
+                            Text('💰 TOTAL EN JUEGO: ${currency.format(basePrizeAmount + prevAccumulatedPot)} COP',
+                                style: const TextStyle(fontSize: 11, color: AppTheme.primaryBlue, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
@@ -263,12 +267,11 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                   ),
                 ),
                 const SizedBox(height: 14),
-
                 if (ticketExists && meetsAbonoCondition) ...[
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.secondaryEmerald.withOpacity(0.12),
+                      color: AppTheme.secondaryEmerald.withValues(alpha: 0.12),
                       border: Border.all(color: AppTheme.secondaryEmerald),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -279,7 +282,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           children: const [
                             Icon(Icons.check_circle, color: AppTheme.secondaryEmerald, size: 20),
                             SizedBox(width: 8),
-                            Text('¡BOLETA GANADORA CALIFICADA!', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald, fontSize: 13)),
+                            Text('¡BOLETA GANADORA CALIFICADA!',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald, fontSize: 13)),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -287,7 +291,6 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                         Text('• Comprador: ${tkt.buyerName} (${tkt.buyerPhone})'),
                         Text('• Asesor de Venta: ${tkt.advisorName}'),
                         Text('• Total Abonado: ${currency.format(tkt.totalPaid)} (Mínimo Requerido: ${currency.format(reqAbono)})'),
-                        
                         const SizedBox(height: 10),
                         const Text('📅 Fechas de Pago y/o Abono Registradas:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         const SizedBox(height: 4),
@@ -296,7 +299,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                             padding: const EdgeInsets.only(left: 6),
                             child: Text(
                               '  • Fecha de Venta / Registro: ${tkt.assignedDate != null && tkt.assignedDate!.length >= 10 ? tkt.assignedDate!.substring(0, 10) : (tkt.assignedDate ?? "N/A")} — Monto: ${currency.format(tkt.totalPaid)} (Asesor: ${tkt.advisorName})',
-                              style: const TextStyle(fontSize: 11, color: Colors.black87),
+                              style: const TextStyle(fontSize: 11),
                             ),
                           )
                         else
@@ -307,11 +310,13 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                   style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
                                 ),
                               )),
-
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppTheme.secondaryEmerald)),
+                          decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.secondaryEmerald)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -322,7 +327,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               const SizedBox(height: 2),
                               Text(
                                 '• Premio Base Sorteo: ${currency.format(basePrizeAmount)} COP',
-                                style: const TextStyle(fontSize: 11, color: Colors.black87),
+                                style: const TextStyle(fontSize: 11),
                               ),
                               if (prevAccumulatedPot > 0)
                                 Text(
@@ -364,18 +369,20 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                             Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 22),
                             SizedBox(width: 8),
                             Expanded(
-                              child: Text('⚠️ BOLETA VENDIDA PERO ABONO INSUFICIENTE', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber, fontSize: 12)),
+                              child: Text('⚠️ BOLETA VENDIDA PERO ABONO INSUFICIENTE',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.amber, fontSize: 12)),
                             ),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Text('• Boleta N°: #${tkt.ticketNumber} — ${tkt.buyerName}'),
                         Text('• Abonado Actual: ${currency.format(tkt.totalPaid)} (Requerido: ${currency.format(reqAbono)})'),
-                        
                         const SizedBox(height: 8),
                         const Text('📅 Fechas de Abono Registradas:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                         if (tkt.abonos.isEmpty)
-                          Text('  • Fecha de Venta: ${tkt.assignedDate != null && tkt.assignedDate!.length >= 10 ? tkt.assignedDate!.substring(0, 10) : (tkt.assignedDate ?? "N/A")}', style: const TextStyle(fontSize: 11))
+                          Text(
+                              '  • Fecha de Venta: ${tkt.assignedDate != null && tkt.assignedDate!.length >= 10 ? tkt.assignedDate!.substring(0, 10) : (tkt.assignedDate ?? "N/A")}',
+                              style: const TextStyle(fontSize: 11))
                         else
                           ...tkt.abonos.map((a) => Padding(
                                 padding: const EdgeInsets.only(left: 6, top: 2),
@@ -384,7 +391,6 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                   style: const TextStyle(fontSize: 11),
                                 ),
                               )),
-
                         const SizedBox(height: 8),
                         Text(
                           currentRaffle?.isWeeklyPrizeAccumulative == true
@@ -399,7 +405,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.dangerRose.withOpacity(0.1),
+                      color: AppTheme.dangerRose.withValues(alpha: 0.1),
                       border: Border.all(color: AppTheme.dangerRose),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -410,7 +416,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           children: const [
                             Icon(Icons.history_toggle_off, color: AppTheme.dangerRose, size: 20),
                             SizedBox(width: 8),
-                            Text('NÚMERO NO VENDIDO / DISPONIBLE', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.dangerRose, fontSize: 13)),
+                            Text('NÚMERO NO VENDIDO / DISPONIBLE',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.dangerRose, fontSize: 13)),
                           ],
                         ),
                         const SizedBox(height: 6),
@@ -424,7 +431,6 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                     ),
                   ),
                 ],
-
                 if (_photoUrlController.text.trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
                   EvidencePreviewTile(url: _photoUrlController.text.trim()),
@@ -488,18 +494,20 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
         final currentRaffle = raffleVM.selectedRaffle;
         final isAsesor = authVM.isAsesor;
 
+        final isMobile = MediaQuery.of(context).size.width < 600;
+
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(isMobile ? 12 : 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // VISTA REGISTRO SOLO PARA ADMINISTRADOR / LECTURA PARA ASESORES
               if (isAsesor) ...[
                 Card(
-                  color: AppTheme.primaryBlue.withOpacity(0.06),
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.06),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: AppTheme.primaryBlue.withOpacity(0.2)),
+                    side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -518,7 +526,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               SizedBox(height: 4),
                               Text(
                                 '👁️ Modo Lectura (Asesor). Consulta los ganadores oficiales de cada sorteo semanal o premio acumulado registrado por la administración.',
-                                style: TextStyle(fontSize: 12, color: Colors.black87),
+                                style: TextStyle(fontSize: 12),
                               ),
                             ],
                           ),
@@ -530,7 +538,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
               ] else ...[
                 Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(isMobile ? 14 : 20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -538,9 +546,11 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           children: [
                             Icon(Icons.casino, color: AppTheme.primaryBlue, size: 28),
                             SizedBox(width: 10),
-                            Text(
-                              'Registrar Sorteo / Ganador (Administrador)',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            Expanded(
+                              child: Text(
+                                'Registrar Sorteo / Ganador (Administrador)',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ],
                         ),
@@ -550,9 +560,11 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 16),
-                        Row(
+                        Flex(
+                          direction: isMobile ? Axis.vertical : Axis.horizontal,
                           children: [
-                            Expanded(
+                            ResponsiveFlexChild(
+                              expand: !isMobile,
                               child: TextField(
                                 controller: _drawNameController,
                                 decoration: const InputDecoration(
@@ -562,8 +574,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
+                            const SizedBox(width: 12, height: 12),
+                            ResponsiveFlexChild(
+                              expand: !isMobile,
                               child: TextField(
                                 controller: _prizeAmountController,
                                 decoration: const InputDecoration(
@@ -577,9 +590,12 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        Row(
+                        Flex(
+                          direction: isMobile ? Axis.vertical : Axis.horizontal,
+                          crossAxisAlignment: isMobile ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
                           children: [
-                            Expanded(
+                            ResponsiveFlexChild(
+                              expand: !isMobile,
                               flex: 2,
                               child: TextField(
                                 controller: _numberController,
@@ -599,15 +615,16 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
+                            const SizedBox(width: 12, height: 12),
+                            ResponsiveFlexChild(
+                              expand: !isMobile,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   TextField(
                                     controller: _photoUrlController,
                                     decoration: const InputDecoration(
-                                      labelText: 'URL / Foto Entregas (Google Drive, Photos, OneDrive...)',
+                                      labelText: 'URL / Foto de Entrega (Drive, Photos...)',
                                       hintText: 'https://photos.app.goo.gl/... o https://drive.google.com/...',
                                       border: OutlineInputBorder(),
                                       prefixIcon: Icon(Icons.photo_camera),
@@ -650,8 +667,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: _lastResult!.isWinner
-                        ? AppTheme.secondaryEmerald.withOpacity(0.15)
-                        : AppTheme.dangerRose.withOpacity(0.15),
+                        ? AppTheme.secondaryEmerald.withValues(alpha: 0.15)
+                        : AppTheme.dangerRose.withValues(alpha: 0.15),
                     border: Border.all(
                       color: _lastResult!.isWinner ? AppTheme.secondaryEmerald : AppTheme.dangerRose,
                       width: 2,
@@ -670,6 +687,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                         _lastResult!.isWinner
                             ? '¡¡TENEMOS GANADOR DE LA RIFA Y DEL POZO ACUMULADO!!'
                             : '¡¡NO HUBO GANADOR - PREMIO ACUMULADO!!',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -696,6 +714,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               _lastResult!.isWinner
                                   ? '🏆 TOTAL PREMIO ENTREGADO: ${currency.format(_lastResult!.totalPrizePaid)} COP'
                                   : '💰 Valor Acumulado: ${currency.format(_lastResult!.basePrizeAmount)} COP',
+                              textAlign: TextAlign.center,
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                             ),
                             if (_lastResult!.isWinner && _lastResult!.previousAccumulatedAmount > 0)
@@ -709,12 +728,14 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
 
                       const SizedBox(height: 12),
                       if (_lastResult!.isWinner && _lastResult!.winnerDetails != null) ...[
-                        Text('Boleta N°: #${_lastResult!.winnerDetails!.ticketNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        Text('Boleta N°: #${_lastResult!.winnerDetails!.ticketNumber}',
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                         Text('Ganador: ${_lastResult!.winnerDetails!.buyerName} (${_lastResult!.winnerDetails!.buyerPhone})'),
                         Text('Vendido por Asesor: ${_lastResult!.winnerDetails!.advisorName}'),
                         if (_lastResult!.winnerDetails!.abonosSummary.isNotEmpty) ...[
                           const SizedBox(height: 6),
-                          const Text('📅 Fechas de Pago y/o Abono Registradas:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          const Text('📅 Fechas de Pago y/o Abono Registradas:',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                           ..._lastResult!.winnerDetails!.abonosSummary.map((a) => Text(
                                 '• ${a['date'].toString().length >= 10 ? a['date'].toString().substring(0, 10) : a['date']}: ${currency.format(a['amount'])} (${a['note'] != null && a['note'].toString().isNotEmpty ? a['note'] : "Abono / Pago"}) — Asesor: ${a['sellerName'] ?? ""}',
                                 style: const TextStyle(fontSize: 11),
@@ -755,7 +776,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               if (dateStr.length >= 10) dateStr = dateStr.substring(0, 10);
                               return Text(
                                 '• $dateStr: ${currency.format(a['amount'])} (${a['note'] != null && a['note'].toString().isNotEmpty ? a['note'] : "Abono / Pago"}) — Asesor: ${a['sellerName'] ?? det.advisorName}',
-                                style: const TextStyle(fontSize: 11, color: Colors.black87),
+                                style: const TextStyle(fontSize: 11),
                               );
                             }).toList();
                           } else if (det.assignedDate != null) {
@@ -764,7 +785,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                             abonoDetailWidgets = [
                               Text(
                                 '• $dateStr: ${currency.format(det.totalPaid)} (Pago de venta) — Asesor: ${det.advisorName}',
-                                style: const TextStyle(fontSize: 11, color: Colors.black87),
+                                style: const TextStyle(fontSize: 11),
                               )
                             ];
                           }
@@ -781,8 +802,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                   children: [
                                     CircleAvatar(
                                       backgroundColor: w.isWinner
-                                          ? AppTheme.secondaryEmerald.withOpacity(0.2)
-                                          : AppTheme.dangerRose.withOpacity(0.2),
+                                          ? AppTheme.secondaryEmerald.withValues(alpha: 0.2)
+                                          : AppTheme.dangerRose.withValues(alpha: 0.2),
                                       child: Icon(
                                         w.isWinner ? Icons.emoji_events : Icons.history,
                                         color: w.isWinner ? AppTheme.secondaryEmerald : AppTheme.dangerRose,
@@ -793,9 +814,27 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            '${w.drawName} • Número Ganador: ${w.winningNumber}',
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                          Wrap(
+                                            spacing: 8,
+                                            runSpacing: 4,
+                                            crossAxisAlignment: WrapCrossAlignment.center,
+                                            children: [
+                                              Text(
+                                                '${w.drawName} • Número Ganador: ${w.winningNumber}',
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                              ),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: w.isWinner ? AppTheme.secondaryEmerald : AppTheme.dangerRose,
+                                                  borderRadius: BorderRadius.circular(12),
+                                                ),
+                                                child: Text(
+                                                  w.isWinner ? 'GANADOR' : 'ACUMULADO',
+                                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(height: 2),
                                           if (w.isWinner) ...[
@@ -805,7 +844,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                             ),
                                             Text(
                                               '🏆 Premio Entregado: ${currency.format(w.totalPrizePaid)}${w.previousAccumulatedAmount > 0 ? " (Base Sorteo: ${currency.format(w.basePrizeAmount)} + Acumulado Anterior: ${currency.format(w.previousAccumulatedAmount)})" : ""}',
-                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
+                                              style: const TextStyle(
+                                                  fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
                                             ),
                                           ] else ...[
                                             Text(
@@ -816,20 +856,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                         ],
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: w.isWinner ? AppTheme.secondaryEmerald : AppTheme.dangerRose,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        w.isWinner ? 'GANADOR' : 'ACUMULADO',
-                                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
                                     if (!isAsesor) ...[
-                                      const SizedBox(width: 6),
                                       IconButton(
+                                        visualDensity: VisualDensity.compact,
                                         icon: const Icon(Icons.delete_outline, color: AppTheme.dangerRose),
                                         tooltip: 'Eliminar Sorteo y Descargar Informe PDF',
                                         onPressed: () => _showDeleteDrawDialog(w),
@@ -839,18 +868,19 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 ),
                                 if (w.isWinner && abonoDetailWidgets.isNotEmpty) ...[
                                   const Divider(height: 14),
-                                  const Text('📅 Fechas y Registro de Pagos/Abonos:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                  const Text('📅 Fechas y Registro de Pagos/Abonos:',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                   const SizedBox(height: 2),
                                   ...abonoDetailWidgets,
                                 ],
                                 if (w.photoUrl != null && w.photoUrl!.trim().isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   EvidencePreviewTile(url: w.photoUrl!.trim()),
-                                 ],
-                               ],
-                             ),
-                           ),
-                         );
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
                       },
                     )
             ],

@@ -5,8 +5,7 @@ import '../../../../data/repositories/raffle_repository.dart';
 class RaffleViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
 
-  RaffleViewModel({RaffleRepository? repository})
-      : _repository = repository ?? RaffleRepository();
+  RaffleViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository();
 
   List<Raffle> _raffles = [];
   List<Raffle> get raffles => _raffles;

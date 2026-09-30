@@ -8,8 +8,7 @@ enum UserRole { superadmin, admin, asesor }
 class AuthViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
 
-  AuthViewModel({RaffleRepository? repository})
-      : _repository = repository ?? RaffleRepository();
+  AuthViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository();
 
   bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
@@ -98,9 +97,11 @@ class AuthViewModel extends ChangeNotifier {
     try {
       final companies = await _repository.fetchCompanies();
       final matchedCompany = companies.firstWhere(
-        (c) => (c.adminUsername.trim().toLowerCase() == inputUser || c.adminEmail.trim().toLowerCase() == inputUser) &&
+        (c) =>
+            (c.adminUsername.trim().toLowerCase() == inputUser || c.adminEmail.trim().toLowerCase() == inputUser) &&
             c.adminPassword.trim() == inputPass,
-        orElse: () => Company(id: '', name: '', code: '', status: '', adminUsername: '', adminPassword: '', adminName: '', adminEmail: '', createdAt: ''),
+        orElse: () => Company(
+            id: '', name: '', code: '', status: '', adminUsername: '', adminPassword: '', adminName: '', adminEmail: '', createdAt: ''),
       );
 
       if (matchedCompany.id.isNotEmpty) {
@@ -175,7 +176,16 @@ class AuthViewModel extends ChangeNotifier {
           final companies = await _repository.fetchCompanies();
           final matchedComp = companies.firstWhere(
             (c) => c.id == matched.companyId,
-            orElse: () => Company(id: '', name: 'Empresa Principal', code: '', status: '', adminUsername: '', adminPassword: '', adminName: '', adminEmail: '', createdAt: ''),
+            orElse: () => Company(
+                id: '',
+                name: 'Empresa Principal',
+                code: '',
+                status: '',
+                adminUsername: '',
+                adminPassword: '',
+                adminName: '',
+                adminEmail: '',
+                createdAt: ''),
           );
           if (matchedComp.name.isNotEmpty) {
             _companyName = matchedComp.name;

@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/data/models/raffle.dart';
@@ -120,7 +120,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   void _showAddPrizeDialog() {
     final nameCtrl = TextEditingController(text: 'Sorteo Semanal #${_weeklyPrizes.length + 1}');
     final amountCtrl = TextEditingController(text: '1000000');
-    final dateCtrl = TextEditingController(text: DateTime.now().add(Duration(days: 7 * (_weeklyPrizes.length + 1))).toIso8601String().substring(0, 10));
+    final dateCtrl =
+        TextEditingController(text: DateTime.now().add(Duration(days: 7 * (_weeklyPrizes.length + 1))).toIso8601String().substring(0, 10));
     final lotteryCtrl = TextEditingController(text: _lotteryName);
     String minType = _weeklyMinAbonoType;
     final minValCtrl = TextEditingController(text: _weeklyMinAbonoValueController.text);
@@ -174,9 +175,12 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       decoration: const InputDecoration(labelText: 'Lotería o Mecánica del Sorteo', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
-                    Row(
+                    Flex(
+                      direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                      crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                       children: [
-                        Expanded(
+                        ResponsiveFlexChild(
+                          expand: !isNarrowScreen(context),
                           child: RadioListTile<String>(
                             value: 'PORCENTAJE',
                             groupValue: minType,
@@ -186,7 +190,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                        Expanded(
+                        ResponsiveFlexChild(
+                          expand: !isNarrowScreen(context),
                           child: RadioListTile<String>(
                             value: 'VALOR_FIJO',
                             groupValue: minType,
@@ -282,9 +287,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   )
                 : null;
 
-            double reqAbono = prize.minAbonoType == 'PORCENTAJE'
-                ? (widget.raffle.ticketPrice * (prize.minAbonoValue / 100))
-                : prize.minAbonoValue;
+            double reqAbono =
+                prize.minAbonoType == 'PORCENTAJE' ? (widget.raffle.ticketPrice * (prize.minAbonoValue / 100)) : prize.minAbonoValue;
 
             bool ticketExists = matchedTicket != null && matchedTicket.id.isNotEmpty;
             bool meetsCondition = ticketExists && matchedTicket.totalPaid >= reqAbono;
@@ -302,8 +306,11 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Sorteo: ${prize.name} • Prem: \$${prize.amount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Condición: Abono mín. de ${prize.minAbonoType == 'PORCENTAJE' ? '${prize.minAbonoValue}%' : '\$${prize.minAbonoValue.toStringAsFixed(0)}'} (\$${reqAbono.toStringAsFixed(0)} COP)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text('Sorteo: ${prize.name} • Prem: \$${prize.amount.toStringAsFixed(0)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                        'Condición: Abono mín. de ${prize.minAbonoType == 'PORCENTAJE' ? '${prize.minAbonoValue}%' : '\$${prize.minAbonoValue.toStringAsFixed(0)}'} (\$${reqAbono.toStringAsFixed(0)} COP)',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     const SizedBox(height: 12),
                     TextField(
                       controller: numCtrl,
@@ -320,11 +327,15 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       if (!ticketExists) ...[
                         Container(
                           padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade300)),
+                          decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange.shade300)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('⚠️ El número $winningNum NO pertenece a boleta vendida.', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
+                              Text('⚠️ El número $winningNum NO pertenece a boleta vendida.',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
                               const SizedBox(height: 4),
                               Text(
                                 prize.isAccumulative
@@ -348,12 +359,18 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             children: [
                               Text(
                                 'Boleta Ganadora #${matchedTicket.ticketNumber} — ${matchedTicket.buyerName}',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: meetsCondition ? Colors.green.shade900 : Colors.red.shade900),
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: meetsCondition ? Colors.green.shade900 : Colors.red.shade900),
                               ),
-                              Text('Abonado Actual: \$${matchedTicket.totalPaid.toStringAsFixed(0)} COP (Requerido: \$${reqAbono.toStringAsFixed(0)})', style: const TextStyle(fontSize: 11)),
+                              Text(
+                                  'Abonado Actual: \$${matchedTicket.totalPaid.toStringAsFixed(0)} COP (Requerido: \$${reqAbono.toStringAsFixed(0)})',
+                                  style: const TextStyle(fontSize: 11)),
                               const SizedBox(height: 6),
                               if (meetsCondition)
-                                const Text('🎉 ¡CUMPLE LA CONDICIÓN! El comprador califica para reclamar el premio.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green))
+                                const Text('🎉 ¡CUMPLE LA CONDICIÓN! El comprador califica para reclamar el premio.',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green))
                               else ...[
                                 Text(
                                   '❌ NO CUMPLE LA CONDICIÓN DE ABONO.\n${prize.isAccumulative ? "✓ Como 'El premio se acumula' está activo, este premio SE ACUMULA." : "El premio queda desierto."}',
@@ -487,9 +504,12 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                Row(
+                Flex(
+                  direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                  crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: TextFormField(
                         controller: _mainDrawDateController,
                         readOnly: true,
@@ -507,8 +527,9 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese fecha principal' : null,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    const SizedBox(width: 12, height: 12),
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: TextFormField(
                         controller: _weeklyPrizesStartDateController,
                         readOnly: true,
@@ -541,9 +562,12 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Flex(
+                  direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                  crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: RadioListTile<String>(
                         value: 'PORCENTAJE',
                         groupValue: _commissionType,
@@ -558,7 +582,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: RadioListTile<String>(
                         value: 'VALOR_FIJO',
                         groupValue: _commissionType,
@@ -600,7 +625,9 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   children: [
                     const Icon(Icons.people, color: AppTheme.primaryBlue, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Asesores Autorizados para este Sorteo:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Expanded(
+                        child: const Text('Asesores Autorizados para este Sorteo:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -655,22 +682,28 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   children: [
                     const Icon(Icons.upload_file, color: Colors.orange, size: 20),
                     const SizedBox(width: 8),
-                    const Text('Actualizar / Importar Boletas Vendidas desde Excel (.xlsx):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    Expanded(
+                        child: const Text('Actualizar / Importar Boletas Vendidas desde Excel (.xlsx):',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.start,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
                       onPressed: () => ExcelCsvHelper.downloadSoldTicketsTemplate(),
                       icon: const Icon(Icons.download, size: 16),
                       label: const Text('Plantilla Excel (.xlsx)', style: TextStyle(fontSize: 12)),
                     ),
-                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       onPressed: _pickPreSoldTicketsFile,
                       icon: const Icon(Icons.upload_file, size: 16),
-                      label: Text(_importedRecords != null ? 'Cambiar Archivo Excel' : 'Cargar Boletas Excel', style: const TextStyle(fontSize: 12)),
+                      label: Text(_importedRecords != null ? 'Cambiar Archivo Excel' : 'Cargar Boletas Excel',
+                          style: const TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800),
                     ),
                   ],
@@ -733,9 +766,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                               final sellerName = (rec['sellerName'] != null && rec['sellerName'].toString().trim().isNotEmpty)
                                   ? rec['sellerName'].toString()
                                   : "N/A";
-                              final note = (rec['note'] != null && rec['note'].toString().trim().isNotEmpty)
-                                  ? " • ${rec['note']}"
-                                  : "";
+                              final note = (rec['note'] != null && rec['note'].toString().trim().isNotEmpty) ? " • ${rec['note']}" : "";
 
                               return ListTile(
                                 dense: true,
@@ -808,10 +839,11 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   children: [
                     const Icon(Icons.stars, color: Colors.purple, size: 22),
                     const SizedBox(width: 8),
-                    const Text(
+                    Expanded(
+                        child: const Text(
                       '🎁 Sorteos Semanales y Premios Adicionales:',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -822,7 +854,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 const SizedBox(height: 8),
 
                 SwitchListTile(
-                  title: const Text('Habilitar Sorteos Semanales / Adicionales', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  title:
+                      const Text('Habilitar Sorteos Semanales / Adicionales', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                   subtitle: Text(_hasWeeklyDraws
                       ? 'Las boletas participan en sorteos recurrentes según abonado acumulado.'
                       : 'Deshabilitado para este sorteo.'),
@@ -833,10 +866,14 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
                 if (_hasWeeklyDraws) ...[
                   const SizedBox(height: 8),
-                  Row(
+                  Flex(
+                    direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                    crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                     children: [
-                      Expanded(
+                      ResponsiveFlexChild(
+                        expand: !isNarrowScreen(context),
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _weeklyDrawDay,
                           decoration: const InputDecoration(labelText: 'Día Habitual del Sorteo', border: OutlineInputBorder()),
                           items: const [
@@ -851,8 +888,9 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           onChanged: (v) => setState(() => _weeklyDrawDay = v!),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
+                      const SizedBox(width: 12, height: 12),
+                      ResponsiveFlexChild(
+                        expand: !isNarrowScreen(context),
                         child: TextFormField(
                           initialValue: _lotteryName,
                           decoration: const InputDecoration(labelText: 'Lotería Principal', border: OutlineInputBorder()),
@@ -865,9 +903,12 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
                   // REQUISITO MÍNIMO DE ABONO
                   const Text('📊 Condición Mínima de Abono para Participar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Row(
+                  Flex(
+                    direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                    crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                     children: [
-                      Expanded(
+                      ResponsiveFlexChild(
+                        expand: !isNarrowScreen(context),
                         child: RadioListTile<String>(
                           value: 'PORCENTAJE',
                           groupValue: _weeklyMinAbonoType,
@@ -877,7 +918,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
-                      Expanded(
+                      ResponsiveFlexChild(
+                        expand: !isNarrowScreen(context),
                         child: RadioListTile<String>(
                           value: 'VALOR_FIJO',
                           groupValue: _weeklyMinAbonoType,
@@ -917,10 +959,14 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   const SizedBox(height: 12),
 
                   // LISTADO Y GESTIÓN DE PREMIOS ADICIONALES
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 10,
+                    runSpacing: 8,
                     children: [
-                      Text('Premios / Sorteos Registrados (${_weeklyPrizes.length}):', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text('Premios / Sorteos Registrados (${_weeklyPrizes.length}):',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       ElevatedButton.icon(
                         onPressed: _showAddPrizeDialog,
                         icon: const Icon(Icons.add, size: 16),
@@ -934,7 +980,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   if (_weeklyPrizes.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('No hay premios o sorteos adicionales configurados.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
+                      child: Text('No hay premios o sorteos adicionales configurados.',
+                          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
                     )
                   else
                     Container(
@@ -960,7 +1007,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             title: Row(
                               children: [
                                 Expanded(
-                                  child: Text('${p.name} — \$${p.amount.toStringAsFixed(0)} COP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  child: Text('${p.name} — \$${p.amount.toStringAsFixed(0)} COP',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1004,11 +1052,13 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
                 const SizedBox(height: 24),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-                    const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () async {
                         if (_formKey.currentState!.validate()) {

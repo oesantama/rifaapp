@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
@@ -163,10 +163,11 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                   children: [
                     const Icon(Icons.confirmation_number, color: AppTheme.primaryBlue, size: 28),
                     const SizedBox(width: 10),
-                    const Text(
+                    Expanded(
+                        child: const Text(
                       'Configurar Nuevo Sorteo / Rifa',
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -189,9 +190,12 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                Row(
+                Flex(
+                  direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                  crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: TextFormField(
                         controller: _mainDrawDateController,
                         readOnly: true,
@@ -209,8 +213,9 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                         validator: (v) => (v == null || v.trim().isEmpty) ? 'Seleccione fecha' : null,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    const SizedBox(width: 12, height: 12),
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: TextFormField(
                         controller: _weeklyPrizesStartDateController,
                         readOnly: true,
@@ -231,10 +236,14 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                Row(
+                Flex(
+                  direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                  crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: DropdownButtonFormField<int>(
+                        isExpanded: true,
                         value: _digits,
                         decoration: const InputDecoration(labelText: 'Cantidad de Dígitos', border: OutlineInputBorder()),
                         items: const [
@@ -248,8 +257,9 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                    const SizedBox(width: 12, height: 12),
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: TextFormField(
                         controller: _totalTicketsController,
                         decoration: const InputDecoration(labelText: 'Cantidad de Boletas *', border: OutlineInputBorder()),
@@ -318,9 +328,12 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 6),
-                Row(
+                Flex(
+                  direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                  crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                   children: [
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: RadioListTile<String>(
                         value: 'PORCENTAJE',
                         groupValue: _commissionType,
@@ -335,7 +348,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
-                    Expanded(
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
                       child: RadioListTile<String>(
                         value: 'VALOR_FIJO',
                         groupValue: _commissionType,
@@ -383,7 +397,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                   value: 'SECUENCIAL',
                   groupValue: _generationMode,
                   title: const Text('Matemático / Secuencial (Recomendado)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: const Text('Distribución uniforme matemática ordenada (Ej: 0000, 1000, 2000, 3000...).', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Distribución uniforme matemática ordenada (Ej: 0000, 1000, 2000, 3000...).',
+                      style: TextStyle(fontSize: 11)),
                   onChanged: (v) => setState(() => _generationMode = v!),
                   dense: true,
                 ),
@@ -392,7 +407,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                   value: 'ALEATORIO',
                   groupValue: _generationMode,
                   title: const Text('Aleatorio (Sorteo al Azar por Boleta)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: const Text('Mezcla todos los números del 0000 al 9999 y asigna oportunidades completamente al azar.', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Mezcla todos los números del 0000 al 9999 y asigna oportunidades completamente al azar.',
+                      style: TextStyle(fontSize: 11)),
                   onChanged: (v) => setState(() => _generationMode = v!),
                   dense: true,
                 ),
@@ -400,8 +416,10 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 RadioListTile<String>(
                   value: 'EXCEL',
                   groupValue: _generationMode,
-                  title: const Text('Importar Números Personalizados desde Excel / CSV', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: const Text('Sube una matriz de números específicos por boleta asignados externamente.', style: TextStyle(fontSize: 11)),
+                  title: const Text('Importar Números Personalizados desde Excel / CSV',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  subtitle: const Text('Sube una matriz de números específicos por boleta asignados externamente.',
+                      style: TextStyle(fontSize: 11)),
                   onChanged: (v) => setState(() => _generationMode = v!),
                   dense: true,
                 ),
@@ -425,7 +443,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                             ElevatedButton.icon(
                               onPressed: () => _pickCustomNumbersFile(seriesCalculated),
                               icon: const Icon(Icons.upload_file, size: 16),
-                              label: Text(_customNumbersMap != null ? 'Cambiar Archivo' : 'Subir Archivo Excel', style: const TextStyle(fontSize: 12)),
+                              label: Text(_customNumbersMap != null ? 'Cambiar Archivo' : 'Subir Archivo Excel',
+                                  style: const TextStyle(fontSize: 12)),
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700),
                             ),
                           ],
@@ -538,18 +557,22 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.start,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
                       onPressed: () => ExcelCsvHelper.downloadSoldTicketsTemplate(),
                       icon: const Icon(Icons.download, size: 16),
                       label: const Text('Plantilla Excel (.xlsx)', style: TextStyle(fontSize: 12)),
                     ),
-                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       onPressed: _pickPreSoldTicketsFile,
                       icon: const Icon(Icons.upload_file, size: 16),
-                      label: Text(_preSoldTicketsList != null ? 'Cambiar Archivo' : 'Cargar Boletas Excel', style: const TextStyle(fontSize: 12)),
+                      label: Text(_preSoldTicketsList != null ? 'Cambiar Archivo' : 'Cargar Boletas Excel',
+                          style: const TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800),
                     ),
                   ],
@@ -649,11 +672,13 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
 
                 const SizedBox(height: 24),
 
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-                    const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () async {
                         if (_formKey.currentState!.validate()) {

@@ -13,30 +13,36 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// Initialize Firebase Admin if credentials present
+// Initialize Firebase Admin if credentials present and not forcing local DB
 let firestore = null;
-try {
-  let serviceAccount = null;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  } else {
-    const keyPath = path.join(__dirname, 'serviceAccountKey.json');
-    if (fs.existsSync(keyPath)) {
-      serviceAccount = require(keyPath);
-    }
-  }
+const forceLocalDb = process.env.USE_LOCAL_DB === 'true';
 
-  if (serviceAccount && admin) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
-    });
-    firestore = admin.firestore();
-    console.log('✅ Conectado exitosamente a Google Cloud Firestore (100% Gratis)');
-  } else {
-    console.log('ℹ️ Firebase no configurado. Usando almacenamiento local data.json');
+if (!forceLocalDb) {
+  try {
+    let serviceAccount = null;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+      const keyPath = path.join(__dirname, 'serviceAccountKey.json');
+      if (fs.existsSync(keyPath)) {
+        serviceAccount = require(keyPath);
+      }
+    }
+
+    if (serviceAccount && admin) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+      });
+      firestore = admin.firestore();
+      console.log('✅ Conectado exitosamente a Google Cloud Firestore (100% Gratis)');
+    } else {
+      console.log('ℹ️ Firebase no configurado. Usando almacenamiento local data.json');
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo conectar a Firebase, usando data.json local:', err.message);
   }
-} catch (err) {
-  console.warn('⚠️ No se pudo conectar a Firebase, usando data.json local:', err.message);
+} else {
+  console.log('ℹ️ Modo USE_LOCAL_DB activo. Usando almacenamiento local data.json');
 }
 
 app.use(cors({
@@ -190,25 +196,28 @@ function generateInitialTickets() {
 
 // File persistence helpers
 async function loadDB() {
+  let loadedFromFirestore = false;
   if (firestore) {
     try {
       const doc = await firestore.collection('rifaapp').doc('database').get();
       if (doc.exists) {
         db = doc.data();
+        loadedFromFirestore = true;
         console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
       } else {
-        console.log('ℹ️ No hay datos previos en Firestore, inicializando base de datos...');
+        console.log('ℹ️ No hay datos previos en Firestore, buscando en almacenamiento local...');
       }
     } catch (e) {
       console.error('Error cargando datos desde Firestore:', e.message);
     }
   }
 
-  try {
-    if (!db || (!db.raffles && !db.tickets)) {
+  if (!loadedFromFirestore) {
+    try {
       if (fs.existsSync(DB_FILE)) {
         const data = fs.readFileSync(DB_FILE, 'utf8');
         db = JSON.parse(data);
+        console.log('✅ Datos cargados exitosamente desde data.json local');
       } else {
         db = {
           companies: [],
@@ -221,22 +230,47 @@ async function loadDB() {
         };
         saveDB();
       }
+    } catch (err) {
+      console.error('Error loading DB file:', err);
+      db = {
+        companies: [],
+        raffles: [],
+        tickets: [],
+        advisors: [],
+        winners: [],
+        cashTransactions: [],
+        logs: []
+      };
     }
-  } catch (err) {
-    console.error('Error loading DB:', err);
-    db = {
-      companies: [],
-      raffles: [],
-      tickets: [],
-      advisors: [],
-      winners: [],
-      cashTransactions: [],
-      logs: []
-    };
   }
 
   // Ensure DB arrays exist
-  if (!db.companies) db.companies = [];
+  if (!db.companies || db.companies.length === 0) {
+    db.companies = [
+      {
+        id: 'comp-1',
+        name: 'contruexito',
+        code: 'EMP01',
+        status: 'ACTIVA',
+        adminUsername: 'william',
+        adminPassword: '1234',
+        adminName: 'WILLIAM SANTAMARIA',
+        adminEmail: 'william@santamaria.com',
+        createdAt: '2026-09-29T19:54:13.535Z'
+      },
+      {
+        id: 'comp-2',
+        name: 'marisol y edgar distribuciones del norte',
+        code: 'SANT-01',
+        status: 'ACTIVA',
+        adminUsername: 'marisol',
+        adminPassword: '12345678',
+        adminName: 'marisol santamaria',
+        adminEmail: 'marisol.santamaria.larga@gmail.com',
+        createdAt: '2026-09-29T19:54:13.535Z'
+      }
+    ];
+  }
   if (!db.raffles) db.raffles = [];
   if (!db.tickets) db.tickets = [];
   if (!db.advisors) db.advisors = [];

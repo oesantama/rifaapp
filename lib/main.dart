@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'ui/core/theme.dart';
+import 'ui/core/widgets/app_logo.dart';
 import 'data/repositories/raffle_repository.dart';
 import 'ui/features/auth/view_models/auth_view_model.dart';
 import 'ui/features/auth/views/login_view.dart';
@@ -47,7 +48,7 @@ class _RifaAppState extends State<RifaApp> {
         ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)..loadWinners()),
       ],
       child: MaterialApp(
-        title: 'Gestión de Rifas y Boletas Multiplataforma',
+        title: 'Rifa Master',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
@@ -140,17 +141,19 @@ class _MainShellScreenState extends State<MainShellScreen> {
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.confirmation_number, color: AppTheme.accentAmber, size: 20),
-                const SizedBox(width: 6),
+                const AppLogo(size: 28),
+                const SizedBox(width: 8),
                 Text(
                   isWide ? 'RIFA MASTER' : 'RIFA',
                   style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5, fontSize: 16),
                 ),
                 if (isWide && !authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty) ...[
                   const SizedBox(width: 8),
-                  Flexible(
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
+                        isExpanded: true,
                         dropdownColor: const Color(0xFF1E293B),
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                         value: raffleVM.selectedRaffle?.id,
@@ -395,8 +398,6 @@ class _MainShellScreenState extends State<MainShellScreen> {
           ? BottomNavigationBar(
               currentIndex: _selectedIndex,
               onTap: (idx) => setState(() => _selectedIndex = idx),
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppTheme.primaryBlue,
               items: authVM.isSuperAdmin
                   ? const [
                       BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),

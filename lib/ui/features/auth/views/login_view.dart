@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/widgets/app_logo.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 
 class LoginView extends StatefulWidget {
@@ -143,22 +144,18 @@ class _LoginViewState extends State<LoginView> {
                 children: [
                   // Professional Header Logo / Badge
                   Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
+                    child: DecoratedBox(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [AppTheme.primaryBlue, Colors.indigo.shade800],
-                        ),
-                        shape: BoxShape.circle,
+                        borderRadius: BorderRadius.circular(22),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.primaryBlue.withValues(alpha: 0.4),
-                            blurRadius: 15,
-                            offset: const Offset(0, 6),
-                          )
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.35),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
                         ],
                       ),
-                      child: const Icon(Icons.confirmation_number, size: 42, color: Colors.white),
+                      child: AppLogo(size: isCompact ? 76 : 88),
                     ),
                   ),
                   const SizedBox(height: 20),

@@ -76,7 +76,8 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                     ),
                   )
                 else ...[
-                  Text('Saldo Pendiente por Cobrar: \$${maxPending.toStringAsFixed(0)} COP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
+                  Text('Saldo Pendiente por Cobrar: \$${maxPending.toStringAsFixed(0)} COP',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
                   const SizedBox(height: 10),
                   TextField(
                     controller: amountCtrl,
@@ -222,7 +223,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 )
@@ -233,7 +234,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -248,9 +249,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        authVM.isAdmin
-                            ? 'DASHBOARD DE COMISIONES Y GANANCIAS (ADMIN)'
-                            : 'MI PANEL DE GANANCIAS Y LIQUIDACIONES',
+                        authVM.isAdmin ? 'DASHBOARD DE COMISIONES Y GANANCIAS (ADMIN)' : 'MI PANEL DE GANANCIAS Y LIQUIDACIONES',
                         style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1),
                       ),
                       const SizedBox(height: 4),
@@ -263,9 +262,11 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                         children: [
                           const Icon(Icons.percent, color: Colors.white70, size: 14),
                           const SizedBox(width: 4),
-                          Text(
-                            'Esquema de Comisión Activo: $commBadgeText',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                          Expanded(
+                            child: Text(
+                              'Esquema de Comisión Activo: $commBadgeText',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
                           ),
                         ],
                       ),
@@ -286,45 +287,38 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
           // TARJETAS METRICAS PRINCIPALES
           if (authVM.isAdmin) ...[
             // VISTA ADMIN METRICS
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Total Comisiones Ganadas',
-                    val: currency.format(globalEarned),
-                    icon: Icons.savings_outlined,
-                    color: AppTheme.primaryBlue,
-                    subtitle: 'Acumulado por ventas de asesores',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Comisiones Liquidadas',
-                    val: currency.format(globalPaid),
-                    icon: Icons.check_circle_outline,
-                    color: AppTheme.secondaryEmerald,
-                    subtitle: 'Total ya pagado a asesores',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Pendiente por Pagar',
-                    val: currency.format(globalPending),
-                    icon: Icons.pending_actions,
-                    color: Colors.orange.shade800,
-                    subtitle: 'Saldo actual a liquidar',
-                  ),
-                ),
-              ],
-            ),
+            _metricsGrid([
+              _buildMetricCard(
+                title: 'Total Comisiones Ganadas',
+                val: currency.format(globalEarned),
+                icon: Icons.savings_outlined,
+                color: AppTheme.primaryBlue,
+                subtitle: 'Acumulado por ventas de asesores',
+              ),
+              _buildMetricCard(
+                title: 'Comisiones Liquidadas',
+                val: currency.format(globalPaid),
+                icon: Icons.check_circle_outline,
+                color: AppTheme.secondaryEmerald,
+                subtitle: 'Total ya pagado a asesores',
+              ),
+              _buildMetricCard(
+                title: 'Pendiente por Pagar',
+                val: currency.format(globalPending),
+                icon: Icons.pending_actions,
+                color: Colors.orange.shade800,
+                subtitle: 'Saldo actual a liquidar',
+              ),
+            ]),
 
             const SizedBox(height: 20),
 
             // BOTON ACCION GLOBAL ADMIN
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 const Text(
                   'Detalle de Ganancias por Asesor:',
@@ -363,77 +357,103 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                   int sold = adv['totalTicketsSold'] ?? 0;
                   double collected = (adv['totalCollected'] as num?)?.toDouble() ?? 0.0;
 
+                  final avatar = CircleAvatar(
+                    radius: 20,
+                    backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                    child: Text(
+                      adv['advisorName'] != null && adv['advisorName'].toString().isNotEmpty ? adv['advisorName'][0].toUpperCase() : 'A',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
+                    ),
+                  );
+                  final identity = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        adv['advisorName'] ?? 'Sin Nombre',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Cédula/Código: ${adv['advisorCode'] ?? "N/A"} • Tel: ${adv['phone'] ?? "N/A"}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
+                  );
+                  final sales = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$sold boletas vendidas', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('Recaudado: ${currency.format(collected)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  );
+                  final earnings = Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Ganancia: ${currency.format(earned)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primaryBlue)),
+                      Text('Pagado: ${currency.format(paid)} | Pendiente: ${currency.format(pending)}',
+                          textAlign: TextAlign.end,
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: pending > 0 ? Colors.red : Colors.green)),
+                    ],
+                  );
+                  final payButton = ElevatedButton.icon(
+                    onPressed: pending > 0
+                        ? () => _showPayoutDialog(
+                              context,
+                              advisorId: adv['advisorId'],
+                              advisorName: adv['advisorName'],
+                              maxPending: pending,
+                            )
+                        : null,
+                    icon: const Icon(Icons.attach_money, size: 16),
+                    label: Text(pending > 0 ? 'Liquidar' : 'Al día', style: const TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: pending > 0 ? Colors.orange.shade800 : Colors.grey,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                  );
+
                   return Padding(
                     padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppTheme.primaryBlue.withOpacity(0.15),
-                          child: Text(
-                            adv['advisorName'] != null && adv['advisorName'].toString().isNotEmpty
-                                ? adv['advisorName'][0].toUpperCase()
-                                : 'A',
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 560) {
+                          return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                adv['advisorName'] ?? 'Sin Nombre',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              Row(
+                                children: [
+                                  avatar,
+                                  const SizedBox(width: 12),
+                                  Expanded(child: identity),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Cédula/Código: ${adv['advisorCode'] ?? "N/A"} • Tel: ${adv['phone'] ?? "N/A"}',
-                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              const SizedBox(height: 10),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: sales),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: earnings),
+                                ],
                               ),
+                              const SizedBox(height: 8),
+                              Align(alignment: Alignment.centerRight, child: payButton),
                             ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Text('$sold boletas vendidas', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                              Text('Recaudado: ${currency.format(collected)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text('Ganancia: ${currency.format(earned)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primaryBlue)),
-                              Text('Pagado: ${currency.format(paid)} | Pendiente: ${currency.format(pending)}',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: pending > 0 ? Colors.red : Colors.green)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          onPressed: pending > 0
-                              ? () => _showPayoutDialog(
-                                    context,
-                                    advisorId: adv['advisorId'],
-                                    advisorName: adv['advisorName'],
-                                    maxPending: pending,
-                                  )
-                              : null,
-                          icon: const Icon(Icons.attach_money, size: 16),
-                          label: Text(pending > 0 ? 'Liquidar' : 'Al día', style: const TextStyle(fontSize: 11)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: pending > 0 ? Colors.orange.shade800 : Colors.grey,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                        ),
-                      ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            avatar,
+                            const SizedBox(width: 12),
+                            Expanded(flex: 3, child: identity),
+                            Expanded(flex: 2, child: sales),
+                            Expanded(flex: 3, child: earnings),
+                            const SizedBox(width: 12),
+                            payButton,
+                          ],
+                        );
+                      },
                     ),
                   );
                 },
@@ -441,53 +461,36 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
             ),
           ] else if (myAdvisorStat != null) ...[
             // VISTA ASESOR INDIVIDUAL METRICS
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Boletas Vendidas',
-                    val: '$mySold',
-                    icon: Icons.confirmation_number_outlined,
-                    color: AppTheme.primaryBlue,
-                    subtitle: 'Ventas registradas',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Tu Ganancia Total',
-                    val: currency.format(myEarned),
-                    icon: Icons.savings_outlined,
-                    color: Colors.purple,
-                    subtitle: 'Calculado según esquema',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Ganancia Pagada / Cobrada',
-                    val: currency.format(myPaid),
-                    icon: Icons.check_circle_outline,
-                    color: AppTheme.secondaryEmerald,
-                    subtitle: 'Entregado por el administrador',
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildMetricCard(
-                    title: 'Saldo Pendiente por Cobrar',
-                    val: currency.format(myPending),
-                    icon: Icons.hourglass_top_outlined,
-                    color: myPending > 0 ? Colors.red : Colors.green,
-                    subtitle: myPending > 0 ? 'Por cobrar al administrador' : '¡Estás al día sin saldos!',
-                  ),
-                ),
-              ],
-            ),
+            _metricsGrid([
+              _buildMetricCard(
+                title: 'Boletas Vendidas',
+                val: '$mySold',
+                icon: Icons.confirmation_number_outlined,
+                color: AppTheme.primaryBlue,
+                subtitle: 'Ventas registradas',
+              ),
+              _buildMetricCard(
+                title: 'Tu Ganancia Total',
+                val: currency.format(myEarned),
+                icon: Icons.savings_outlined,
+                color: Colors.purple,
+                subtitle: 'Calculado según esquema',
+              ),
+              _buildMetricCard(
+                title: 'Ganancia Pagada / Cobrada',
+                val: currency.format(myPaid),
+                icon: Icons.check_circle_outline,
+                color: AppTheme.secondaryEmerald,
+                subtitle: 'Entregado por el administrador',
+              ),
+              _buildMetricCard(
+                title: 'Saldo Pendiente por Cobrar',
+                val: currency.format(myPending),
+                icon: Icons.hourglass_top_outlined,
+                color: myPending > 0 ? Colors.red : Colors.green,
+                subtitle: myPending > 0 ? 'Por cobrar al administrador' : '¡Estás al día sin saldos!',
+              ),
+            ]),
           ],
 
           const SizedBox(height: 24),
@@ -504,7 +507,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
+                    color: Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
@@ -522,14 +525,13 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                     itemBuilder: (context, i) {
                       final pay = payoutsHistory[i];
                       double amt = (pay['amount'] as num?)?.toDouble() ?? 0.0;
-                      String dateStr = pay['date'] != null
-                          ? DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.parse(pay['date']))
-                          : 'Reciente';
+                      String dateStr =
+                          pay['date'] != null ? DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.parse(pay['date'])) : 'Reciente';
 
                       return ListTile(
                         dense: true,
                         leading: CircleAvatar(
-                          backgroundColor: Colors.green.withOpacity(0.15),
+                          backgroundColor: Colors.green.withValues(alpha: 0.15),
                           child: const Icon(Icons.receipt_long, color: Colors.green, size: 20),
                         ),
                         title: Text(
@@ -553,6 +555,29 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     );
   }
 
+  /// Lays out metric cards in a single row on wide screens and two per row on phones.
+  Widget _metricsGrid(List<Widget> cards) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 10.0;
+        final perRow = constraints.maxWidth >= 600 ? cards.length : 2;
+        final width = (constraints.maxWidth - spacing * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (int i = 0; i < cards.length; i++)
+              SizedBox(
+                // On phones an odd last card takes the full row
+                width: (perRow == 2 && i == cards.length - 1 && cards.length.isOdd) ? constraints.maxWidth : width,
+                child: cards[i],
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildMetricCard({
     required String title,
     required String val,
@@ -563,12 +588,12 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.05),
+            color: color.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 3),
           )
@@ -584,16 +609,21 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            val,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              val,
+              maxLines: 1,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+            ),
           ),
           const SizedBox(height: 2),
           Text(

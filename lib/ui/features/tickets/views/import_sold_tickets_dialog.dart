@@ -176,7 +176,11 @@ class _ImportSoldTicketsDialogState extends State<ImportSoldTicketsDialog> {
               const SizedBox(height: 16),
 
               // BOTONES DE PLANTILLA Y CARGA
-              Row(
+              Wrap(
+                alignment: WrapAlignment.start,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
                     onPressed: () => ExcelCsvHelper.downloadSoldTicketsTemplate(),
@@ -184,7 +188,6 @@ class _ImportSoldTicketsDialogState extends State<ImportSoldTicketsDialog> {
                     label: const Text('Descargar Plantilla Excel (.xlsx)'),
                     style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
                     onPressed: _pickExcelFile,
                     icon: const Icon(Icons.upload_file, size: 18),
@@ -270,18 +273,18 @@ class _ImportSoldTicketsDialogState extends State<ImportSoldTicketsDialog> {
               const SizedBox(height: 10),
 
               // BOTONES DE ACCIÓN
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10,
+                runSpacing: 8,
                 children: [
                   TextButton(
                     onPressed: _isProcessing ? null : () => Navigator.pop(context),
                     child: const Text('Cancelar'),
                   ),
-                  const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: (_loadedRecords != null && _loadedRecords!.isNotEmpty && !_isProcessing)
-                        ? _executeImport
-                        : null,
+                    onPressed: (_loadedRecords != null && _loadedRecords!.isNotEmpty && !_isProcessing) ? _executeImport : null,
                     icon: _isProcessing
                         ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.check),

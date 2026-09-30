@@ -71,78 +71,95 @@ class _TicketGridViewState extends State<TicketGridView> {
         return Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 16),
               color: Theme.of(context).cardColor,
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: authVM.isAsesor
-                                ? 'Buscar en mis boletas asignadas o vendidas...'
-                                : 'Buscar por N° boleta, número (ej: 0001) o comprador...',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: _searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      ticketVM.setSearchQuery('', raffleId: currentRaffle?.id);
-                                    },
-                                  )
-                                : null,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                          ),
-                          onChanged: (val) {
-                            ticketVM.setSearchQuery(val, raffleId: currentRaffle?.id);
-                          },
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isNarrow = constraints.maxWidth < 560;
+                      final searchField = TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: authVM.isAsesor ? 'Buscar en mis boletas...' : 'Buscar N° boleta, número o comprador...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    ticketVM.setSearchQuery('', raffleId: currentRaffle?.id);
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (authVM.isAdmin && currentRaffle != null) ...[
-                        IconButton.filledTonal(
-                          icon: const Icon(Icons.settings),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => RaffleEditDialog(raffle: currentRaffle),
-                          ),
-                          tooltip: 'Gestionar Sorteo (Asesores, Estado, Importar)',
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton.filledTonal(
-                          icon: const Icon(Icons.file_upload_outlined),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => ImportSoldTicketsDialog(
-                              raffleId: currentRaffle.id,
-                              raffleTitle: currentRaffle.title,
+                        onChanged: (val) {
+                          ticketVM.setSearchQuery(val, raffleId: currentRaffle?.id);
+                        },
+                      );
+                      final actionButtons = <Widget>[
+                        if (authVM.isAdmin && currentRaffle != null) ...[
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.settings),
+                            onPressed: () => showDialog(
+                              context: context,
+                              builder: (_) => RaffleEditDialog(raffle: currentRaffle),
                             ),
+                            tooltip: 'Gestionar Sorteo (Asesores, Estado, Importar)',
                           ),
-                          tooltip: 'Importar Boletas Vendidas desde Excel (.xlsx)',
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (currentRaffle != null) ...[
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.file_upload_outlined),
+                            onPressed: () => showDialog(
+                              context: context,
+                              builder: (_) => ImportSoldTicketsDialog(
+                                raffleId: currentRaffle.id,
+                                raffleTitle: currentRaffle.title,
+                              ),
+                            ),
+                            tooltip: 'Importar Boletas Vendidas desde Excel (.xlsx)',
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (currentRaffle != null) ...[
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.grid_on_rounded, color: AppTheme.accentAmber),
+                            onPressed: () => showDialog(
+                              context: context,
+                              builder: (_) => RafflePoster2dDialog(raffle: currentRaffle),
+                            ),
+                            tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         IconButton.filledTonal(
-                          icon: const Icon(Icons.grid_on_rounded, color: AppTheme.accentAmber),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => RafflePoster2dDialog(raffle: currentRaffle),
-                          ),
-                          tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
+                          icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
+                          onPressed: () => setState(() => _isGridView = !_isGridView),
+                          tooltip: _isGridView ? 'Ver Lista' : 'Ver Cuadrícula',
                         ),
-                        const SizedBox(width: 8),
-                      ],
-                      IconButton.filledTonal(
-                        icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
-                        onPressed: () => setState(() => _isGridView = !_isGridView),
-                        tooltip: _isGridView ? 'Ver Lista' : 'Ver Cuadrícula',
-                      ),
-                    ],
+                      ];
+                      if (isNarrow) {
+                        return Column(
+                          children: [
+                            searchField,
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Row(mainAxisSize: MainAxisSize.min, children: actionButtons),
+                            ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        children: [
+                          Expanded(child: searchField),
+                          const SizedBox(width: 8),
+                          ...actionButtons,
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   SingleChildScrollView(
@@ -176,9 +193,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                               Icon(Icons.confirmation_number_outlined, size: 64, color: Colors.grey.shade400),
                               const SizedBox(height: 12),
                               Text(
-                                authVM.isAsesor
-                                    ? 'No tienes boletas en este filtro'
-                                    : 'No se encontraron boletas',
+                                authVM.isAsesor ? 'No tienes boletas en este filtro' : 'No se encontraron boletas',
                                 style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                               ),
                             ],
@@ -204,19 +219,21 @@ class _TicketGridViewState extends State<TicketGridView> {
       onSelected: (_) {
         ticketVM.setStatusFilter(status, raffleId: raffleId);
       },
-      selectedColor: AppTheme.primaryBlue.withOpacity(0.2),
+      selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
       checkmarkColor: AppTheme.primaryBlue,
     );
   }
 
   Widget _buildGrid(BuildContext context, List<Ticket> tickets, String? raffleTitle, NumberFormat currency) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      padding: EdgeInsets.all(isMobile ? 10 : 16),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 260,
-        childAspectRatio: 1.15,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        mainAxisExtent: 176,
+        crossAxisSpacing: isMobile ? 8 : 12,
+        mainAxisSpacing: isMobile ? 8 : 12,
       ),
       itemCount: tickets.length,
       itemBuilder: (context, i) {
@@ -226,7 +243,7 @@ class _TicketGridViewState extends State<TicketGridView> {
         return Card(
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
-            side: BorderSide(color: borderCol.withOpacity(0.4), width: 1.5),
+            side: BorderSide(color: borderCol.withValues(alpha: 0.4), width: 1.5),
             borderRadius: BorderRadius.circular(14),
           ),
           child: InkWell(
@@ -243,35 +260,33 @@ class _TicketGridViewState extends State<TicketGridView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'BOLETA #${ticket.ticketNumber}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      Expanded(
+                        child: Text(
+                          'BOLETA #${ticket.ticketNumber}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.print_outlined, size: 16),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            tooltip: 'Imprimir Boleta',
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) => TicketPrintDialog(
-                                  ticket: ticket,
-                                  raffleTitle: raffleTitle ?? 'GRAN RIFA',
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 4),
-                          StatusBadge(status: ticket.status, isSmall: true),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.print_outlined, size: 18),
+                        padding: const EdgeInsets.all(4),
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Imprimir Boleta',
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => TicketPrintDialog(
+                              ticket: ticket,
+                              raffleTitle: raffleTitle ?? 'GRAN RIFA',
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
+                  const SizedBox(height: 4),
+                  StatusBadge(status: ticket.status, isSmall: true),
                   const SizedBox(height: 6),
                   Text(
                     'Números: ${ticket.numbers.join(', ')}',
@@ -297,11 +312,16 @@ class _TicketGridViewState extends State<TicketGridView> {
                         currency.format(ticket.price),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                       ),
-                      if (ticket.balancePending > 0 && ticket.totalPaid > 0)
-                        Text(
-                          'Abonado: ${currency.format(ticket.totalPaid)}',
-                          style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                      if (ticket.balancePending > 0 && ticket.totalPaid > 0) ...[
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            'Abonado: ${currency.format(ticket.totalPaid)}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                          ),
                         ),
+                      ],
                     ],
                   )
                 ],
@@ -315,7 +335,7 @@ class _TicketGridViewState extends State<TicketGridView> {
 
   Widget _buildList(BuildContext context, List<Ticket> tickets, String? raffleTitle, NumberFormat currency) {
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
       itemCount: tickets.length,
       itemBuilder: (context, i) {
         final ticket = tickets[i];
@@ -329,7 +349,7 @@ class _TicketGridViewState extends State<TicketGridView> {
               );
             },
             leading: CircleAvatar(
-              backgroundColor: AppTheme.getStatusColor(ticket.status).withOpacity(0.2),
+              backgroundColor: AppTheme.getStatusColor(ticket.status).withValues(alpha: 0.2),
               child: Text(
                 '#${ticket.ticketNumber}',
                 style: TextStyle(
@@ -341,6 +361,8 @@ class _TicketGridViewState extends State<TicketGridView> {
             ),
             title: Text('Números: ${ticket.numbers.join(', ')}', style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               ticket.buyerName.isNotEmpty
                   ? 'Comprador: ${ticket.buyerName} • Tel: ${ticket.buyerPhone}'
                   : 'Sin Vender • Asesor: ${ticket.advisorName.isNotEmpty ? ticket.advisorName : "General"}',

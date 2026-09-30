@@ -11,87 +11,136 @@ class AppTheme {
   static const Color cardLight = Colors.white;
   static const Color cardDark = Color(0xFF1E293B);
 
-  static ThemeData lightTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.light,
-    primaryColor: primaryBlue,
-    scaffoldBackgroundColor: backgroundLight,
-    fontFamily: 'Roboto',
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: primaryBlue,
-      brightness: Brightness.light,
-      primary: primaryBlue,
-      secondary: secondaryEmerald,
-      surface: cardLight,
-    ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: primaryDark,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: false,
-    ),
-    cardTheme: CardThemeData(
-      color: cardLight,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    ),
-    dialogTheme: const DialogThemeData(
-      insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-    ),
-    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: primaryBlue,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
-      ),
-    ),
-    chipTheme: ChipThemeData(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    ),
+  // Brand: navy + royal blue with gold accent (same palette as the app icon).
+  static const Color brandGold = Color(0xFFF59E0B);
+  static const Color borderLight = Color(0xFFE2E8F0);
+  static const Color borderDark = Color(0xFF334155);
+  static const LinearGradient brandGradient = LinearGradient(
+    colors: [Color(0xFF1E3A8A), primaryBlue],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
   );
 
-  static ThemeData darkTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    primaryColor: primaryBlue,
-    scaffoldBackgroundColor: backgroundDark,
-    fontFamily: 'Roboto',
-    colorScheme: ColorScheme.fromSeed(
+  static ThemeData lightTheme = _build(Brightness.light);
+  static ThemeData darkTheme = _build(Brightness.dark);
+
+  static ThemeData _build(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final surface = isDark ? cardDark : cardLight;
+    final border = isDark ? borderDark : borderLight;
+    final radius = BorderRadius.circular(12);
+
+    final colorScheme = ColorScheme.fromSeed(
       seedColor: primaryBlue,
-      brightness: Brightness.dark,
+      brightness: brightness,
       primary: primaryBlue,
       secondary: secondaryEmerald,
-      surface: cardDark,
-    ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF0B1120),
-      foregroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: false,
-    ),
-    cardTheme: CardThemeData(
-      color: cardDark,
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    ),
-    dialogTheme: const DialogThemeData(
-      insetPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-    ),
-    snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
+      tertiary: brandGold,
+      error: dangerRose,
+      surface: surface,
+    );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      primaryColor: primaryBlue,
+      scaffoldBackgroundColor: isDark ? backgroundDark : backgroundLight,
+      fontFamily: 'Roboto',
+      colorScheme: colorScheme,
+      dividerColor: border,
+      appBarTheme: AppBarTheme(
+        backgroundColor: isDark ? const Color(0xFF0B1120) : primaryDark,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+      ),
+      cardTheme: CardThemeData(
+        color: surface,
+        elevation: isDark ? 2 : 1,
+        shadowColor: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: border.withValues(alpha: isDark ? 0.6 : 0.9)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        border: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: border)),
+        enabledBorder: OutlineInputBorder(borderRadius: radius, borderSide: BorderSide(color: border)),
+        focusedBorder: OutlineInputBorder(borderRadius: radius, borderSide: const BorderSide(color: primaryBlue, width: 1.6)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryBlue,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          elevation: 0,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: radius),
+          side: BorderSide(color: border),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: radius)),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: primaryBlue,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-    ),
-  );
+      chipTheme: ChipThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: surface,
+        selectedItemColor: primaryBlue,
+        unselectedItemColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(fontSize: 11),
+        type: BottomNavigationBarType.fixed,
+        elevation: 12,
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: surface,
+        indicatorColor: primaryBlue.withValues(alpha: 0.14),
+        selectedIconTheme: const IconThemeData(color: primaryBlue),
+        selectedLabelTextStyle: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
+      ),
+      tabBarTheme: const TabBarThemeData(
+        labelColor: primaryBlue,
+        indicatorColor: primaryBlue,
+        labelStyle: TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
 
   static Color getStatusColor(String status) {
     switch (status) {

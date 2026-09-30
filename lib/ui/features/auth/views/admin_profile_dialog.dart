@@ -64,7 +64,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 16),
-
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -75,7 +74,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                   validator: (val) => val == null || val.trim().isEmpty ? 'Ingrese el nombre' : null,
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -91,7 +89,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                   },
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
@@ -102,7 +99,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                   validator: (val) => val == null || val.trim().isEmpty ? 'Ingrese el nombre de usuario' : null,
                 ),
                 const SizedBox(height: 12),
-
                 TextFormField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,

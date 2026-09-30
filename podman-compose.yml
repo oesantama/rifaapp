@@ -7,9 +7,10 @@ services:
       dockerfile: Containerfile
     container_name: rifaapp-backend
     ports:
-      - "3000:3000"
+      - "8080:8080"
     environment:
-      - PORT=3000
+      - PORT=8080
+      - USE_LOCAL_DB=true
     volumes:
-      - ./backend/data.json:/app/data.json
+      - ./backend/data.json:/app/data.json:z
     restart: always

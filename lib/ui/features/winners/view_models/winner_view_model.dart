@@ -5,8 +5,7 @@ import '../../../../data/repositories/raffle_repository.dart';
 class WinnerViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
 
-  WinnerViewModel({RaffleRepository? repository})
-      : _repository = repository ?? RaffleRepository();
+  WinnerViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository();
 
   List<WinnerRecord> _winners = [];
   List<WinnerRecord> get winners => _winners;
@@ -65,10 +64,8 @@ class WinnerViewModel extends ChangeNotifier {
   }
 
   int get accumulatedCount => _winners.where((w) => w.accumulated).length;
-  double get totalAccumulatedAmount =>
-      _winners.where((w) => w.accumulated).fold(0.0, (sum, w) => sum + w.basePrizeAmount);
+  double get totalAccumulatedAmount => _winners.where((w) => w.accumulated).fold(0.0, (sum, w) => sum + w.basePrizeAmount);
 
   int get totalWinnersCount => _winners.where((w) => w.isWinner).length;
-  double get totalPrizesPaid =>
-      _winners.where((w) => w.isWinner).fold(0.0, (sum, w) => sum + w.prizeAmount);
+  double get totalPrizesPaid => _winners.where((w) => w.isWinner).fold(0.0, (sum, w) => sum + w.prizeAmount);
 }

@@ -17,7 +17,7 @@ class ApiService {
             );
 
   bool _useLocalFallback = false;
-  
+
   final List<Raffle> _localRaffles = [];
   late final List<Ticket> _localTickets = [];
   final List<Advisor> _localAdvisors = [];
@@ -117,7 +117,9 @@ class ApiService {
     }
 
     if (isAsesor && advisorId != null) {
-      return _localRaffles.where((r) => r.status == 'ACTIVA' && (r.assignedAdvisorIds.isEmpty || r.assignedAdvisorIds.contains(advisorId))).toList();
+      return _localRaffles
+          .where((r) => r.status == 'ACTIVA' && (r.assignedAdvisorIds.isEmpty || r.assignedAdvisorIds.contains(advisorId)))
+          .toList();
     }
     return _localRaffles;
   }
@@ -142,9 +144,8 @@ class ApiService {
     if (idx != -1) {
       Raffle cur = _localRaffles[idx];
       var prizesRaw = body['weeklyPrizes'] as List?;
-      List<WeeklyPrize> prizes = prizesRaw != null
-          ? prizesRaw.map((p) => p is WeeklyPrize ? p : WeeklyPrize.fromJson(p)).toList()
-          : cur.weeklyPrizes;
+      List<WeeklyPrize> prizes =
+          prizesRaw != null ? prizesRaw.map((p) => p is WeeklyPrize ? p : WeeklyPrize.fromJson(p)).toList() : cur.weeklyPrizes;
 
       Raffle updated = Raffle(
         id: cur.id,
@@ -228,7 +229,7 @@ class ApiService {
     );
 
     _localRaffles.insert(0, newRaf);
-    
+
     // Generate tickets taking into account mode & pre-sold tickets
     String mode = body['generationMode'] ?? 'SECUENCIAL';
     Map<int, List<String>>? customMap = body['customNumbersMap'] as Map<int, List<String>>?;
@@ -441,12 +442,13 @@ class ApiService {
     }
     if (search != null && search.isNotEmpty) {
       String q = search.toLowerCase();
-      res = res.where((t) =>
-        t.ticketNumber.toString().contains(q) ||
-        t.buyerName.toLowerCase().contains(q) ||
-        t.buyerPhone.contains(q) ||
-        t.numbers.any((n) => n.contains(q))
-      ).toList();
+      res = res
+          .where((t) =>
+              t.ticketNumber.toString().contains(q) ||
+              t.buyerName.toLowerCase().contains(q) ||
+              t.buyerPhone.contains(q) ||
+              t.numbers.any((n) => n.contains(q)))
+          .toList();
     }
     return res;
   }
@@ -643,9 +645,8 @@ class ApiService {
         mode: body['mode'] ?? cur.mode,
         status: body['status'] ?? cur.status,
         deletionReason: body['deletionReason'] ?? cur.deletionReason,
-        assignedTicketRanges: body['assignedTicketRanges'] != null
-            ? List<String>.from(body['assignedTicketRanges'])
-            : cur.assignedTicketRanges,
+        assignedTicketRanges:
+            body['assignedTicketRanges'] != null ? List<String>.from(body['assignedTicketRanges']) : cur.assignedTicketRanges,
         totalTicketsCount: cur.totalTicketsCount,
         totalSold: cur.totalSold,
         totalCollected: cur.totalCollected,
@@ -751,12 +752,14 @@ class ApiService {
     List<Map<String, dynamic>> abonosSummary = [];
     if (match != null) {
       if (match.abonos.isNotEmpty) {
-        abonosSummary = match.abonos.map((a) => {
-          'date': a.date,
-          'amount': a.amount,
-          'sellerName': a.sellerName,
-          'note': a.note,
-        }).toList();
+        abonosSummary = match.abonos
+            .map((a) => {
+                  'date': a.date,
+                  'amount': a.amount,
+                  'sellerName': a.sellerName,
+                  'note': a.note,
+                })
+            .toList();
       } else {
         abonosSummary = [
           {
@@ -903,16 +906,13 @@ class ApiService {
   Future<bool> postCommissionPayout({required String advisorId, required double amount, String? note, String? raffleId}) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
-          Uri.parse('$baseUrl/commissions/payout'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'advisorId': advisorId,
-            'amount': amount,
-            'note': note ?? '',
-            'raffleId': raffleId
-          }),
-        ).timeout(const Duration(seconds: 3));
+        final response = await http
+            .post(
+              Uri.parse('$baseUrl/commissions/payout'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'advisorId': advisorId, 'amount': amount, 'note': note ?? '', 'raffleId': raffleId}),
+            )
+            .timeout(const Duration(seconds: 3));
         if (response.statusCode == 200 || response.statusCode == 201) {
           return true;
         }
@@ -937,11 +937,13 @@ class ApiService {
 
   Future<Company?> createCompany(Map<String, dynamic> data) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/companies'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 4));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/companies'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200 || response.statusCode == 201) {
         return Company.fromJson(jsonDecode(response.body));
       }
@@ -951,11 +953,13 @@ class ApiService {
 
   Future<Company?> updateCompany(String id, Map<String, dynamic> data) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/companies/$id'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(data),
-      ).timeout(const Duration(seconds: 4));
+      final response = await http
+          .put(
+            Uri.parse('$baseUrl/companies/$id'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(data),
+          )
+          .timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         return Company.fromJson(jsonDecode(response.body));
       }

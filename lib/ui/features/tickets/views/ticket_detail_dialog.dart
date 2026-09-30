@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -56,9 +57,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
         ? _buyerNameController.text.trim()
         : (widget.ticket.buyerName.isNotEmpty ? widget.ticket.buyerName : "Pendiente");
 
-    String phone = _buyerPhoneController.text.trim().isNotEmpty
-        ? _buyerPhoneController.text.trim()
-        : widget.ticket.buyerPhone;
+    String phone = _buyerPhoneController.text.trim().isNotEmpty ? _buyerPhoneController.text.trim() : widget.ticket.buyerPhone;
 
     double addAmt = double.tryParse(_amountController.text) ?? 0;
     double currentPaid = widget.ticket.totalPaid + addAmt;
@@ -196,7 +195,6 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                 ],
               ),
               const Divider(height: 24),
-
               const Text('Números de Oportunidad (Boleta):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               Wrap(
@@ -217,9 +215,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         ))
                     .toList(),
               ),
-
               const SizedBox(height: 16),
-
               Row(
                 children: [
                   _infoTile('Precio Boleta', currency.format(widget.ticket.price), Colors.blueGrey),
@@ -227,9 +223,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   _infoTile('Saldo Pendiente', currency.format(widget.ticket.balancePending), AppTheme.dangerRose),
                 ],
               ),
-
               const SizedBox(height: 20),
-
               if (widget.ticket.balancePending > 0) ...[
                 Text(
                   isDisponible
@@ -279,6 +273,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         )
                       else
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _selectedSellerId,
                           decoration: const InputDecoration(
                             labelText: 'Asesor / Vendedor',
@@ -338,14 +333,15 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           onPressed: () async {
                             if (_formKey.currentState!.validate()) {
                               final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
-                              final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') &&
-                                  (newSellerId != null && newSellerId != widget.ticket.advisorId);
+                              final isChangingSeller =
+                                  (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
 
                               if (isChangingSeller && _noteController.text.trim().isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     backgroundColor: Colors.red,
-                                    content: Text('⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
+                                    content: Text(
+                                        '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
                                   ),
                                 );
                                 return;
@@ -360,9 +356,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                   'buyerPhone': _buyerPhoneController.text.trim(),
                                   'sellerId': newSellerId,
                                   'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
-                                  'note': _noteController.text.trim().isNotEmpty
-                                      ? _noteController.text.trim()
-                                      : defaultNoteText,
+                                  'note': _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : defaultNoteText,
                                 },
                                 raffleId: widget.ticket.raffleId,
                               );
@@ -397,14 +391,14 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                     children: [
                       Icon(Icons.check_circle, color: AppTheme.secondaryEmerald),
                       SizedBox(width: 8),
-                      Text('Esta boleta ya se encuentra pagada en su totalidad.', style: TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                          child:
+                              Text('Esta boleta ya se encuentra pagada en su totalidad.', style: TextStyle(fontWeight: FontWeight.bold))),
                     ],
                   ),
                 ),
               ],
-
               const SizedBox(height: 20),
-
               if (widget.ticket.abonos.isNotEmpty) ...[
                 const Text('Historial de Abonos:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 const SizedBox(height: 8),
@@ -426,12 +420,13 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   },
                 ),
               ],
-
               const SizedBox(height: 16),
-
-              Row(
+              Flex(
+                direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
+                crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
                 children: [
-                  Expanded(
+                  ResponsiveFlexChild(
+                    expand: !isNarrowScreen(context),
                     child: ElevatedButton.icon(
                       onPressed: () {
                         showDialog(
@@ -450,8 +445,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  const SizedBox(width: 10, height: 12),
+                  ResponsiveFlexChild(
+                    expand: !isNarrowScreen(context),
                     child: OutlinedButton.icon(
                       onPressed: () => _copyReceiptToClipboard(context),
                       icon: const Icon(Icons.share),

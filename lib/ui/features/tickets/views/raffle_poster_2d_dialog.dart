@@ -45,7 +45,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   double _posterScale = 0.75; // Zoom scale for poster preview (0.40 to 1.20)
 
   final bool _fillCellBg = true;
-  final Color _cellBgColor = Colors.white.withOpacity(0.92);
+  final Color _cellBgColor = Colors.white.withValues(alpha: 0.92);
 
   final ScrollController _scrollController = ScrollController();
 
@@ -237,294 +237,316 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       child: Container(
         width: 1020,
         height: MediaQuery.of(context).size.height * 0.95,
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 10 : 16),
         child: Column(
           children: [
-            // HEADER DIALOG
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.42),
+              child: SingleChildScrollView(
+                child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: goldAccent.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.grid_on_rounded, color: goldAccent, size: 26),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    // HEADER DIALOG
+                    Row(
                       children: [
-                        Text(
-                          'Plantilla Afiche Rifa 2D (100 Números)',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryDark,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: goldAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.grid_on_rounded, color: goldAccent, size: 26),
                               ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Plantilla Afiche Rifa 2D (100 Números)',
+                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                    Text(
+                                      '${widget.raffle.title} • Estado de Celdas (Vendidas / Disponibles)',
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            color: Colors.grey[600],
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        Text(
-                          '${widget.raffle.title} • Estado de Celdas (Vendidas / Disponibles)',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey[600],
-                              ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Cerrar',
                         ),
                       ],
                     ),
-                  ],
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Cerrar',
-                ),
-              ],
-            ),
-            const Divider(height: 14),
+                    const Divider(height: 14),
 
-            // TOOLBAR ACTIONS
-            Wrap(
-              spacing: 10,
-              runSpacing: 8,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _pickBgImage,
-                      icon: const Icon(Icons.upload_file, size: 18),
-                      label: Text(_bgImageBase64 == null ? 'Subir Imagen de Plantilla' : 'Cambiar Plantilla'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _showCustomControls = !_showCustomControls;
-                        });
-                      },
-                      icon: Icon(_showCustomControls ? Icons.expand_less : Icons.tune, size: 18),
-                      label: Text(_showCustomControls ? 'Ocultar Ajustes' : 'Ajustar Grilla (Alto/Ancho) y Zoom'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _saveTemplateConfig,
-                      icon: const Icon(Icons.save, size: 18),
-                      label: const Text('Guardar Plantilla'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accentAmber,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _isExportingImage ? null : _downloadPosterAsImage,
-                      icon: _isExportingImage
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.download, size: 18),
-                      label: const Text('Descargar Imagen PNG (HD)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6), // Purple accent
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _triggerPrint,
-                      icon: const Icon(Icons.print, size: 18),
-                      label: const Text('Imprimir / Guardar PDF'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.secondaryEmerald,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-
-            // CONTROLS PANEL (COLLAPSIBLE WITH FULL DIMENSION SLIDERS)
-            if (_showCustomControls) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade300),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    // TOOLBAR ACTIONS
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Text(
-                          '⚙️ Controles de Alto, Ancho, Posición y Zoom de la Grilla:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.brown),
-                        ),
-                        Row(
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          runSpacing: 8,
                           children: [
-                            TextButton.icon(
-                              onPressed: () => setState(() => _posterScale = 0.55),
-                              icon: const Icon(Icons.fit_screen, size: 16),
-                              label: const Text('Encajar en Pantalla', style: TextStyle(fontSize: 12)),
+                            ElevatedButton.icon(
+                              onPressed: _pickBgImage,
+                              icon: const Icon(Icons.upload_file, size: 18),
+                              label: Text(_bgImageBase64 == null ? 'Subir Imagen de Plantilla' : 'Cambiar Plantilla'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryBlue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
                             ),
-                            TextButton.icon(
-                              onPressed: () => setState(() => _posterScale = 1.0),
-                              icon: const Icon(Icons.zoom_in, size: 16),
-                              label: const Text('Tamaño Real (100%)', style: TextStyle(fontSize: 12)),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _showCustomControls = !_showCustomControls;
+                                });
+                              },
+                              icon: Icon(_showCustomControls ? Icons.expand_less : Icons.tune, size: 18),
+                              label: Text(_showCustomControls ? 'Ocultar Ajustes' : 'Ajustar Grilla (Alto/Ancho) y Zoom'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _saveTemplateConfig,
+                              icon: const Icon(Icons.save, size: 18),
+                              label: const Text('Guardar Plantilla'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accentAmber,
+                                foregroundColor: Colors.black87,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Wrap(
+                          alignment: WrapAlignment.start,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 10,
+                          runSpacing: 8,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: _isExportingImage ? null : _downloadPosterAsImage,
+                              icon: _isExportingImage
+                                  ? const SizedBox(
+                                      width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Icon(Icons.download, size: 18),
+                              label: const Text('Descargar Imagen PNG (HD)'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6), // Purple accent
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _triggerPrint,
+                              icon: const Icon(Icons.print, size: 18),
+                              label: const Text('Imprimir / Guardar PDF'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.secondaryEmerald,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
                             ),
                           ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
 
-                    // ROW 1: Zoom, Posición Vertical (Top), Posición Horizontal (Left)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('🔍 Zoom Vista: ${(_posterScale * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              Slider(
-                                value: _posterScale,
-                                min: 0.40,
-                                max: 1.20,
-                                onChanged: (v) => setState(() => _posterScale = v),
-                              ),
-                            ],
-                          ),
+                    // CONTROLS PANEL (COLLAPSIBLE WITH FULL DIMENSION SLIDERS)
+                    if (_showCustomControls) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.amber.shade300),
                         ),
-                        if (_bgImageBase64 != null) ...[
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Text('↕️ Posición Vertical (Top): ${(_gridTopPercent * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                Slider(
-                                  value: _gridTopPercent,
-                                  min: 0.10,
-                                  max: 0.85,
-                                  onChanged: (v) => setState(() => _gridTopPercent = v),
+                                const Text(
+                                  '⚙️ Controles de Alto, Ancho, Posición y Zoom de la Grilla:',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.brown),
+                                ),
+                                Wrap(
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () => setState(() => _posterScale = 0.55),
+                                      icon: const Icon(Icons.fit_screen, size: 16),
+                                      label: const Text('Encajar en Pantalla', style: TextStyle(fontSize: 12)),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => setState(() => _posterScale = 1.0),
+                                      icon: const Icon(Icons.zoom_in, size: 16),
+                                      label: const Text('Tamaño Real (100%)', style: TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 4),
+
+                            // ROW 1: Zoom, Posición Vertical (Top), Posición Horizontal (Left)
+                            Row(
                               children: [
-                                Text('↔️ Posición Horizontal (Left): ${(_gridLeftPercent * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                Slider(
-                                  value: _gridLeftPercent,
-                                  min: 0.0,
-                                  max: 0.20,
-                                  onChanged: (v) => setState(() => _gridLeftPercent = v),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('🔍 Zoom Vista: ${(_posterScale * 100).toInt()}%',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      Slider(
+                                        value: _posterScale,
+                                        min: 0.40,
+                                        max: 1.20,
+                                        onChanged: (v) => setState(() => _posterScale = v),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_bgImageBase64 != null) ...[
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('↕️ Posición Vertical (Top): ${(_gridTopPercent * 100).toInt()}%',
+                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                        Slider(
+                                          value: _gridTopPercent,
+                                          min: 0.10,
+                                          max: 0.85,
+                                          onChanged: (v) => setState(() => _gridTopPercent = v),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('↔️ Posición Horizontal (Left): ${(_gridLeftPercent * 100).toInt()}%',
+                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                        Slider(
+                                          value: _gridLeftPercent,
+                                          min: 0.0,
+                                          max: 0.20,
+                                          onChanged: (v) => setState(() => _gridLeftPercent = v),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+
+                            // ROW 2: Alto Grilla/Celdas, Ancho Grilla, Tamaño Texto, Tamaño Círculo Rojo
+                            Row(
+                              children: [
+                                // Alto Celdas / Grilla
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('📏 Alto de Grilla / Celdas: ${_cellHeight.toInt()} px',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
+                                      Slider(
+                                        value: _cellHeight,
+                                        min: 16.0,
+                                        max: 45.0,
+                                        activeColor: Colors.indigo,
+                                        onChanged: (v) => setState(() => _cellHeight = v),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Ancho Grilla
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('📐 Ancho de Grilla: ${(_gridWidthPercent * 100).toInt()}%',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      Slider(
+                                        value: _gridWidthPercent,
+                                        min: 0.50,
+                                        max: 0.98,
+                                        onChanged: (v) => setState(() => _gridWidthPercent = v),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Tamaño Texto
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('🔤 Tamaño Texto: ${_fontSize.toStringAsFixed(1)} px',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      Slider(
+                                        value: _fontSize,
+                                        min: 8.0,
+                                        max: 16.0,
+                                        onChanged: (v) => setState(() => _fontSize = v),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Círculo Rojo
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      Slider(
+                                        value: _dotScale,
+                                        min: 0.5,
+                                        max: 1.8,
+                                        onChanged: (v) => setState(() => _dotScale = v),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ],
-                    ),
-
-                    // ROW 2: Alto Grilla/Celdas, Ancho Grilla, Tamaño Texto, Tamaño Círculo Rojo
-                    Row(
-                      children: [
-                        // Alto Celdas / Grilla
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('📏 Alto de Grilla / Celdas: ${_cellHeight.toInt()} px', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                              Slider(
-                                value: _cellHeight,
-                                min: 16.0,
-                                max: 45.0,
-                                activeColor: Colors.indigo,
-                                onChanged: (v) => setState(() => _cellHeight = v),
-                              ),
-                            ],
-                          ),
+                          ],
                         ),
-                        // Ancho Grilla
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('📐 Ancho de Grilla: ${(_gridWidthPercent * 100).toInt()}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              Slider(
-                                value: _gridWidthPercent,
-                                min: 0.50,
-                                max: 0.98,
-                                onChanged: (v) => setState(() => _gridWidthPercent = v),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Tamaño Texto
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('🔤 Tamaño Texto: ${_fontSize.toStringAsFixed(1)} px', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              Slider(
-                                value: _fontSize,
-                                min: 8.0,
-                                max: 16.0,
-                                onChanged: (v) => setState(() => _fontSize = v),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Círculo Rojo
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              Slider(
-                                value: _dotScale,
-                                min: 0.5,
-                                max: 1.8,
-                                onChanged: (v) => setState(() => _dotScale = v),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-            ],
-
+            ),
             const SizedBox(height: 10),
 
             // CANVAS / POSTER DISPLAY (SCROLLABLE & ZOOMABLE WITH REPAINTBOUNDARY)
@@ -552,11 +574,16 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                           child: Transform.scale(
                             scale: _posterScale,
                             alignment: Alignment.topCenter,
-                            child: RepaintBoundary(
-                              key: _posterKey,
-                              child: _bgImageBase64 != null
-                                  ? _buildCustomTemplatePoster(context, tickets)
-                                  : _buildDefaultLuxuryPoster(context, tickets, currency),
+                            // Scaled down to fit phones; the PNG export still captures full size.
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.topCenter,
+                              child: RepaintBoundary(
+                                key: _posterKey,
+                                child: _bgImageBase64 != null
+                                    ? _buildCustomTemplatePoster(context, tickets)
+                                    : _buildDefaultLuxuryPoster(context, tickets, currency),
+                              ),
                             ),
                           ),
                         ),
@@ -652,7 +679,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
         boxShadow: const [
           BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(0, 10)),
         ],
-        border: Border.all(color: goldAccent.withOpacity(0.6), width: 2),
+        border: Border.all(color: goldAccent.withValues(alpha: 0.6), width: 2),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -695,7 +722,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                 colors: [Color(0xFFD4AF37), Color(0xFFFFF1B0), Color(0xFFD4AF37)],
               ),
               borderRadius: BorderRadius.circular(30),
-              boxShadow: [BoxShadow(color: goldAccent.withOpacity(0.4), blurRadius: 10)],
+              boxShadow: [BoxShadow(color: goldAccent.withValues(alpha: 0.4), blurRadius: 10)],
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -718,16 +745,16 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: goldAccent.withOpacity(0.3)),
+              border: Border.all(color: goldAccent.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: goldAccent.withOpacity(0.2),
+                    color: goldAccent.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.card_giftcard, color: goldAccent, size: 32),
@@ -770,7 +797,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white12),
             ),
@@ -867,12 +894,12 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                           width: _cellHeight * 0.78,
                           height: _cellHeight * 0.78,
                           decoration: BoxDecoration(
-                            color: Colors.red.shade600.withOpacity(0.95),
+                            color: Colors.red.shade600.withValues(alpha: 0.95),
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 1),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.4),
+                                color: Colors.black.withValues(alpha: 0.4),
                                 blurRadius: 3,
                                 offset: const Offset(0, 1),
                               ),

@@ -27,7 +27,7 @@ class AdvisorManagementView extends StatelessWidget {
             children: [
               Icon(Icons.admin_panel_settings, color: Colors.amber, size: 28),
               SizedBox(width: 10),
-              Text('Registrar Nuevo Administrador', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Expanded(child: Text('Registrar Nuevo Administrador', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
             ],
           ),
           content: SingleChildScrollView(
@@ -148,7 +148,9 @@ class AdvisorManagementView extends StatelessWidget {
                 children: [
                   Icon(isEditing ? Icons.manage_accounts : Icons.person_add, color: AppTheme.primaryBlue),
                   const SizedBox(width: 10),
-                  Text(isEditing ? 'Editar Perfil y Clave del Asesor' : 'Registrar Nuevo Asesor / Vendedor', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Expanded(
+                      child: Text(isEditing ? 'Editar Perfil y Clave del Asesor' : 'Registrar Nuevo Asesor / Vendedor',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
                 ],
               ),
               content: SingleChildScrollView(
@@ -217,6 +219,7 @@ class AdvisorManagementView extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: status,
                       decoration: const InputDecoration(
                         labelText: 'Estado de la Cuenta',
@@ -237,6 +240,7 @@ class AdvisorManagementView extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: mode,
                       decoration: const InputDecoration(
                         labelText: 'Modo de Trabajo (Boletas Disponibles)',
@@ -274,10 +278,8 @@ class AdvisorManagementView extends StatelessWidget {
                     if (nameCtrl.text.trim().isNotEmpty && codeCtrl.text.trim().isNotEmpty) {
                       final authVM = Provider.of<AuthViewModel>(context, listen: false);
                       final advVM = Provider.of<AdvisorViewModel>(context, listen: false);
-                      List<String> ranges = rangeCtrl.text.isNotEmpty
-                          ? rangeCtrl.text.split(',').map((e) => e.trim()).toList()
-                          : [];
-                      
+                      List<String> ranges = rangeCtrl.text.isNotEmpty ? rangeCtrl.text.split(',').map((e) => e.trim()).toList() : [];
+
                       Map<String, dynamic> data = {
                         'companyId': authVM.selectedCompanyId,
                         'name': nameCtrl.text.trim(),
@@ -443,6 +445,7 @@ class AdvisorManagementView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Consumer<AdvisorViewModel>(
       builder: (context, advVM, _) {
@@ -453,12 +456,23 @@ class AdvisorManagementView extends StatelessWidget {
         if (advVM.advisors.isEmpty) {
           return Scaffold(
             floatingActionButton: FloatingActionButton.extended(
-              onPressed: () => _showAdvisorDialog(context),
-              icon: const Icon(Icons.person_add),
-              label: const Text('Nuevo Asesor'),
+              heroTag: 'fab_new_empty',
+              onPressed: () => _showCreateMenu(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo Asesor / Admin'),
               backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
             ),
-            body: const Center(child: Text('No hay asesores registrados')),
+            body: const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text('No hay asesores registrados'),
+                ],
+              ),
+            ),
           );
         }
 
@@ -472,61 +486,79 @@ class AdvisorManagementView extends StatelessWidget {
             appBar: PreferredSize(
               preferredSize: const Size.fromHeight(48),
               child: Container(
-                color: Colors.white,
-                child: const TabBar(
+                color: Theme.of(context).cardColor,
+                child: TabBar(
                   labelColor: AppTheme.primaryBlue,
                   unselectedLabelColor: Colors.grey,
                   indicatorColor: AppTheme.primaryBlue,
                   tabs: [
-                    Tab(icon: Icon(Icons.people_outline, size: 18), text: 'Gestión & Ranking de Asesores'),
-                    Tab(icon: Icon(Icons.monetization_on_outlined, size: 18), text: 'Dashboard de Comisiones & Liquidación'),
+                    Tab(
+                      icon: const Icon(Icons.people_outline, size: 18),
+                      text: isMobile ? 'Asesores y Ranking' : 'Gestión & Ranking de Asesores',
+                      iconMargin: EdgeInsets.zero,
+                    ),
+                    Tab(
+                      icon: const Icon(Icons.monetization_on_outlined, size: 18),
+                      text: isMobile ? 'Comisiones' : 'Dashboard de Comisiones & Liquidación',
+                      iconMargin: EdgeInsets.zero,
+                    ),
                   ],
                 ),
               ),
             ),
-            floatingActionButton: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FloatingActionButton.extended(
-                  heroTag: 'fab_admin',
-                  onPressed: () => _showAdminDialog(context),
-                  icon: const Icon(Icons.admin_panel_settings, size: 20),
-                  label: const Text('Nuevo Admin', style: TextStyle(fontSize: 12)),
-                  backgroundColor: Colors.amber.shade900,
-                ),
-                const SizedBox(width: 10),
-                FloatingActionButton.extended(
-                  heroTag: 'fab_advisor',
-                  onPressed: () => _showAdvisorDialog(context),
-                  icon: const Icon(Icons.person_add, size: 20),
-                  label: const Text('Nuevo Asesor', style: TextStyle(fontSize: 12)),
-                  backgroundColor: AppTheme.primaryBlue,
-                ),
-              ],
-            ),
+            floatingActionButton: isMobile
+                ? FloatingActionButton.extended(
+                    heroTag: 'fab_new',
+                    onPressed: () => _showCreateMenu(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nuevo'),
+                    backgroundColor: AppTheme.primaryBlue,
+                    foregroundColor: Colors.white,
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_admin',
+                        onPressed: () => _showAdminDialog(context),
+                        icon: const Icon(Icons.admin_panel_settings, size: 20),
+                        label: const Text('Nuevo Admin', style: TextStyle(fontSize: 12)),
+                        backgroundColor: Colors.amber.shade900,
+                      ),
+                      const SizedBox(width: 10),
+                      FloatingActionButton.extended(
+                        heroTag: 'fab_advisor',
+                        onPressed: () => _showAdvisorDialog(context),
+                        icon: const Icon(Icons.person_add, size: 20),
+                        label: const Text('Nuevo Asesor', style: TextStyle(fontSize: 12)),
+                        backgroundColor: AppTheme.primaryBlue,
+                      ),
+                    ],
+                  ),
             body: TabBarView(
               children: [
                 SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.fromLTRB(isMobile ? 12 : 16, isMobile ? 12 : 16, isMobile ? 12 : 16, 96),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      const Row(
                         children: [
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Gestión de Asesores y Control de Caja',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Visualiza las ventas, dinero recaudado, correos, usuarios y estado de cuenta de cada asesor.',
-                                style: TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Gestión de Asesores y Control de Caja',
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Visualiza las ventas, dinero recaudado, correos, usuarios y estado de cuenta de cada asesor.',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -536,7 +568,7 @@ class AdvisorManagementView extends StatelessWidget {
                       Card(
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        color: AppTheme.primaryBlue.withOpacity(0.04),
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.04),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
@@ -546,9 +578,11 @@ class AdvisorManagementView extends StatelessWidget {
                                 children: [
                                   Text('🏆', style: TextStyle(fontSize: 22)),
                                   SizedBox(width: 8),
-                                  Text(
-                                    'Ranking de Mejores Vendedores (Leaderboard)',
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  Expanded(
+                                    child: Text(
+                                      'Ranking de Mejores Vendedores (Leaderboard)',
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -557,7 +591,11 @@ class AdvisorManagementView extends StatelessWidget {
                                 children: rankedAdvisors.take(3).toList().asMap().entries.map((entry) {
                                   int rank = entry.key + 1;
                                   final adv = entry.value;
-                                  String medal = rank == 1 ? '🥇' : rank == 2 ? '🥈' : '🥉';
+                                  String medal = rank == 1
+                                      ? '🥇'
+                                      : rank == 2
+                                          ? '🥈'
+                                          : '🥉';
                                   Color medalColor = rank == 1
                                       ? Colors.amber.shade700
                                       : rank == 2
@@ -567,14 +605,14 @@ class AdvisorManagementView extends StatelessWidget {
                                   return Expanded(
                                     child: Container(
                                       margin: const EdgeInsets.symmetric(horizontal: 4),
-                                      padding: const EdgeInsets.all(12),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
                                       decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: Theme.of(context).cardColor,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: medalColor.withOpacity(0.4), width: 1.5),
+                                        border: Border.all(color: medalColor.withValues(alpha: 0.4), width: 1.5),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Colors.black.withOpacity(0.03),
+                                            color: Colors.black.withValues(alpha: 0.03),
                                             blurRadius: 4,
                                             offset: const Offset(0, 2),
                                           )
@@ -637,16 +675,14 @@ class AdvisorManagementView extends StatelessWidget {
                             margin: const EdgeInsets.only(bottom: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             child: Padding(
-                              padding: const EdgeInsets.all(16),
+                              padding: EdgeInsets.all(isMobile ? 12 : 16),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
                                       CircleAvatar(
-                                        backgroundColor: adv.isActive
-                                            ? AppTheme.primaryBlue.withOpacity(0.15)
-                                            : Colors.grey.shade400,
+                                        backgroundColor: adv.isActive ? AppTheme.primaryBlue.withValues(alpha: 0.15) : Colors.grey.shade400,
                                         child: Text(
                                           adv.name.isNotEmpty ? adv.name[0].toUpperCase() : 'A',
                                           style: TextStyle(
@@ -660,7 +696,10 @@ class AdvisorManagementView extends StatelessWidget {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            Row(
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 4,
+                                              crossAxisAlignment: WrapCrossAlignment.center,
                                               children: [
                                                 Text(
                                                   adv.name,
@@ -670,11 +709,10 @@ class AdvisorManagementView extends StatelessWidget {
                                                     decoration: !adv.isActive ? TextDecoration.lineThrough : null,
                                                   ),
                                                 ),
-                                                const SizedBox(width: 8),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.amber.withOpacity(0.2),
+                                                    color: Colors.amber.withValues(alpha: 0.2),
                                                     borderRadius: BorderRadius.circular(8),
                                                   ),
                                                   child: Text(
@@ -686,7 +724,6 @@ class AdvisorManagementView extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 6),
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                   decoration: BoxDecoration(
@@ -704,6 +741,7 @@ class AdvisorManagementView extends StatelessWidget {
                                                 ),
                                               ],
                                             ),
+                                            const SizedBox(height: 4),
                                             Text(
                                               'Usuario: ${adv.username.isNotEmpty ? adv.username : adv.code} • Correo: ${adv.email.isNotEmpty ? adv.email : "N/A"} • Tel: ${adv.phone}',
                                               style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -721,7 +759,9 @@ class AdvisorManagementView extends StatelessWidget {
                                           } else if (val == 'toggle_status') {
                                             await advVM.toggleAdvisorStatus(adv);
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Estado de "${adv.name}" actualizado a ${adv.isActive ? "INHABILITADO" : "ACTIVO"}')),
+                                              SnackBar(
+                                                  content: Text(
+                                                      'Estado de "${adv.name}" actualizado a ${adv.isActive ? "INHABILITADO" : "ACTIVO"}')),
                                             );
                                           } else if (val == 'delete') {
                                             _handleDeleteAdvisor(context, adv);
@@ -738,7 +778,8 @@ class AdvisorManagementView extends StatelessWidget {
                                             value: 'toggle_status',
                                             child: Row(
                                               children: [
-                                                Icon(adv.isActive ? Icons.block : Icons.check_circle, size: 18, color: adv.isActive ? Colors.orange : Colors.green),
+                                                Icon(adv.isActive ? Icons.block : Icons.check_circle,
+                                                    size: 18, color: adv.isActive ? Colors.orange : Colors.green),
                                                 const SizedBox(width: 8),
                                                 Text(adv.isActive ? 'Inhabilitar Acceso' : 'Activar Acceso'),
                                               ],
@@ -747,7 +788,11 @@ class AdvisorManagementView extends StatelessWidget {
                                           const PopupMenuItem(
                                             value: 'delete',
                                             child: Row(
-                                              children: [Icon(Icons.delete_forever, size: 18, color: AppTheme.dangerRose), SizedBox(width: 8), Text('Eliminar Usuario')],
+                                              children: [
+                                                Icon(Icons.delete_forever, size: 18, color: AppTheme.dangerRose),
+                                                SizedBox(width: 8),
+                                                Text('Eliminar Usuario')
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -755,15 +800,12 @@ class AdvisorManagementView extends StatelessWidget {
                                     ],
                                   ),
                                   const Divider(height: 24),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                    children: [
-                                      _metricCol('Boletas Vendidas', '${adv.totalSold}', Colors.blueGrey),
-                                      _metricCol('Recaudado Asesor', currency.format(adv.totalCollected), AppTheme.secondaryEmerald),
-                                      _metricCol('Confirmado Admin', currency.format(adv.totalConfirmed), AppTheme.primaryBlue),
-                                      _metricCol('Pendiente Turn-in', currency.format(adv.pendingTurnIn), AppTheme.dangerRose),
-                                    ],
-                                  )
+                                  _metricsRow([
+                                    _metricCol('Boletas Vendidas', '${adv.totalSold}', Colors.blueGrey),
+                                    _metricCol('Recaudado Asesor', currency.format(adv.totalCollected), AppTheme.secondaryEmerald),
+                                    _metricCol('Confirmado Admin', currency.format(adv.totalConfirmed), AppTheme.primaryBlue),
+                                    _metricCol('Pendiente Turn-in', currency.format(adv.pendingTurnIn), AppTheme.dangerRose),
+                                  ])
                                 ],
                               ),
                             ),
@@ -782,13 +824,69 @@ class AdvisorManagementView extends StatelessWidget {
     );
   }
 
+  /// Four metrics side by side on wide screens, a 2x2 grid on phones.
+  Widget _metricsRow(List<Widget> metrics) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final perRow = constraints.maxWidth >= 520 ? metrics.length : 2;
+        final width = constraints.maxWidth / perRow;
+        return Wrap(
+          runSpacing: 12,
+          children: metrics.map((m) => SizedBox(width: width, child: m)).toList(),
+        );
+      },
+    );
+  }
+
   Widget _metricCol(String title, String val, Color color) {
     return Column(
       children: [
-        Text(title, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.grey)),
         const SizedBox(height: 4),
-        Text(val, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(val, maxLines: 1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+        ),
       ],
+    );
+  }
+
+  void _showCreateMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: AppTheme.primaryBlue,
+                child: Icon(Icons.person_add, color: Colors.white, size: 20),
+              ),
+              title: const Text('Nuevo Asesor', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Registrar un vendedor con usuario y clave'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showAdvisorDialog(context);
+              },
+            ),
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.amber.shade900,
+                child: const Icon(Icons.admin_panel_settings, color: Colors.white, size: 20),
+              ),
+              title: const Text('Nuevo Administrador', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('Dar acceso de administración a otra persona'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showAdminDialog(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 }

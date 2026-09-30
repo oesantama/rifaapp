@@ -111,9 +111,7 @@ class WinnerRecord {
       lotteryName: json['lotteryName'] ?? '',
       weeklyDrawDay: json['weeklyDrawDay'] ?? '',
       accumulationReason: json['accumulationReason'] ?? '',
-      winnerDetails: json['winnerDetails'] != null
-          ? WinnerDetails.fromJson(json['winnerDetails'])
-          : null,
+      winnerDetails: json['winnerDetails'] != null ? WinnerDetails.fromJson(json['winnerDetails']) : null,
       photoUrl: json['photoUrl'] ?? '',
       createdAt: json['createdAt'] ?? '',
     );

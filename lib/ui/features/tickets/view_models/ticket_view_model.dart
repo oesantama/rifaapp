@@ -5,8 +5,7 @@ import 'package:rifaapp/data/repositories/raffle_repository.dart';
 class TicketViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
 
-  TicketViewModel({RaffleRepository? repository})
-      : _repository = repository ?? RaffleRepository();
+  TicketViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository();
 
   List<Ticket> _tickets = [];
   List<Ticket> get tickets => _tickets;

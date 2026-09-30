@@ -79,11 +79,13 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
 
         setState(() => _isRestoring = true);
 
-        final response = await http.post(
-          Uri.parse('$_baseUrl/backup/restore'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(backupJson),
-        ).timeout(const Duration(seconds: 8));
+        final response = await http
+            .post(
+              Uri.parse('$_baseUrl/backup/restore'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(backupJson),
+            )
+            .timeout(const Duration(seconds: 8));
 
         if (response.statusCode == 200) {
           await _loadBackupInfo();
@@ -118,31 +120,36 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
     final fileSizeKb = stats['fileSizeBytes'] != null ? ((stats['fileSizeBytes'] as num) / 1024).toStringAsFixed(1) : 'N/A';
     final lastMod = stats['lastModified'] != null ? stats['lastModified'].toString().substring(0, 19).replaceAll('T', ' ') : 'Reciente';
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 12 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // HEADER
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Respaldo y Copias de Seguridad (SuperAdmin)',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryDark,
-                        ),
-                  ),
-                  Text(
-                    'Gestión y validación exclusiva de copias de seguridad de la base de datos (data.json).',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isMobile ? 'Respaldo de Base de Datos' : 'Respaldo y Copias de Seguridad (SuperAdmin)',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 20 : null,
+                          ),
+                    ),
+                    Text(
+                      'Gestión y validación exclusiva de copias de seguridad de la base de datos (data.json).',
+                      style: TextStyle(color: Colors.grey[600], fontSize: isMobile ? 12 : 13),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               IconButton.filledTonal(
                 icon: const Icon(Icons.refresh),
                 onPressed: _loadBackupInfo,
@@ -153,57 +160,67 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
           const SizedBox(height: 20),
 
           // HEALTH METRICS CARDS
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricCard(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cards = <Widget>[
+                _buildMetricCard(
                   title: 'Estado de Base de Datos',
                   value: 'ACTIVA (OK)',
                   subtitle: 'Archivo data.json ($fileSizeKb KB)',
                   icon: Icons.storage_rounded,
                   color: AppTheme.secondaryEmerald,
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _buildMetricCard(
+                _buildMetricCard(
                   title: 'Empresas Registradas',
                   value: '${stats['companiesCount'] ?? 1}',
                   subtitle: 'Grupos activos',
                   icon: Icons.apartment,
                   color: AppTheme.primaryBlue,
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: _buildMetricCard(
+                _buildMetricCard(
                   title: 'Sorteos / Boletas',
                   value: '${stats['rafflesCount'] ?? 0} Sorteos',
                   subtitle: '${stats['ticketsCount'] ?? 0} Boletas en sistema',
                   icon: Icons.confirmation_number_outlined,
                   color: AppTheme.accentAmber,
                 ),
-              ),
-            ],
+              ];
+              if (constraints.maxWidth < 700) {
+                return Column(
+                  children: cards.map((c) => Padding(padding: const EdgeInsets.only(bottom: 8), child: c)).toList(),
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 14),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 14),
+                  Expanded(child: cards[2]),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: isMobile ? 12 : 24),
 
           // BACKUP ACTION CARD
           Card(
             elevation: 3,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: const [
+                  const Row(
+                    children: [
                       Icon(Icons.backup_rounded, color: AppTheme.primaryBlue, size: 28),
                       SizedBox(width: 12),
-                      Text(
-                        'Acciones de Respaldo y Restauración',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.primaryDark),
+                      Expanded(
+                        child: Text(
+                          'Acciones de Respaldo y Restauración',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                        ),
                       ),
                     ],
                   ),
@@ -217,30 +234,33 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
                     spacing: 16,
                     runSpacing: 14,
                     children: [
-                      ElevatedButton.icon(
-                        onPressed: _downloadBackupFile,
-                        icon: const Icon(Icons.download_rounded, size: 20),
-                        label: const Text('Descargar Copia de Seguridad (.json)'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryBlue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      for (final button in [
+                        ElevatedButton.icon(
+                          onPressed: _downloadBackupFile,
+                          icon: const Icon(Icons.download_rounded, size: 20),
+                          label: Text('Descargar Copia de Seguridad (.json)', textAlign: TextAlign.center),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _isRestoring ? null : _restoreBackupFromFile,
-                        icon: _isRestoring
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.upload_file_rounded, size: 20),
-                        label: const Text('Restaurar Base de Datos desde Archivo'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.secondaryEmerald,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ElevatedButton.icon(
+                          onPressed: _isRestoring ? null : _restoreBackupFromFile,
+                          icon: _isRestoring
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.upload_file_rounded, size: 20),
+                          label: Text('Restaurar Base de Datos desde Archivo', textAlign: TextAlign.center),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.secondaryEmerald,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
-                      ),
+                      ])
+                        SizedBox(width: isMobile ? double.infinity : null, child: button),
                     ],
                   ),
                 ],
@@ -263,25 +283,25 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color, size: 30),
+              child: Icon(icon, color: color, size: 26),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
-                  Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.primaryDark)),
+                  Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                   const SizedBox(height: 2),
                   Text(subtitle, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
                 ],

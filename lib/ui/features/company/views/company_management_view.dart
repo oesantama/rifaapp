@@ -239,6 +239,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                             ),
                           ),
                           DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: selectedStatus,
                             decoration: const InputDecoration(
                               labelText: 'Estado',
