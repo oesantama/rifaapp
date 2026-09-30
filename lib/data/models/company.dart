@@ -4,7 +4,6 @@ class Company {
   final String code;
   final String status; // ACTIVA, INACTIVA
   final String adminUsername;
-  final String adminPassword;
   final String adminName;
   final String adminEmail;
   final String createdAt;
@@ -21,7 +20,6 @@ class Company {
     required this.code,
     required this.status,
     required this.adminUsername,
-    required this.adminPassword,
     required this.adminName,
     required this.adminEmail,
     required this.createdAt,
@@ -50,7 +48,6 @@ class Company {
       code: json['code'] ?? '',
       status: json['status'] ?? 'ACTIVA',
       adminUsername: json['adminUsername'] ?? 'ADMIN',
-      adminPassword: json['adminPassword'] ?? '123',
       adminName: json['adminName'] ?? 'Administrador',
       adminEmail: json['adminEmail'] ?? '',
       createdAt: json['createdAt'] ?? '',
@@ -62,7 +59,6 @@ class Company {
                 'name': json['adminName'] ?? 'Administrador General',
                 'username': json['adminUsername'] ?? 'ADMIN',
                 'email': json['adminEmail'] ?? '',
-                'password': json['adminPassword'] ?? '123',
                 'status': 'ACTIVO',
               }
             ],
@@ -79,7 +75,6 @@ class Company {
         'code': code,
         'status': status,
         'adminUsername': adminUsername,
-        'adminPassword': adminPassword,
         'adminName': adminName,
         'adminEmail': adminEmail,
         'createdAt': createdAt,

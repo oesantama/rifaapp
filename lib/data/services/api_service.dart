@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'auth_http.dart';
 import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
@@ -10,12 +11,15 @@ import '../models/company.dart';
 class ApiService {
   final String baseUrl;
 
-  ApiService({String? baseUrl})
-      : baseUrl = baseUrl ??
-            const String.fromEnvironment(
-              'API_URL',
-              defaultValue: kIsWeb ? '/api' : 'http://localhost:8080/api',
-            );
+  ApiService({String? baseUrl}) : baseUrl = _resolveBaseUrl(baseUrl);
+
+  static String _resolveBaseUrl(String? customUrl) {
+    if (customUrl != null && customUrl.isNotEmpty) return customUrl;
+    const envUrl = String.fromEnvironment('API_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (kIsWeb) return '/api';
+    return 'http://localhost:8080/api';
+  }
 
   bool _useLocalFallback = false;
 
@@ -107,7 +111,7 @@ class ApiService {
           if (isAsesor && advisorId != null) 'advisorId': advisorId,
           if (isAsesor) 'role': 'asesor',
         });
-        final response = await http.get(uri).timeout(const Duration(seconds: 2));
+        final response = await authGet(uri).timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Raffle.fromJson(json)).toList();
@@ -128,7 +132,7 @@ class ApiService {
   Future<Raffle> updateRaffle(String raffleId, Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.put(
+        final response = await authPut(
           Uri.parse('$baseUrl/raffles/$raffleId'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -182,7 +186,7 @@ class ApiService {
   Future<Raffle> createRaffle(Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
+        final response = await authPost(
           Uri.parse('$baseUrl/raffles'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -351,7 +355,7 @@ class ApiService {
   Future<bool> importTickets(String raffleId, List<Map<String, dynamic>> records) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
+        final response = await authPost(
           Uri.parse('$baseUrl/tickets/import'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'raffleId': raffleId, 'records': records}),
@@ -417,7 +421,7 @@ class ApiService {
           if (status != null && status.isNotEmpty) 'status': status,
           if (advisorId != null && advisorId.isNotEmpty) 'advisorId': advisorId,
         });
-        final response = await http.get(uri).timeout(const Duration(seconds: 2));
+        final response = await authGet(uri).timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Ticket.fromJson(json)).toList();
@@ -457,7 +461,7 @@ class ApiService {
   Future<Ticket> registerAbono(String ticketId, Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
+        final response = await authPost(
           Uri.parse('$baseUrl/tickets/$ticketId/abono'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -532,7 +536,7 @@ class ApiService {
   Future<Ticket> confirmTicket(String ticketId) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(Uri.parse('$baseUrl/tickets/$ticketId/confirm'));
+        final response = await authPost(Uri.parse('$baseUrl/tickets/$ticketId/confirm'));
         if (response.statusCode == 200) {
           return Ticket.fromJson(jsonDecode(response.body));
         }
@@ -571,7 +575,7 @@ class ApiService {
   Future<List<Advisor>> getAdvisors() async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.get(Uri.parse('$baseUrl/advisors')).timeout(const Duration(seconds: 2));
+        final response = await authGet(Uri.parse('$baseUrl/advisors')).timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Advisor.fromJson(json)).toList();
@@ -586,7 +590,7 @@ class ApiService {
   Future<Advisor> createAdvisor(Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
+        final response = await authPost(
           Uri.parse('$baseUrl/advisors'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -594,6 +598,9 @@ class ApiService {
         if (response.statusCode == 201) {
           return Advisor.fromJson(jsonDecode(response.body));
         }
+        throw ApiException.fromResponse(response);
+      } on ApiException {
+        rethrow;
       } catch (_) {
         _useLocalFallback = true;
       }
@@ -604,7 +611,6 @@ class ApiService {
       name: body['name'] ?? 'Nuevo Asesor',
       email: body['email'] ?? '',
       username: body['username'] ?? body['code'] ?? '',
-      password: body['password'] ?? '1234',
       phone: body['phone'] ?? '',
       code: body['code'] ?? 'ADV${DateTime.now().millisecond}',
       mode: body['mode'] ?? 'POOL_GENERAL',
@@ -619,7 +625,7 @@ class ApiService {
   Future<Advisor> updateAdvisor(String advisorId, Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.put(
+        final response = await authPut(
           Uri.parse('$baseUrl/advisors/$advisorId'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -627,6 +633,9 @@ class ApiService {
         if (response.statusCode == 200) {
           return Advisor.fromJson(jsonDecode(response.body));
         }
+        throw ApiException.fromResponse(response);
+      } on ApiException {
+        rethrow;
       } catch (_) {
         _useLocalFallback = true;
       }
@@ -640,7 +649,6 @@ class ApiService {
         name: body['name'] ?? cur.name,
         email: body['email'] ?? cur.email,
         username: body['username'] ?? cur.username,
-        password: body['password'] ?? cur.password,
         phone: body['phone'] ?? cur.phone,
         code: body['code'] ?? cur.code,
         mode: body['mode'] ?? cur.mode,
@@ -664,7 +672,7 @@ class ApiService {
   Future<bool> deleteAdvisor(String advisorId, {String? reason}) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.delete(
+        final response = await authDelete(
           Uri.parse('$baseUrl/advisors/$advisorId'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'reason': reason}),
@@ -684,7 +692,7 @@ class ApiService {
   Future<bool> deleteWinner(String winnerId, {String? reason}) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.delete(
+        final response = await authDelete(
           Uri.parse('$baseUrl/winners/$winnerId'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({'reason': reason}),
@@ -704,7 +712,7 @@ class ApiService {
   Future<WinnerRecord> registerWinner(Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.post(
+        final response = await authPost(
           Uri.parse('$baseUrl/winners'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(body),
@@ -836,7 +844,7 @@ class ApiService {
   Future<List<WinnerRecord>> getWinners() async {
     if (!_useLocalFallback) {
       try {
-        final response = await http.get(Uri.parse('$baseUrl/winners')).timeout(const Duration(seconds: 2));
+        final response = await authGet(Uri.parse('$baseUrl/winners')).timeout(const Duration(seconds: 2));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => WinnerRecord.fromJson(json)).toList();
@@ -854,7 +862,7 @@ class ApiService {
         final Uri url = raffleId != null && raffleId.isNotEmpty
             ? Uri.parse('$baseUrl/commissions?raffleId=$raffleId')
             : Uri.parse('$baseUrl/commissions');
-        final response = await http.get(url).timeout(const Duration(seconds: 3));
+        final response = await authGet(url).timeout(const Duration(seconds: 3));
         if (response.statusCode == 200) {
           return jsonDecode(response.body);
         }
@@ -907,8 +915,7 @@ class ApiService {
   Future<bool> postCommissionPayout({required String advisorId, required double amount, String? note, String? raffleId}) async {
     if (!_useLocalFallback) {
       try {
-        final response = await http
-            .post(
+        final response = await authPost(
               Uri.parse('$baseUrl/commissions/payout'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({'advisorId': advisorId, 'amount': amount, 'note': note ?? '', 'raffleId': raffleId}),
@@ -927,7 +934,7 @@ class ApiService {
   // Company / Group methods (SuperAdmin)
   Future<List<Company>> fetchCompanies() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/companies')).timeout(const Duration(seconds: 4));
+      final response = await authGet(Uri.parse('$baseUrl/companies')).timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         List data = jsonDecode(response.body);
         return data.map((c) => Company.fromJson(c)).toList();
@@ -936,35 +943,57 @@ class ApiService {
     return [];
   }
 
-  Future<Company?> createCompany(Map<String, dynamic> data) async {
-    try {
-      final response = await http
-          .post(
-            Uri.parse('$baseUrl/companies'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(data),
-          )
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return Company.fromJson(jsonDecode(response.body));
-      }
-    } catch (_) {}
-    return null;
+  Future<Company> createCompany(Map<String, dynamic> data) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/companies'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(data),
+    ).timeout(const Duration(seconds: 8));
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return Company.fromJson(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
   }
 
-  Future<Company?> updateCompany(String id, Map<String, dynamic> data) async {
-    try {
-      final response = await http
-          .put(
-            Uri.parse('$baseUrl/companies/$id'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode(data),
-          )
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode == 200) {
-        return Company.fromJson(jsonDecode(response.body));
-      }
-    } catch (_) {}
-    return null;
+  Future<Company> updateCompany(String id, Map<String, dynamic> data) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/companies/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(data),
+    ).timeout(const Duration(seconds: 8));
+    if (response.statusCode == 200) {
+      return Company.fromJson(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  // Authentication: credentials are validated by the server only
+  Future<Map<String, dynamic>> login({required String role, required String username, required String password}) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'role': role, 'username': username, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Returns the current user if the stored session is still valid, or throws.
+  Future<Map<String, dynamic>> currentUser() async {
+    final response = await authGet(Uri.parse('$baseUrl/auth/me')).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return (jsonDecode(response.body) as Map<String, dynamic>)['user'] as Map<String, dynamic>;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> changePassword({required String currentPassword, required String newPassword}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/auth/change-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'currentPassword': currentPassword, 'newPassword': newPassword}),
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
+    throw ApiException.fromResponse(response);
   }
 }

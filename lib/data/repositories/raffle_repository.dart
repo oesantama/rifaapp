@@ -58,4 +58,12 @@ class RaffleRepository {
   Future<bool> deleteAdvisor(String id, {String? reason}) => _apiService.deleteAdvisor(id, reason: reason);
 
   Future<bool> deleteWinner(String id, {String? reason}) => _apiService.deleteWinner(id, reason: reason);
+
+  Future<Map<String, dynamic>> login({required String role, required String username, required String password}) =>
+      _apiService.login(role: role, username: username, password: password);
+
+  Future<Map<String, dynamic>> currentUser() => _apiService.currentUser();
+
+  Future<Map<String, dynamic>> changePassword({required String currentPassword, required String newPassword}) =>
+      _apiService.changePassword(currentPassword: currentPassword, newPassword: newPassword);
 }

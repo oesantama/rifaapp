@@ -19,6 +19,7 @@ import 'ui/features/company/views/company_management_view.dart';
 import 'ui/features/backup/views/database_backup_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
+import 'ui/features/auth/views/change_password_dialog.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -94,6 +95,19 @@ class MainShellScreen extends StatefulWidget {
 class _MainShellScreenState extends State<MainShellScreen> {
   int _selectedIndex = 0;
 
+  bool _passwordPromptOpen = false;
+
+  /// Blocks the app until a default/assigned password is replaced.
+  void _promptPasswordChangeIfRequired(AuthViewModel authVM) {
+    if (!authVM.mustChangePassword || _passwordPromptOpen) return;
+    _passwordPromptOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await ChangePasswordDialog.show(context, required: true);
+      _passwordPromptOpen = false;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -108,6 +122,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
   Widget build(BuildContext context) {
     final raffleVM = Provider.of<RaffleViewModel>(context);
     final authVM = Provider.of<AuthViewModel>(context);
+    _promptPasswordChangeIfRequired(authVM);
 
     // Filter pages and destinations based on Role
     final List<Widget> pages = authVM.isSuperAdmin
@@ -242,6 +257,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
                           context: context,
                           builder: (_) => const AdminProfileDialog(),
                         );
+                      } else {
+                        // SuperAdmin and advisors: change their own password
+                        ChangePasswordDialog.show(context);
                       }
                     },
                     borderRadius: BorderRadius.circular(20),

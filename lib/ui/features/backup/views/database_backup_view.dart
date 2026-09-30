@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:rifaapp/data/services/auth_http.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
@@ -29,7 +30,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
   Future<void> _loadBackupInfo() async {
     setState(() => _isLoading = true);
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/backup')).timeout(const Duration(seconds: 4));
+      final response = await authGet(Uri.parse('$_baseUrl/backup')).timeout(const Duration(seconds: 4));
       if (response.statusCode == 200) {
         setState(() {
           _backupStats = jsonDecode(response.body);
@@ -43,7 +44,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
 
   Future<void> _downloadBackupFile() async {
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/backup')).timeout(const Duration(seconds: 6));
+      final response = await authGet(Uri.parse('$_baseUrl/backup')).timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final dbData = data['database'];
@@ -80,8 +81,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
 
         setState(() => _isRestoring = true);
 
-        final response = await http
-            .post(
+        final response = await authPost(
               Uri.parse('$_baseUrl/backup/restore'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(backupJson),
@@ -115,154 +115,82 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
     }
   }
 
+  String _formatSize(num? bytes) {
+    if (bytes == null) return '—';
+    if (bytes >= 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  }
+
+  String _formatDate(String? iso) {
+    final date = iso != null ? DateTime.tryParse(iso)?.toLocal() : null;
+    if (date == null) return 'Sin registro';
+    return DateFormat('dd/MM/yyyy • hh:mm a').format(date);
+  }
+
   @override
   Widget build(BuildContext context) {
     final stats = _backupStats?['stats'] as Map<String, dynamic>? ?? {};
-    final fileSizeKb = stats['fileSizeBytes'] != null ? ((stats['fileSizeBytes'] as num) / 1024).toStringAsFixed(1) : 'N/A';
-    final lastMod = stats['lastModified'] != null ? stats['lastModified'].toString().substring(0, 19).replaceAll('T', ' ') : 'Reciente';
-
+    final isOnline = _backupStats != null;
     final isMobile = MediaQuery.of(context).size.width < 600;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 12 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: _loadBackupInfo,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, isMobile ? 12 : 24, isMobile ? 12 : 24, 24),
         children: [
-          // HEADER
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isMobile ? 'Respaldo de Base de Datos' : 'Respaldo y Copias de Seguridad (SuperAdmin)',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            fontSize: isMobile ? 20 : null,
-                          ),
-                    ),
-                    Text(
-                      'Gestión y validación exclusiva de copias de seguridad de la base de datos (data.json).',
-                      style: TextStyle(color: Colors.grey[600], fontSize: isMobile ? 12 : 13),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                icon: const Icon(Icons.refresh),
-                onPressed: _loadBackupInfo,
-                tooltip: 'Actualizar Diagnóstico',
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // HEALTH METRICS CARDS
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cards = <Widget>[
-                _buildMetricCard(
-                  title: 'Estado de Base de Datos',
-                  value: 'ACTIVA (OK)',
-                  subtitle: 'Archivo data.json ($fileSizeKb KB)',
-                  icon: Icons.storage_rounded,
-                  color: AppTheme.secondaryEmerald,
-                ),
-                _buildMetricCard(
-                  title: 'Empresas Registradas',
-                  value: '${stats['companiesCount'] ?? 1}',
-                  subtitle: 'Grupos activos',
-                  icon: Icons.apartment,
-                  color: AppTheme.primaryBlue,
-                ),
-                _buildMetricCard(
-                  title: 'Sorteos / Boletas',
-                  value: '${stats['rafflesCount'] ?? 0} Sorteos',
-                  subtitle: '${stats['ticketsCount'] ?? 0} Boletas en sistema',
-                  icon: Icons.confirmation_number_outlined,
-                  color: AppTheme.accentAmber,
-                ),
-              ];
-              if (constraints.maxWidth < 700) {
-                return Column(
-                  children: cards.map((c) => Padding(padding: const EdgeInsets.only(bottom: 8), child: c)).toList(),
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 14),
-                  Expanded(child: cards[1]),
-                  const SizedBox(width: 14),
-                  Expanded(child: cards[2]),
-                ],
-              );
-            },
-          ),
-          SizedBox(height: isMobile ? 12 : 24),
-
-          // BACKUP ACTION CARD
-          Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: EdgeInsets.all(isMobile ? 16 : 24),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.backup_rounded, color: AppTheme.primaryBlue, size: 28),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Acciones de Respaldo y Restauración',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                        ),
-                      ),
-                    ],
+                  _buildStatusHero(stats, isOnline, isMobile),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Contenido de la base de datos'),
+                  const SizedBox(height: 10),
+                  _buildStatsGrid(stats),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Acciones'),
+                  const SizedBox(height: 10),
+                  _buildActionTile(
+                    icon: Icons.download_rounded,
+                    color: AppTheme.primaryBlue,
+                    title: 'Descargar copia de seguridad',
+                    subtitle: 'Guarda un archivo .json con toda la información actual del sistema.',
+                    onTap: _downloadBackupFile,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Descarga una copia completa de la base de datos para custodia o restaura el sistema en un clic.',
-                    style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                  const SizedBox(height: 10),
+                  _buildActionTile(
+                    icon: Icons.settings_backup_restore_rounded,
+                    color: AppTheme.accentAmber,
+                    title: 'Restaurar desde archivo',
+                    subtitle: 'Reemplaza los datos actuales por los de una copia descargada previamente.',
+                    onTap: _isRestoring ? null : _restoreBackupFromFile,
+                    busy: _isRestoring,
                   ),
-                  const Divider(height: 28),
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 14,
-                    children: [
-                      for (final button in [
-                        ElevatedButton.icon(
-                          onPressed: _downloadBackupFile,
-                          icon: const Icon(Icons.download_rounded, size: 20),
-                          label: Text('Descargar Copia de Seguridad (.json)', textAlign: TextAlign.center),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: isDark ? 0.12 : 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.2)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.lightbulb_outline_rounded, color: AppTheme.primaryBlue, size: 20),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Recomendación: descargue una copia antes de importar boletas, restaurar datos o realizar '
+                            'cambios importantes, y guárdela en un lugar seguro (Drive, correo o USB).',
+                            style: TextStyle(fontSize: 12, height: 1.4),
                           ),
                         ),
-                        ElevatedButton.icon(
-                          onPressed: _isRestoring ? null : _restoreBackupFromFile,
-                          icon: _isRestoring
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.upload_file_rounded, size: 20),
-                          label: Text('Restaurar Base de Datos desde Archivo', textAlign: TextAlign.center),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.secondaryEmerald,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ])
-                        SizedBox(width: isMobile ? double.infinity : null, child: button),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -273,42 +201,231 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
     );
   }
 
-  Widget _buildMetricCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
+  Widget _buildStatusHero(Map<String, dynamic> stats, bool isOnline, bool isMobile) {
+    final statusColor = isOnline ? AppTheme.secondaryEmerald : AppTheme.dangerRose;
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 18 : 24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF1E3A8A).withValues(alpha: 0.3), blurRadius: 18, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.shield_outlined, color: AppTheme.brandGold, size: 26),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Respaldo de datos',
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Copias de seguridad del sistema',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _isLoading ? null : _loadBackupInfo,
+                tooltip: 'Actualizar',
+                icon: _isLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.refresh_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: statusColor.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text(
+                  isOnline ? 'Base de datos operativa' : 'Sin conexión con el servidor',
+                  style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 24,
+            runSpacing: 12,
+            children: [
+              _buildHeroFact(Icons.update_rounded, 'Último cambio', _formatDate(stats['lastModified']?.toString())),
+              _buildHeroFact(Icons.sd_storage_outlined, 'Tamaño', _formatSize(stats['fileSizeBytes'] as num?)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroFact(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white54, size: 18),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle(String text) {
+    return Text(
+      text.toUpperCase(),
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.8, color: Colors.grey[600]),
+    );
+  }
+
+  Widget _buildStatsGrid(Map<String, dynamic> stats) {
+    final items = [
+      (Icons.apartment_rounded, 'Empresas', stats['companiesCount'], AppTheme.primaryBlue),
+      (Icons.event_note_rounded, 'Sorteos', stats['rafflesCount'], Colors.purple),
+      (Icons.confirmation_number_outlined, 'Boletas', stats['ticketsCount'], AppTheme.accentAmber),
+      (Icons.people_alt_outlined, 'Asesores', stats['advisorsCount'], AppTheme.secondaryEmerald),
+      (Icons.emoji_events_outlined, 'Ganadores', stats['winnersCount'], AppTheme.dangerRose),
+    ];
+    final number = NumberFormat.decimalPattern('es_CO');
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 10.0;
+        final perRow = constraints.maxWidth >= 700 ? 5 : (constraints.maxWidth >= 420 ? 3 : 2);
+        final width = (constraints.maxWidth - spacing * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (int i = 0; i < items.length; i++)
+              SizedBox(
+                // An odd last card takes the full row on phones
+                width: (perRow == 2 && i == items.length - 1 && items.length.isOdd) ? constraints.maxWidth : width,
+                child: _buildStatTile(items[i].$1, items[i].$2, items[i].$3, items[i].$4, number),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStatTile(IconData icon, String label, Object? value, Color color, NumberFormat number) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: color, size: 26),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value is num ? number.format(value) : '—',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.1),
+                    ),
+                  ),
+                  Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+    bool busy = false,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: busy
+                    ? Padding(padding: const EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: color))
+                    : Icon(icon, color: color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.3)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: Colors.grey[400]),
+            ],
+          ),
         ),
       ),
     );

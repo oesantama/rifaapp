@@ -4,7 +4,7 @@ class Advisor {
   final String name;
   final String email;
   final String username;
-  final String password;
+  final bool hasPassword; // passwords never leave the server
   final String phone;
   final String code;
   final String mode; // POOL_GENERAL or ASSIGNED
@@ -24,7 +24,7 @@ class Advisor {
     required this.name,
     this.email = '',
     this.username = '',
-    this.password = '1234',
+    this.hasPassword = false,
     required this.phone,
     required this.code,
     required this.mode,
@@ -50,7 +50,7 @@ class Advisor {
       name: json['name'] ?? '',
       email: json['email'] ?? '',
       username: json['username'] ?? codeVal,
-      password: json['password'] ?? '1234',
+      hasPassword: json['hasPassword'] == true,
       phone: json['phone'] ?? '',
       code: codeVal,
       mode: json['mode'] ?? 'POOL_GENERAL',
@@ -72,7 +72,7 @@ class Advisor {
         'name': name,
         'email': email,
         'username': username.isNotEmpty ? username : code,
-        'password': password,
+        'hasPassword': hasPassword,
         'phone': phone,
         'code': code,
         'mode': mode,

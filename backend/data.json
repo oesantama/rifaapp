@@ -12,7 +12,8 @@
       "ticketPrice": 50000,
       "weeklyPrizes": [],
       "status": "ACTIVA",
-      "createdAt": "2026-09-29T00:47:24.828Z"
+      "createdAt": "2026-09-29T00:47:24.828Z",
+      "companyId": "comp-1"
     },
     {
       "id": "raf-1790628195999",
@@ -26,7 +27,8 @@
       "ticketPrice": 1000,
       "weeklyPrizes": [],
       "status": "ACTIVA",
-      "createdAt": "2026-09-28T20:43:15.999Z"
+      "createdAt": "2026-09-28T20:43:15.999Z",
+      "companyId": "comp-1"
     },
     {
       "id": "raf-1",
@@ -53,7 +55,8 @@
         }
       ],
       "status": "ACTIVA",
-      "createdAt": "2026-09-28T20:38:36.625Z"
+      "createdAt": "2026-09-28T20:38:36.625Z",
+      "companyId": "comp-1"
     }
   ],
   "advisors": [
@@ -66,7 +69,8 @@
       "assignedTicketRanges": [
         "1-500"
       ],
-      "createdAt": "2026-09-28T20:38:36.625Z"
+      "createdAt": "2026-09-28T20:38:36.625Z",
+      "companyId": "comp-1"
     },
     {
       "id": "adv-2",
@@ -77,7 +81,8 @@
       "assignedTicketRanges": [
         "501-1000"
       ],
-      "createdAt": "2026-09-28T20:38:36.625Z"
+      "createdAt": "2026-09-28T20:38:36.625Z",
+      "companyId": "comp-1"
     },
     {
       "id": "adv-1790633588105",
@@ -86,7 +91,8 @@
       "code": "1121111",
       "mode": "POOL_GENERAL",
       "assignedTicketRanges": [],
-      "createdAt": "2026-09-28T22:13:08.105Z"
+      "createdAt": "2026-09-28T22:13:08.105Z",
+      "companyId": "comp-1"
     }
   ],
   "tickets": [

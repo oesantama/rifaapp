@@ -20,6 +20,16 @@ class _LoginViewState extends State<LoginView> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Explain why the user is back at the login (expired or revoked session)
+    final authVM = Provider.of<AuthViewModel>(context, listen: false);
+    if (authVM.sessionExpired && authVM.loginErrorMessage.isNotEmpty) {
+      _errorMessage = authVM.loginErrorMessage;
+    }
+  }
+
+  @override
   void dispose() {
     _userController.dispose();
     _passwordController.dispose();
@@ -27,6 +37,14 @@ class _LoginViewState extends State<LoginView> {
   }
 
   void _handleLogin() async {
+    if (_isLoading) return;
+    // Both fields are always required; the server validates the credentials
+    if (_userController.text.trim().isEmpty || _passwordController.text.isEmpty) {
+      setState(() {
+        _errorMessage = _userController.text.trim().isEmpty ? 'Ingrese su usuario o correo.' : 'Ingrese su contraseña.';
+      });
+      return;
+    }
     setState(() {
       _errorMessage = null;
       _isLoading = true;
@@ -48,6 +66,7 @@ class _LoginViewState extends State<LoginView> {
           _errorMessage = authVM.loginErrorMessage.isNotEmpty
               ? authVM.loginErrorMessage
               : 'Usuario o contraseña incorrectos. Verifique sus credenciales.';
+          _passwordController.clear();
         }
       });
     }
@@ -191,8 +210,8 @@ class _LoginViewState extends State<LoginView> {
                             onTap: () {
                               setState(() {
                                 _selectedRole = UserRole.admin;
-                                _userController.text = 'admin';
-                                _passwordController.text = '1234';
+                                _userController.clear();
+                                _passwordController.clear();
                                 _errorMessage = null;
                               });
                             },
@@ -232,8 +251,8 @@ class _LoginViewState extends State<LoginView> {
                             onTap: () {
                               setState(() {
                                 _selectedRole = UserRole.asesor;
-                                _userController.text = 'ADV01';
-                                _passwordController.text = '1234';
+                                _userController.clear();
+                                _passwordController.clear();
                                 _errorMessage = null;
                               });
                             },
@@ -280,11 +299,14 @@ class _LoginViewState extends State<LoginView> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _userController,
+                    autofillHints: const [AutofillHints.username],
+                    textInputAction: TextInputAction.next,
+                    autocorrect: false,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       prefixIcon: Icon(_selectedRole == UserRole.admin ? Icons.admin_panel_settings_outlined : Icons.person_outline,
                           color: Colors.grey),
-                      hintText: _selectedRole == UserRole.admin ? 'Ej: admin o admin@rifamaster.com' : 'Ej: ADV01 o correo',
+                      hintText: _selectedRole == UserRole.admin ? 'Usuario o correo del administrador' : 'Código, cédula, usuario o correo',
                       filled: true,
                       fillColor: const Color(0xFF0F172A),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -301,6 +323,10 @@ class _LoginViewState extends State<LoginView> {
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    enableSuggestions: false,
+                    autocorrect: false,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),

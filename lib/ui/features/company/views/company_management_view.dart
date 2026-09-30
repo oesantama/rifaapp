@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:rifaapp/data/models/company.dart';
 import 'package:rifaapp/data/services/api_service.dart';
+import 'package:rifaapp/data/services/auth_http.dart';
+import 'package:rifaapp/ui/features/auth/views/change_password_dialog.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 class CompanyManagementView extends StatefulWidget {
@@ -49,6 +51,13 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     );
   }
 
+  void _showError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error is ApiException ? error.message : 'No se pudo guardar: $error')),
+    );
+  }
+
   void _showCreateCompanyDialog() {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
@@ -56,7 +65,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     final adminNameController = TextEditingController();
     final adminEmailController = TextEditingController();
     final adminUsernameController = TextEditingController();
-    final adminPasswordController = TextEditingController(text: '123');
+    final adminPasswordController = TextEditingController();
 
     showDialog(
       context: context,
@@ -138,10 +147,13 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                       TextFormField(
                         controller: adminPasswordController,
                         decoration: const InputDecoration(
-                          labelText: 'Contraseña *',
+                          labelText: 'Contraseña temporal *',
+                          helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
+                          helperMaxLines: 2,
                           prefixIcon: Icon(Icons.lock),
                         ),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
+                        obscureText: true,
+                        validator: validateNewPassword,
                       ),
                     ),
                   ],
@@ -163,11 +175,17 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                     'adminName': adminNameController.text.trim(),
                     'adminEmail': adminEmailController.text.trim(),
                     'adminUsername': adminUsernameController.text.trim(),
-                    'adminPassword': adminPasswordController.text.trim(),
+                    'adminPassword': adminPasswordController.text,
                   };
-                  Navigator.pop(context);
-                  Company? created = await _apiService.createCompany(data);
-                  if (created != null) {
+                  final Company created;
+                  try {
+                    created = await _apiService.createCompany(data);
+                  } catch (e) {
+                    _showError(e);
+                    return;
+                  }
+                  if (context.mounted) Navigator.pop(context);
+                  {
                     _loadCompanies();
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,7 +213,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     final adminNameController = TextEditingController(text: company.adminName);
     final adminEmailController = TextEditingController(text: company.adminEmail);
     final adminUsernameController = TextEditingController(text: company.adminUsername);
-    final adminPasswordController = TextEditingController(text: company.adminPassword);
+    final adminPasswordController = TextEditingController();
     String selectedStatus = company.status;
 
     showDialog(
@@ -292,10 +310,12 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           TextFormField(
                             controller: adminPasswordController,
                             decoration: const InputDecoration(
-                              labelText: 'Contraseña *',
-                              prefixIcon: Icon(Icons.lock),
+                              labelText: 'Nueva contraseña (opcional)',
+                              helperText: 'Déjela vacía para no cambiarla.',
+                              prefixIcon: Icon(Icons.lock_reset),
                             ),
-                            validator: (val) => val == null || val.trim().isEmpty ? 'Contraseña requerida' : null,
+                            obscureText: true,
+                            validator: (val) => (val == null || val.isEmpty) ? null : validateNewPassword(val),
                           ),
                         ),
                       ],
@@ -319,11 +339,17 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         'adminName': adminNameController.text.trim(),
                         'adminEmail': adminEmailController.text.trim(),
                         'adminUsername': adminUsernameController.text.trim(),
-                        'adminPassword': adminPasswordController.text.trim(),
+                        if (adminPasswordController.text.isNotEmpty) 'adminPassword': adminPasswordController.text,
                       };
-                      Navigator.pop(context);
-                      Company? updated = await _apiService.updateCompany(company.id, updateData);
-                      if (updated != null) {
+                      final Company updated;
+                      try {
+                        updated = await _apiService.updateCompany(company.id, updateData);
+                      } catch (e) {
+                        _showError(e);
+                        return;
+                      }
+                      if (context.mounted) Navigator.pop(context);
+                      {
                         _loadCompanies();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -455,7 +481,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                         style: const TextStyle(fontWeight: FontWeight.bold),
                                       ),
                                       subtitle: Text(
-                                        'Usuario: ${adm['username']} • Clave: ${adm['password']}'
+                                        'Usuario: ${adm['username']}'
                                         '${(adm['email'] ?? '').toString().isNotEmpty ? '\n${adm['email']}' : ''}',
                                       ),
                                     ),
@@ -719,7 +745,6 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
             ),
             const Divider(height: 20),
             _buildInfoLine(Icons.person_outline, 'Admin: ${comp.adminName} (${comp.adminUsername})'),
-            _buildInfoLine(Icons.key, 'Clave: ${comp.adminPassword}'),
             if (comp.adminEmail.isNotEmpty) _buildInfoLine(Icons.email_outlined, comp.adminEmail),
             const SizedBox(height: 8),
             Wrap(

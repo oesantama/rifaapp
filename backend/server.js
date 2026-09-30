@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const security = require('./security');
 let admin;
 try {
   admin = require('firebase-admin');
@@ -52,6 +53,14 @@ app.use(cors({
 }));
 app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
+app.set('trust proxy', true);
+
+// Never send password hashes or credentials to clients
+app.use('/api', (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (body) => originalJson(security.stripSecrets(body));
+  next();
+});
 
 // Serve static Flutter Web SPA if present
 const publicDir = path.join(__dirname, 'public');
@@ -195,13 +204,90 @@ function generateInitialTickets() {
 }
 
 // File persistence helpers
+// Encryption at rest: with a master key (DATA_ENCRYPTION_KEY or secrets/data.key) the
+// database is stored encrypted (AES-256-GCM) in data.json and in Firestore.
+function initEncryptionKey() {
+  // A key file is only generated for local storage, where secrets/ is persisted.
+  // With Firestore the key must come from DATA_ENCRYPTION_KEY, otherwise a new key per
+  // container restart would make the stored data unreadable.
+  security.loadMasterKey({ allowCreate: !firestore });
+  if (!security.hasMasterKey()) {
+    console.warn('⚠️ DATA_ENCRYPTION_KEY no configurada: los datos se guardarán SIN cifrar en Firestore.');
+  }
+}
+
+function fatal(message) {
+  console.error(`❌ ${message}`);
+  console.error('   El servidor se detiene para no sobrescribir ni dañar los datos existentes.');
+  process.exit(1);
+}
+
+function decodeStoredDb(raw, source) {
+  if (!security.isEncryptedEnvelope(raw)) return raw;
+  if (!security.hasMasterKey()) {
+    fatal(`Los datos de ${source} están cifrados pero no se encontró la llave (${security.KEY_FILE} o DATA_ENCRYPTION_KEY).`);
+  }
+  try {
+    return security.decryptObject(raw);
+  } catch (e) {
+    fatal(`No se pudieron descifrar los datos de ${source}: la llave de cifrado no corresponde.`);
+  }
+}
+
+function emptyDb() {
+  return {
+    companies: [],
+    raffles: [],
+    tickets: [],
+    advisors: [],
+    winners: [],
+    cashTransactions: [],
+    logs: []
+  };
+}
+
+/** Hashes any remaining plain-text password and ensures the SuperAdmin account exists. */
+function migrateCredentials() {
+  let changed = false;
+  (db.companies || []).forEach(c => {
+    if (c.adminPassword && !security.isPasswordHash(c.adminPassword)) {
+      // Weak legacy passwords (e.g. 1234) must be replaced on next login
+      if (security.validatePasswordPolicy(String(c.adminPassword))) c.adminMustChangePassword = true;
+      c.adminPassword = security.hashPassword(c.adminPassword);
+      changed = true;
+    }
+  });
+  (db.advisors || []).forEach(a => {
+    if (a.password && !security.isPasswordHash(a.password)) {
+      if (security.validatePasswordPolicy(String(a.password))) a.mustChangePassword = true;
+      a.password = security.hashPassword(a.password);
+      changed = true;
+    }
+  });
+  if (!db.superAdmin || !db.superAdmin.passwordHash) {
+    const initialPassword = process.env.SUPERADMIN_PASSWORD || '1234';
+    db.superAdmin = {
+      username: 'superadmin',
+      email: 'superadmin@rifamaster.com',
+      name: 'SuperAdministrador Master',
+      passwordHash: security.hashPassword(initialPassword),
+      // The default password must be replaced on first login
+      mustChangePassword: !process.env.SUPERADMIN_PASSWORD,
+      createdAt: new Date().toISOString()
+    };
+    changed = true;
+  }
+  return changed;
+}
+
 async function loadDB() {
+  initEncryptionKey();
   let loadedFromFirestore = false;
   if (firestore) {
     try {
       const doc = await firestore.collection('rifaapp').doc('database').get();
       if (doc.exists) {
-        db = doc.data();
+        db = decodeStoredDb(doc.data(), 'Firestore');
         loadedFromFirestore = true;
         console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
       } else {
@@ -213,64 +299,22 @@ async function loadDB() {
   }
 
   if (!loadedFromFirestore) {
-    try {
-      if (fs.existsSync(DB_FILE)) {
-        const data = fs.readFileSync(DB_FILE, 'utf8');
-        db = JSON.parse(data);
-        console.log('✅ Datos cargados exitosamente desde data.json local');
-      } else {
-        db = {
-          companies: [],
-          raffles: [],
-          tickets: [],
-          advisors: [],
-          winners: [],
-          cashTransactions: [],
-          logs: []
-        };
-        saveDB();
+    if (fs.existsSync(DB_FILE)) {
+      let parsed;
+      try {
+        parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+      } catch (err) {
+        fatal(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
       }
-    } catch (err) {
-      console.error('Error loading DB file:', err);
-      db = {
-        companies: [],
-        raffles: [],
-        tickets: [],
-        advisors: [],
-        winners: [],
-        cashTransactions: [],
-        logs: []
-      };
+      db = decodeStoredDb(parsed, 'data.json');
+      console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
+    } else {
+      db = emptyDb();
     }
   }
 
   // Ensure DB arrays exist
-  if (!db.companies || db.companies.length === 0) {
-    db.companies = [
-      {
-        id: 'comp-1',
-        name: 'contruexito',
-        code: 'EMP01',
-        status: 'ACTIVA',
-        adminUsername: 'william',
-        adminPassword: '1234',
-        adminName: 'WILLIAM SANTAMARIA',
-        adminEmail: 'william@santamaria.com',
-        createdAt: '2026-09-29T19:54:13.535Z'
-      },
-      {
-        id: 'comp-2',
-        name: 'marisol y edgar distribuciones del norte',
-        code: 'SANT-01',
-        status: 'ACTIVA',
-        adminUsername: 'marisol',
-        adminPassword: '12345678',
-        adminName: 'marisol santamaria',
-        adminEmail: 'marisol.santamaria.larga@gmail.com',
-        createdAt: '2026-09-29T19:54:13.535Z'
-      }
-    ];
-  }
+  if (!db.companies) db.companies = [];
   if (!db.raffles) db.raffles = [];
   if (!db.tickets) db.tickets = [];
   if (!db.advisors) db.advisors = [];
@@ -285,17 +329,25 @@ async function loadDB() {
   db.advisors.forEach(a => {
     if (!a.companyId) a.companyId = 'comp-1';
   });
+
+  if (migrateCredentials()) {
+    console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
+  }
+  // Rewrite the store so it is encrypted (and plain-text passwords disappear from disk)
+  saveDB();
 }
 
 function saveDB() {
+  const stored = security.hasMasterKey() ? security.encryptObject(db) : db;
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    // Written in place (data.json is a bind-mounted file, so it cannot be replaced by rename)
+    fs.writeFileSync(DB_FILE, JSON.stringify(stored), { encoding: 'utf8', mode: 0o600 });
   } catch (err) {
     console.error('Error saving local DB:', err);
   }
 
   if (firestore) {
-    firestore.collection('rifaapp').doc('database').set(db).catch(err => {
+    firestore.collection('rifaapp').doc('database').set(stored).catch(err => {
       console.error('Error respaldando datos en Cloud Firestore:', err.message);
     });
   }
@@ -311,9 +363,204 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), companiesCount: (db.companies || []).length, rafflesCount: db.raffles.length, ticketsCount: db.tickets.length });
 });
 
+// ---------------------------------------------------------------------------
+// Authentication: credentials are always validated here, never in the client
+// ---------------------------------------------------------------------------
+function normalize(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function passwordHashOf(kind, record) {
+  if (kind === 'superadmin') return record.passwordHash;
+  if (kind === 'admin') return record.adminPassword;
+  return record.password;
+}
+
+function sessionUser(kind, record) {
+  if (kind === 'superadmin') {
+    return {
+      role: 'superadmin',
+      id: 'superadmin',
+      name: record.name || 'SuperAdministrador Master',
+      email: record.email || '',
+      username: record.username,
+      companyId: null,
+      companyName: '',
+      mustChangePassword: !!record.mustChangePassword
+    };
+  }
+  if (kind === 'admin') {
+    return {
+      role: 'admin',
+      id: record.id,
+      name: record.adminName || 'Administrador',
+      email: record.adminEmail || '',
+      username: record.adminUsername,
+      companyId: record.id,
+      companyName: record.name,
+      mustChangePassword: !!record.adminMustChangePassword
+    };
+  }
+  const company = (db.companies || []).find(c => c.id === record.companyId);
+  return {
+    role: 'asesor',
+    id: record.id,
+    name: record.name,
+    email: record.email || '',
+    username: record.username || record.code,
+    companyId: record.companyId || null,
+    companyName: company ? company.name : '',
+    mustChangePassword: !!record.mustChangePassword,
+    advisor: record
+  };
+}
+
+function issueSession(kind, record) {
+  const pv = security.passwordVersion(passwordHashOf(kind, record));
+  const subject = kind === 'superadmin' ? 'superadmin' : record.id;
+  const { token, expiresAt } = security.signToken({ sub: subject, role: kind, pv });
+  return { token, expiresAt, user: sessionUser(kind, record) };
+}
+
+/** Resolves the account behind a token; null if it no longer exists, is disabled or changed password. */
+function resolveAccount(payload) {
+  let record = null;
+  if (payload.role === 'superadmin') record = db.superAdmin;
+  if (payload.role === 'admin') record = (db.companies || []).find(c => c.id === payload.sub);
+  if (payload.role === 'asesor') record = (db.advisors || []).find(a => a.id === payload.sub);
+  if (!record) return null;
+  if (security.passwordVersion(passwordHashOf(payload.role, record)) !== payload.pv) return null;
+  if (payload.role === 'admin' && record.status === 'INACTIVA') return null;
+  if (payload.role === 'asesor' && record.status === 'INHABILITADO') return null;
+  return { kind: payload.role, record };
+}
+
+app.post('/api/auth/login', (req, res) => {
+  const { role, username, password } = req.body || {};
+  const identifier = normalize(username);
+  const pass = typeof password === 'string' ? password : '';
+  if (!identifier || !pass) {
+    return res.status(400).json({ error: 'Ingrese usuario y contraseña.' });
+  }
+
+  const ip = req.ip || '';
+  const lockedMs = security.isLocked(ip, identifier);
+  if (lockedMs > 0) {
+    return res.status(429).json({ error: `Demasiados intentos fallidos. Intente de nuevo en ${Math.ceil(lockedMs / 60000)} minuto(s).` });
+  }
+
+  let kind = null;
+  let record = null;
+  if (role === 'asesor') {
+    record = (db.advisors || []).find(a => [a.code, a.username, a.email, a.phone].some(v => v && normalize(v) === identifier));
+    kind = record ? 'asesor' : null;
+  } else {
+    const sa = db.superAdmin;
+    if (sa && (normalize(sa.username) === identifier || normalize(sa.email) === identifier)) {
+      kind = 'superadmin';
+      record = sa;
+    } else {
+      record = (db.companies || []).find(c => [c.adminUsername, c.adminEmail].some(v => v && normalize(v) === identifier));
+      kind = record ? 'admin' : null;
+    }
+  }
+
+  let valid = false;
+  if (record) {
+    valid = security.verifyPassword(pass, passwordHashOf(kind, record));
+  } else {
+    security.burnPasswordCheck(pass);
+  }
+
+  if (!valid) {
+    const remaining = security.registerFailure(ip, identifier);
+    return res.status(401).json({
+      error: remaining > 0
+        ? 'Usuario o contraseña incorrectos.'
+        : 'Demasiados intentos fallidos. El acceso quedó bloqueado por 15 minutos.'
+    });
+  }
+
+  // Account state is only revealed after a correct password
+  if (kind === 'admin' && record.status === 'INACTIVA') {
+    return res.status(403).json({ error: `Su empresa "${record.name}" se encuentra INACTIVA. Contacte al superadministrador.` });
+  }
+  if (kind === 'asesor' && record.status === 'INHABILITADO') {
+    return res.status(403).json({ error: 'Su cuenta de asesor se encuentra INHABILITADA por la administración.' });
+  }
+
+  security.clearFailures(ip, identifier);
+  res.json(issueSession(kind, record));
+});
+
+// Every other API route requires a valid session
+app.use('/api', (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const payload = token ? security.verifyToken(token) : null;
+  const account = payload ? resolveAccount(payload) : null;
+  if (!account) {
+    return res.status(401).json({ error: 'Sesión no válida o expirada. Inicie sesión nuevamente.' });
+  }
+  req.auth = { role: account.kind, record: account.record };
+  next();
+});
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.auth || !roles.includes(req.auth.role)) {
+      return res.status(403).json({ error: 'No tiene permisos para realizar esta acción.' });
+    }
+    next();
+  };
+}
+const adminOnly = requireRole('admin', 'superadmin');
+const superAdminOnly = requireRole('superadmin');
+
+app.get('/api/auth/me', (req, res) => {
+  res.json({ user: sessionUser(req.auth.role, req.auth.record) });
+});
+
+app.post('/api/auth/change-password', (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  const { role, record } = req.auth;
+  if (!security.verifyPassword(String(currentPassword || ''), passwordHashOf(role, record))) {
+    return res.status(400).json({ error: 'La contraseña actual no es correcta.' });
+  }
+  const policyError = security.validatePasswordPolicy(newPassword);
+  if (policyError) return res.status(400).json({ error: policyError });
+  if (security.verifyPassword(newPassword, passwordHashOf(role, record))) {
+    return res.status(400).json({ error: 'La nueva contraseña debe ser diferente a la actual.' });
+  }
+
+  const hash = security.hashPassword(newPassword);
+  if (role === 'superadmin') {
+    record.passwordHash = hash;
+    record.mustChangePassword = false;
+  } else if (role === 'admin') {
+    record.adminPassword = hash;
+    record.adminMustChangePassword = false;
+  } else {
+    record.password = hash;
+    record.mustChangePassword = false;
+  }
+  record.passwordChangedAt = new Date().toISOString();
+  saveDB();
+  // Other sessions of this user become invalid; this one gets a fresh token
+  res.json({ message: 'Contraseña actualizada correctamente.', ...issueSession(role, record) });
+});
+
+function isUsernameTaken(username) {
+  const u = normalize(username);
+  if (db.superAdmin && (normalize(db.superAdmin.username) === u || normalize(db.superAdmin.email) === u)) return true;
+  return (db.companies || []).some(c => normalize(c.adminUsername) === u);
+}
+
 // GET Companies (SuperAdmin) - Enriched with Admins, Raffles and Advisors stats
 app.get('/api/companies', (req, res) => {
-  const companiesList = db.companies || [];
+  // SuperAdmin sees every company; other users only their own
+  const ownCompanyId = req.auth.role === 'admin' ? req.auth.record.id : req.auth.record.companyId;
+  const companiesList = (db.companies || []).filter(c => req.auth.role === 'superadmin' || c.id === ownCompanyId);
   const enriched = companiesList.map(comp => {
     // Company Raffles
     const raffles = (db.raffles || []).filter(r => !r.companyId || r.companyId === comp.id);
@@ -325,7 +572,6 @@ app.get('/api/companies', (req, res) => {
         name: comp.adminName || 'Administrador General',
         username: comp.adminUsername || 'ADMIN',
         email: comp.adminEmail || 'admin@empresa.com',
-        password: comp.adminPassword || '123',
         status: 'ACTIVO'
       }
     ];
@@ -359,10 +605,15 @@ app.get('/api/companies', (req, res) => {
 });
 
 // POST Create Company
-app.post('/api/companies', (req, res) => {
+app.post('/api/companies', superAdminOnly, (req, res) => {
   const { name, code, adminUsername, adminPassword, adminName, adminEmail } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'El nombre de la empresa es obligatorio' });
+  }
+  const policyError = security.validatePasswordPolicy(adminPassword);
+  if (policyError) return res.status(400).json({ error: `Contraseña del administrador: ${policyError}` });
+  if (adminUsername && isUsernameTaken(adminUsername)) {
+    return res.status(409).json({ error: 'Ese usuario administrador ya existe.' });
   }
 
   const newCompany = {
@@ -371,7 +622,8 @@ app.post('/api/companies', (req, res) => {
     code: code ? code.trim().toUpperCase() : `EMP${(db.companies || []).length + 1}`,
     status: 'ACTIVA',
     adminUsername: adminUsername ? adminUsername.trim() : `admin_${Date.now().toString().slice(-4)}`,
-    adminPassword: adminPassword || '123',
+    adminPassword: security.hashPassword(adminPassword),
+    adminMustChangePassword: true,
     adminName: adminName || 'Admin Empresa',
     adminEmail: adminEmail || '',
     createdAt: new Date().toISOString()
@@ -384,7 +636,7 @@ app.post('/api/companies', (req, res) => {
 });
 
 // PUT Update Company
-app.put('/api/companies/:id', (req, res) => {
+app.put('/api/companies/:id', superAdminOnly, (req, res) => {
   const { id } = req.params;
   const company = (db.companies || []).find(c => c.id === id);
   if (!company) {
@@ -394,8 +646,19 @@ app.put('/api/companies/:id', (req, res) => {
   if (req.body.name !== undefined) company.name = req.body.name;
   if (req.body.code !== undefined) company.code = req.body.code;
   if (req.body.status !== undefined) company.status = req.body.status;
-  if (req.body.adminUsername !== undefined) company.adminUsername = req.body.adminUsername;
-  if (req.body.adminPassword !== undefined) company.adminPassword = req.body.adminPassword;
+  if (req.body.adminUsername !== undefined) {
+    if (normalize(req.body.adminUsername) !== normalize(company.adminUsername) && isUsernameTaken(req.body.adminUsername)) {
+      return res.status(409).json({ error: 'Ese usuario administrador ya existe.' });
+    }
+    company.adminUsername = req.body.adminUsername;
+  }
+  // Password only changes when a new one is sent (it is never read back)
+  if (typeof req.body.adminPassword === 'string' && req.body.adminPassword.trim() !== '') {
+    const policyError = security.validatePasswordPolicy(req.body.adminPassword);
+    if (policyError) return res.status(400).json({ error: `Contraseña del administrador: ${policyError}` });
+    company.adminPassword = security.hashPassword(req.body.adminPassword);
+    company.adminMustChangePassword = true;
+  }
   if (req.body.adminName !== undefined) company.adminName = req.body.adminName;
   if (req.body.adminEmail !== undefined) company.adminEmail = req.body.adminEmail;
 
@@ -404,7 +667,7 @@ app.put('/api/companies/:id', (req, res) => {
 });
 
 // Backup & Database Management Routes (SuperAdmin)
-app.get('/api/backup', (req, res) => {
+app.get('/api/backup', superAdminOnly, (req, res) => {
   let stats = {};
   try {
     if (fs.existsSync(DB_FILE)) {
@@ -428,19 +691,31 @@ app.get('/api/backup', (req, res) => {
       auditLogsCount: (db.auditLogs || []).length,
       ...stats
     },
-    database: db
+    encrypted: security.hasMasterKey()
   });
 });
 
-app.get('/api/backup/download', (req, res) => {
+app.get('/api/backup/download', superAdminOnly, (req, res) => {
+  // The backup file is encrypted with the server key: it can only be restored with that key
+  const payload = security.hasMasterKey() ? security.encryptObject(db, security.BACKUP_FORMAT) : db;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename=backup_rifamaster_${Date.now()}.json`);
-  res.send(JSON.stringify(db, null, 2));
+  res.send(JSON.stringify(payload));
 });
 
-app.post('/api/backup/restore', (req, res) => {
+app.post('/api/backup/restore', superAdminOnly, (req, res) => {
   try {
-    const backupData = req.body;
+    let backupData = req.body;
+    if (security.isEncryptedEnvelope(backupData)) {
+      if (!security.hasMasterKey()) {
+        return res.status(400).json({ error: 'La copia está cifrada y este servidor no tiene la llave de cifrado configurada.' });
+      }
+      try {
+        backupData = security.decryptObject(backupData);
+      } catch (_) {
+        return res.status(400).json({ error: 'No se pudo descifrar la copia: fue creada con otra llave de cifrado o está dañada.' });
+      }
+    }
     if (!backupData || typeof backupData !== 'object') {
       return res.status(400).json({ error: 'Formato de copia de seguridad inválido' });
     }
@@ -452,9 +727,12 @@ app.post('/api/backup/restore', (req, res) => {
       advisors: backupData.advisors || [],
       tickets: backupData.tickets || [],
       winners: backupData.winners || [],
-      commissionPayouts: backupData.commissionPayouts || []
+      commissionPayouts: backupData.commissionPayouts || [],
+      // Restoring an older copy must never lock the current SuperAdmin out
+      superAdmin: db.superAdmin
     };
 
+    migrateCredentials();
     saveDB();
     res.json({
       message: 'Base de datos restaurada exitosamente.',
@@ -470,7 +748,8 @@ app.post('/api/backup/restore', (req, res) => {
   }
 });
 
-app.post('/api/backup/reset', (req, res) => {
+app.post('/api/backup/reset', superAdminOnly, (req, res) => {
+  const currentSuperAdmin = db.superAdmin;
   db = {
     companies: [],
     raffles: [],
@@ -480,7 +759,8 @@ app.post('/api/backup/reset', (req, res) => {
     cashTransactions: [],
     logs: [],
     auditLogs: [],
-    commissionPayouts: []
+    commissionPayouts: [],
+    superAdmin: currentSuperAdmin
   };
   saveDB();
   res.json({
@@ -490,21 +770,33 @@ app.post('/api/backup/reset', (req, res) => {
   });
 });
 
-// GET Raffles
+// GET Raffles (Multi-tenant isolated)
 app.get('/api/raffles', (req, res) => {
   const { advisorId, role, companyId } = req.query;
-  let raffles = db.raffles;
-  if (companyId) {
-    raffles = raffles.filter(r => !r.companyId || r.companyId === companyId);
+  let raffles = db.raffles || [];
+
+  // Multi-tenant company filtering from session auth context
+  let targetCompanyId = companyId;
+  if (!targetCompanyId && req.auth) {
+    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
   }
-  if (role === 'asesor' && advisorId) {
-    raffles = raffles.filter(r => r.status === 'ACTIVA' && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(advisorId)));
+
+  if (targetCompanyId) {
+    raffles = raffles.filter(r => !r.companyId || r.companyId === targetCompanyId);
+  }
+
+  if ((role === 'asesor' || (req.auth && req.auth.role === 'asesor'))) {
+    const advId = advisorId || (req.auth && req.auth.record ? req.auth.record.id : null);
+    if (advId) {
+      raffles = raffles.filter(r => r.status === 'ACTIVA' && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(advId)));
+    }
   }
   res.json(raffles);
 });
 
 // PUT Update Raffle
-app.put('/api/raffles/:id', (req, res) => {
+app.put('/api/raffles/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   const raffle = db.raffles.find(r => r.id === id);
   if (!raffle) {
@@ -526,7 +818,7 @@ app.put('/api/raffles/:id', (req, res) => {
 });
 
 // POST Create Raffle
-app.post('/api/raffles', (req, res) => {
+app.post('/api/raffles', adminOnly, (req, res) => {
   const { title, description, mainDrawDate, weeklyPrizesStartDate, digits, totalTickets, ticketPrice, weeklyPrizes, generationMode, customNumbers, preSoldTickets, commissionType, commissionValue, companyId } = req.body;
   
   const numDigits = parseInt(digits) || 4;
@@ -534,9 +826,11 @@ app.post('/api/raffles', (req, res) => {
   const totalNumbers = Math.pow(10, numDigits); // 10^4 = 10000
   const opps = Math.floor(totalNumbers / numTickets); // e.g. 10000 / 2500 = 4
 
+  const targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : (companyId || 'comp-1');
+
   const newRaffle = {
     id: `raf-${Date.now()}`,
-    companyId: companyId || 'comp-1',
+    companyId: targetCompanyId,
     title: title || 'Nuevo Sorteo',
     description: description || '',
     mainDrawDate: mainDrawDate || new Date(Date.now() + 90*86400000).toISOString(),
@@ -667,7 +961,7 @@ app.post('/api/raffles', (req, res) => {
 });
 
 // POST Bulk Import Tickets
-app.post('/api/tickets/import', (req, res) => {
+app.post('/api/tickets/import', adminOnly, (req, res) => {
   const { raffleId, records } = req.body;
   if (!raffleId || !Array.isArray(records)) {
     return res.status(400).json({ error: 'Datos de importación inválidos' });
@@ -704,16 +998,35 @@ app.post('/api/tickets/import', (req, res) => {
   res.json({ message: `${importedCount} boletas importadas correctamente`, count: importedCount });
 });
 
-// GET Tickets (with filtering)
+// GET Tickets (with multi-tenant isolation)
 app.get('/api/tickets', (req, res) => {
-  const { raffleId, advisorId, status, search, numberSearch } = req.query;
+  const { raffleId, advisorId, status, search, numberSearch, companyId } = req.query;
   
-  let result = db.tickets;
+  let targetCompanyId = companyId;
+  if (!targetCompanyId && req.auth) {
+    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
+  }
+
+  let result = db.tickets || [];
+
+  if (targetCompanyId) {
+    const companyRaffleIds = (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId).map(r => r.id);
+    result = result.filter(t => companyRaffleIds.includes(t.raffleId));
+  }
+
   if (raffleId) {
     result = result.filter(t => t.raffleId === raffleId);
-  } else if (db.raffles.length > 0) {
-    // default to active raffle
-    result = result.filter(t => t.raffleId === db.raffles[0].id);
+  } else {
+    // If no raffleId specified, filter by company's active raffles
+    const availableRaffles = targetCompanyId
+      ? (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId)
+      : (db.raffles || []);
+    if (availableRaffles.length > 0) {
+      result = result.filter(t => t.raffleId === availableRaffles[0].id);
+    } else {
+      result = [];
+    }
   }
 
   if (advisorId) {
@@ -804,7 +1117,7 @@ app.post('/api/tickets/:id/abono', (req, res) => {
 });
 
 // POST Admin Confirm Ticket Payment Received
-app.post('/api/tickets/:id/confirm', (req, res) => {
+app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   const { id } = req.params;
   const ticket = db.tickets.find(t => t.id === id);
   if (!ticket) {
@@ -820,18 +1133,30 @@ app.post('/api/tickets/:id/confirm', (req, res) => {
   res.json(ticket);
 });
 
-// GET Advisors
+// GET Advisors (Multi-tenant isolated)
 app.get('/api/advisors', (req, res) => {
-  // calculate live metrics for each advisor
-  const advisorsWithStats = db.advisors.map(adv => {
-    const advTickets = db.tickets.filter(t => t.advisorId === adv.id);
+  const { companyId } = req.query;
+  let targetCompanyId = companyId;
+  if (!targetCompanyId && req.auth) {
+    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
+  }
+
+  let list = db.advisors || [];
+  if (targetCompanyId) {
+    list = list.filter(a => !a.companyId || a.companyId === targetCompanyId);
+  }
+
+  const advisorsWithStats = list.map(adv => {
+    const advTickets = (db.tickets || []).filter(t => t.advisorId === adv.id);
     const totalSold = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'ABONO_PARCIAL').length;
-    const totalCollected = advTickets.reduce((sum, t) => sum + t.totalPaid, 0);
-    const totalConfirmed = advTickets.filter(t => t.confirmedByAdmin).reduce((sum, t) => sum + t.totalPaid, 0);
+    const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+    const totalConfirmed = advTickets.filter(t => t.confirmedByAdmin).reduce((sum, t) => sum + (t.totalPaid || 0), 0);
     const pendingTurnIn = totalCollected - totalConfirmed;
 
     return {
       ...adv,
+      hasPassword: !!adv.password,
       totalTicketsCount: advTickets.length,
       totalSold,
       totalCollected,
@@ -844,15 +1169,21 @@ app.get('/api/advisors', (req, res) => {
 });
 
 // POST Create Advisor
-app.post('/api/advisors', (req, res) => {
+app.post('/api/advisors', adminOnly, (req, res) => {
   const { name, email, username, password, status, phone, code, mode, assignedTicketRanges, companyId } = req.body;
+  const policyError = security.validatePasswordPolicy(password);
+  if (policyError) return res.status(400).json({ error: `Contraseña del asesor: ${policyError}` });
+
+  const targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : (companyId || 'comp-1');
+
   const newAdvisor = {
     id: `adv-${Date.now()}`,
-    companyId: companyId || 'comp-1',
+    companyId: targetCompanyId,
     name: name || 'Nuevo Asesor',
     email: email || '',
     username: username || code || `ADV${Math.floor(10 + Math.random()*90)}`,
-    password: password || '1234',
+    password: security.hashPassword(password),
+    mustChangePassword: true,
     status: status || 'ACTIVO',
     phone: phone || '',
     code: code || `ADV${Math.floor(10 + Math.random()*90)}`,
@@ -867,7 +1198,7 @@ app.post('/api/advisors', (req, res) => {
 });
 
 // PUT Update Advisor
-app.put('/api/advisors/:id', (req, res) => {
+app.put('/api/advisors/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   const advisor = db.advisors.find(a => a.id === id);
   if (!advisor) {
@@ -877,7 +1208,13 @@ app.put('/api/advisors/:id', (req, res) => {
   if (req.body.name !== undefined) advisor.name = req.body.name;
   if (req.body.email !== undefined) advisor.email = req.body.email;
   if (req.body.username !== undefined) advisor.username = req.body.username;
-  if (req.body.password !== undefined) advisor.password = req.body.password;
+  // Password only changes when a new one is sent (it is never read back)
+  if (typeof req.body.password === 'string' && req.body.password.trim() !== '') {
+    const policyError = security.validatePasswordPolicy(req.body.password);
+    if (policyError) return res.status(400).json({ error: `Contraseña del asesor: ${policyError}` });
+    advisor.password = security.hashPassword(req.body.password);
+    advisor.mustChangePassword = true;
+  }
   if (req.body.status !== undefined) advisor.status = req.body.status;
   if (req.body.deletionReason !== undefined) advisor.deletionReason = req.body.deletionReason;
   if (req.body.phone !== undefined) advisor.phone = req.body.phone;
@@ -890,7 +1227,7 @@ app.put('/api/advisors/:id', (req, res) => {
 });
 
 // DELETE Advisor (Only allowed if no sales/records exist)
-app.delete('/api/advisors/:id', (req, res) => {
+app.delete('/api/advisors/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body || {};
   const advisor = db.advisors.find(a => a.id === id);
@@ -922,7 +1259,7 @@ app.delete('/api/advisors/:id', (req, res) => {
 });
 
 // DELETE Winner / Draw Record
-app.delete('/api/winners/:id', (req, res) => {
+app.delete('/api/winners/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body || {};
   const winner = db.winners.find(w => w.id === id);
@@ -947,7 +1284,7 @@ app.delete('/api/winners/:id', (req, res) => {
 });
 
 // POST Register Winner / Draw Number
-app.post('/api/winners', (req, res) => {
+app.post('/api/winners', adminOnly, (req, res) => {
   const { raffleId, winningNumber, drawName, drawDate, prizeAmount, photoUrl } = req.body;
 
   const raffle = db.raffles.find(r => r.id === (raffleId || db.raffles[0].id));
@@ -1043,27 +1380,54 @@ app.post('/api/winners', (req, res) => {
   res.status(201).json(record);
 });
 
-// GET Winners
+// GET Winners (Multi-tenant isolated)
 app.get('/api/winners', (req, res) => {
-  res.json(db.winners);
+  const { raffleId, companyId } = req.query;
+  let targetCompanyId = companyId;
+  if (!targetCompanyId && req.auth) {
+    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
+  }
+
+  let winners = db.winners || [];
+  if (targetCompanyId) {
+    const companyRaffleIds = (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId).map(r => r.id);
+    winners = winners.filter(w => companyRaffleIds.includes(w.raffleId));
+  }
+  if (raffleId) {
+    winners = winners.filter(w => w.raffleId === raffleId);
+  }
+  res.json(winners);
 });
 
-// GET Dashboard Metrics Summary
+// GET Dashboard Metrics Summary (Multi-tenant isolated)
 app.get('/api/dashboard', (req, res) => {
-  const raffle = db.raffles[0];
-  const activeTickets = db.tickets.filter(t => t.raffleId === (raffle ? raffle.id : 'raf-1'));
+  const { companyId } = req.query;
+  let targetCompanyId = companyId;
+  if (!targetCompanyId && req.auth) {
+    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
+  }
+
+  const availableRaffles = targetCompanyId
+    ? (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId)
+    : (db.raffles || []);
+
+  const raffle = availableRaffles[0];
+  const activeTickets = db.tickets.filter(t => t.raffleId === (raffle ? raffle.id : ''));
 
   const totalTickets = activeTickets.length;
   const soldPaidCount = activeTickets.filter(t => t.status === 'PAGADA').length;
   const partialAbonoCount = activeTickets.filter(t => t.status === 'ABONO_PARCIAL').length;
   const availableCount = activeTickets.filter(t => t.status === 'DISPONIBLE').length;
 
-  const totalMoneyCollected = activeTickets.reduce((sum, t) => sum + t.totalPaid, 0);
-  const totalMoneyConfirmed = activeTickets.filter(t => t.confirmedByAdmin).reduce((sum, t) => sum + t.totalPaid, 0);
+  const totalMoneyCollected = activeTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+  const totalMoneyConfirmed = activeTickets.filter(t => t.confirmedByAdmin).reduce((sum, t) => sum + (t.totalPaid || 0), 0);
   const totalMoneyPendingTurnIn = totalMoneyCollected - totalMoneyConfirmed;
   const totalPotentialRevenue = totalTickets * (raffle ? raffle.ticketPrice : 50000);
 
-  const accumulatedPrizes = db.winners.filter(w => w.accumulated);
+  const companyRaffleIds = availableRaffles.map(r => r.id);
+  const accumulatedPrizes = (db.winners || []).filter(w => w.accumulated && companyRaffleIds.includes(w.raffleId));
 
   res.json({
     raffle,
@@ -1077,7 +1441,7 @@ app.get('/api/dashboard', (req, res) => {
     totalPotentialRevenue,
     progressPercentage: totalTickets > 0 ? (((soldPaidCount + partialAbonoCount) / totalTickets) * 100).toFixed(1) : 0,
     accumulatedCount: accumulatedPrizes.length,
-    accumulatedTotalAmount: accumulatedPrizes.reduce((sum, w) => sum + w.prizeAmount, 0)
+    accumulatedTotalAmount: accumulatedPrizes.reduce((sum, w) => sum + (w.prizeAmount || 0), 0)
   });
 });
 
@@ -1150,7 +1514,7 @@ app.get('/api/commissions', (req, res) => {
 });
 
 // POST Commission Payout
-app.post('/api/commissions/payout', (req, res) => {
+app.post('/api/commissions/payout', adminOnly, (req, res) => {
   if (!db.commissionPayouts) db.commissionPayouts = [];
   const { advisorId, amount, note, raffleId } = req.body;
   const targetRaffleId = raffleId || (db.raffles[0] ? db.raffles[0].id : 'raf-1');

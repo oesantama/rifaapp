@@ -12,12 +12,6 @@ class AdvisorManagementView extends StatelessWidget {
   const AdvisorManagementView({super.key});
 
   void _showAdminDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    final usernameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-
     showDialog(
       context: context,
       builder: (ctx) {
@@ -27,98 +21,18 @@ class AdvisorManagementView extends StatelessWidget {
             children: [
               Icon(Icons.admin_panel_settings, color: Colors.amber, size: 28),
               SizedBox(width: 10),
-              Expanded(child: Text('Registrar Nuevo Administrador', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+              Expanded(child: Text('Gestión de Administradores', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
             ],
           ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre Completo del Admin *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Correo Electrónico *',
-                    hintText: 'admin2@rifamaster.com',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: usernameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Usuario de Acceso *',
-                    hintText: 'Ej: admin2',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.account_circle),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: phoneCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Teléfono / WhatsApp *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
-                  ),
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: passwordCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Contraseña de Acceso *',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                ),
-              ],
-            ),
+          content: const Text(
+            'Las empresas y sus administradores principales se crean y gestionan desde la vista del SuperAdministrador ("Gestión Empresas").\n\nSi necesita agregar o editar credenciales de administradores de empresa, hágalo desde ese panel.',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade900),
-              onPressed: () {
-                if (nameCtrl.text.trim().isNotEmpty && passwordCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                  final authVM = Provider.of<AuthViewModel>(context, listen: false);
-                  authVM.registerAdmin(
-                    name: nameCtrl.text.trim(),
-                    email: emailCtrl.text.trim(),
-                    username: usernameCtrl.text.trim(),
-                    phone: phoneCtrl.text.trim(),
-                    password: passwordCtrl.text.trim(),
-                  );
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: AppTheme.secondaryEmerald,
-                      content: Text('¡Nuevo administrador "${nameCtrl.text.trim()}" registrado con éxito!'),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: Colors.red,
-                      content: Text('Ingrese Nombre, Correo, Usuario y Contraseña válidos.'),
-                    ),
-                  );
-                }
-              },
-              child: const Text('CREAR ADMINISTRADOR'),
-            )
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+              child: const Text('Entendido'),
+            ),
           ],
         );
       },
@@ -131,7 +45,7 @@ class AdvisorManagementView extends StatelessWidget {
     final emailCtrl = TextEditingController(text: advisor?.email ?? '');
     final usernameCtrl = TextEditingController(text: advisor?.username ?? '');
     final phoneCtrl = TextEditingController(text: advisor?.phone ?? '');
-    final passwordCtrl = TextEditingController(text: advisor?.password ?? '1234');
+    final passwordCtrl = TextEditingController();
     final codeCtrl = TextEditingController(text: advisor?.code ?? '');
     final rangeCtrl = TextEditingController(text: advisor?.assignedTicketRanges.join(', ') ?? '');
     String mode = advisor?.mode ?? 'POOL_GENERAL';
@@ -285,13 +199,17 @@ class AdvisorManagementView extends StatelessWidget {
                         'name': nameCtrl.text.trim(),
                         'email': emailCtrl.text.trim(),
                         'username': usernameCtrl.text.trim().isNotEmpty ? usernameCtrl.text.trim() : codeCtrl.text.trim(),
-                        'password': passwordCtrl.text.trim().isNotEmpty ? passwordCtrl.text.trim() : '1234',
                         'phone': phoneCtrl.text.trim(),
                         'code': codeCtrl.text.trim(),
                         'mode': mode,
                         'status': status,
                         'assignedTicketRanges': ranges,
                       };
+                      if (passwordCtrl.text.trim().isNotEmpty) {
+                        data['password'] = passwordCtrl.text.trim();
+                      } else if (!isEditing) {
+                        data['password'] = '12345678';
+                      }
 
                       bool ok;
                       if (isEditing) {

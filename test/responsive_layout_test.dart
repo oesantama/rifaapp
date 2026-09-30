@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:rifaapp/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final overflows = <String>[];
 
@@ -202,6 +203,9 @@ List<String> _problemsSince(int start) =>
     overflows.sublist(start).where((l) => !l.startsWith('---') && !l.trimLeft().startsWith('[dialog]')).toList();
 
 void main() {
+  // Each test starts logged out (the app persists the session).
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   setUpAll(() async {
     await loadFont('Roboto', ['/usr/share/fonts/google-noto/NotoSans-Regular.ttf', '/usr/share/fonts/google-noto/NotoSans-Bold.ttf']);
   });

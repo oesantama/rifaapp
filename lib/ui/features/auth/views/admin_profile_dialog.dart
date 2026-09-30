@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/features/auth/views/change_password_dialog.dart';
 
 class AdminProfileDialog extends StatefulWidget {
   const AdminProfileDialog({super.key});
@@ -15,8 +16,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _usernameController;
-  late TextEditingController _passwordController;
-  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -25,7 +24,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
     _nameController = TextEditingController(text: authVM.adminName);
     _emailController = TextEditingController(text: authVM.adminEmail);
     _usernameController = TextEditingController(text: authVM.adminUsername);
-    _passwordController = TextEditingController(text: '1234');
   }
 
   @override
@@ -33,7 +31,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
     _nameController.dispose();
     _emailController.dispose();
     _usernameController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -98,25 +95,14 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                   ),
                   validator: (val) => val == null || val.trim().isEmpty ? 'Ingrese el nombre de usuario' : null,
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Nueva Contraseña (o mantener actual)',
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                    border: const OutlineInputBorder(),
-                  ),
-                  validator: (val) {
-                    if (val != null && val.isNotEmpty && val.length < 4) {
-                      return 'La contraseña debe tener al menos 4 caracteres';
-                    }
-                    return null;
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    ChangePasswordDialog.show(context);
                   },
+                  icon: const Icon(Icons.lock_reset_rounded),
+                  label: const Text('Cambiar mi contraseña'),
                 ),
               ],
             ),
@@ -137,7 +123,6 @@ class _AdminProfileDialogState extends State<AdminProfileDialog> {
                 name: _nameController.text.trim(),
                 email: _emailController.text.trim(),
                 username: _usernameController.text.trim(),
-                password: _passwordController.text.trim(),
               );
 
               if (mounted) {
