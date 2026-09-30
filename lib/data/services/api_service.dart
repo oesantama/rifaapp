@@ -111,13 +111,13 @@ class ApiService {
           if (isAsesor && advisorId != null) 'advisorId': advisorId,
           if (isAsesor) 'role': 'asesor',
         });
-        final response = await authGet(uri).timeout(const Duration(seconds: 2));
+        final response = await authGet(uri).timeout(const Duration(seconds: 15));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Raffle.fromJson(json)).toList();
         }
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        debugPrint('⚠️ Error/Timeout obteniendo sorteos de API: $e');
       }
     }
 
@@ -425,13 +425,13 @@ class ApiService {
           if (status != null && status.isNotEmpty) 'status': status,
           if (advisorId != null && advisorId.isNotEmpty) 'advisorId': advisorId,
         });
-        final response = await authGet(uri).timeout(const Duration(seconds: 2));
+        final response = await authGet(uri).timeout(const Duration(seconds: 25));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Ticket.fromJson(json)).toList();
         }
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        debugPrint('⚠️ Error/Timeout obteniendo boletas de API: $e');
       }
     }
 
@@ -579,13 +579,13 @@ class ApiService {
   Future<List<Advisor>> getAdvisors() async {
     if (!_useLocalFallback) {
       try {
-        final response = await authGet(Uri.parse('$baseUrl/advisors')).timeout(const Duration(seconds: 2));
+        final response = await authGet(Uri.parse('$baseUrl/advisors')).timeout(const Duration(seconds: 15));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Advisor.fromJson(json)).toList();
         }
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        debugPrint('⚠️ Error/Timeout obteniendo asesores de API: $e');
       }
     }
     return _localAdvisors;
@@ -852,13 +852,13 @@ class ApiService {
   Future<List<WinnerRecord>> getWinners() async {
     if (!_useLocalFallback) {
       try {
-        final response = await authGet(Uri.parse('$baseUrl/winners')).timeout(const Duration(seconds: 2));
+        final response = await authGet(Uri.parse('$baseUrl/winners')).timeout(const Duration(seconds: 15));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => WinnerRecord.fromJson(json)).toList();
         }
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        debugPrint('⚠️ Error/Timeout obteniendo ganadores de API: $e');
       }
     }
     return _localWinners;
@@ -870,12 +870,12 @@ class ApiService {
         final Uri url = raffleId != null && raffleId.isNotEmpty
             ? Uri.parse('$baseUrl/commissions?raffleId=$raffleId')
             : Uri.parse('$baseUrl/commissions');
-        final response = await authGet(url).timeout(const Duration(seconds: 3));
+        final response = await authGet(url).timeout(const Duration(seconds: 15));
         if (response.statusCode == 200) {
           return jsonDecode(response.body);
         }
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        debugPrint('⚠️ Error/Timeout obteniendo comisiones de API: $e');
       }
     }
 
