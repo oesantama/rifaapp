@@ -9,6 +9,7 @@ import 'package:rifaapp/ui/core/widgets/status_badge.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'ticket_print_dialog.dart';
 
 class TicketDetailDialog extends StatefulWidget {
@@ -50,7 +51,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     super.dispose();
   }
 
-  void _copyReceiptToClipboard(BuildContext context) {
+  void _copyReceiptToClipboard(BuildContext context) async {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
     String name = _buyerNameController.text.trim().isNotEmpty
@@ -84,24 +85,43 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       }
     }
 
+    final isDebt = pending > 0;
     final text = '''
-🎟️ *COMPROBANTE DE BOLETA - ${widget.raffleTitle ?? "RIFA"}*
+${isDebt ? '⚠️ *RECORDATORIO DE PAGO - DEUDA*' : '🎟️ *COMPROBANTE DE BOLETA*'} - ${widget.raffleTitle ?? "RIFA"}
 ----------------------------------------
 🔢 *Número(s):* ${widget.ticket.displayNumber}
 👤 *Comprador:* $name
 📱 *Celular:* $phone
 💰 *Valor Boleta:* ${currency.format(widget.ticket.price)}
 ✅ *Total Abonado:* ${currency.format(currentPaid)}
-🔴 *Saldo Pendiente:* ${currency.format(pending)}
+${pending > 0 ? '🔴 *SALDO PENDIENTE:* ${currency.format(pending)}' : '🎉 *PAGO COMPLETO:* ${currency.format(widget.ticket.price)}'}
 📊 *Estado:* ${AppTheme.getStatusLabel(calculatedStatus)}
 ----------------------------------------
-¡Gracias por tu compra y buena suerte! 🍀
+${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar tu número en el próximo sorteo! 🍀' : '¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀'}
 ''';
 
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Comprobante digital copiado al portapapeles (Listo para WhatsApp)')),
-    );
+
+    if (phone.isNotEmpty) {
+      bool launched = await WhatsAppHelper.sendWhatsAppMessage(phone: phone, message: text);
+      if (launched && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppTheme.secondaryEmerald,
+            content: Text('✓ Abriendo WhatsApp con el mensaje del comprador...'),
+          ),
+        );
+        return;
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Comprobante digital copiado al portapapeles (Listo para pegar en WhatsApp)'),
+        ),
+      );
+    }
   }
 
   @override
@@ -484,11 +504,15 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   const SizedBox(width: 10, height: 12),
                   ResponsiveFlexChild(
                     expand: !isNarrowScreen(context),
-                    child: OutlinedButton.icon(
+                    child: ElevatedButton.icon(
                       onPressed: () => _copyReceiptToClipboard(context),
-                      icon: const Icon(Icons.share),
-                      label: const Text('Recibo WhatsApp'),
-                      style: OutlinedButton.styleFrom(
+                      icon: const Icon(Icons.send_rounded, color: Colors.white),
+                      label: Text(
+                        widget.ticket.balancePending > 0 ? 'Cobro por WhatsApp' : 'Enviar por WhatsApp',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),

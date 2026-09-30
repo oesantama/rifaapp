@@ -43,6 +43,17 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   double _fontSize = 10.0; // font size of number text (8.0 to 16.0)
   double _dotScale = 1.0; // scale for red dots (0.5 to 1.8)
   double _posterScale = 0.75; // Zoom scale for poster preview (0.40 to 1.20)
+  bool _colorByStatus = false; // false = unicolor, true = color per status
+  String _singleCircleColorHex = '#DC2626'; // Default red
+
+  static const List<Map<String, String>> _circleColorPresets = [
+    {'name': 'Rojo', 'hex': '#DC2626'},
+    {'name': 'Verde', 'hex': '#10B981'},
+    {'name': 'Azul', 'hex': '#2563EB'},
+    {'name': 'Morado', 'hex': '#8B5CF6'},
+    {'name': 'Naranja', 'hex': '#F59E0B'},
+    {'name': 'Negro', 'hex': '#1F2937'},
+  ];
 
   final bool _fillCellBg = true;
   final Color _cellBgColor = Colors.white.withValues(alpha: 0.92);
@@ -63,9 +74,40 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       _cellHeight = (config['cellHeight'] as num?)?.toDouble() ?? 24.0;
       _fontSize = (config['fontSize'] as num?)?.toDouble() ?? 10.0;
       _dotScale = (config['dotScale'] as num?)?.toDouble() ?? 1.0;
+      _colorByStatus = (config['colorByStatus'] as bool?) ?? false;
+      _singleCircleColorHex = (config['singleCircleColorHex'] as String?) ?? '#DC2626';
     }
 
     _loadRaffleTickets();
+  }
+
+  Color _parseHexColor(String hexString) {
+    try {
+      final buffer = StringBuffer();
+      if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+      buffer.write(hexString.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (_) {
+      return Colors.red.shade600;
+    }
+  }
+
+  Color _getCircleColorForTicket(Ticket matchedTicket) {
+    if (_colorByStatus) {
+      switch (matchedTicket.status) {
+        case 'CONFIRMADA':
+        case 'PAGADA':
+          return const Color(0xFF10B981); // Emerald / Green
+        case 'ABONO_PARCIAL':
+          return const Color(0xFFF59E0B); // Amber / Orange
+        case 'RESERVADA':
+          return const Color(0xFF8B5CF6); // Purple / Violet
+        default:
+          return const Color(0xFFDC2626); // Red
+      }
+    } else {
+      return _parseHexColor(_singleCircleColorHex);
+    }
   }
 
   void _loadRaffleTickets() async {
@@ -96,6 +138,8 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       'cellHeight': _cellHeight,
       'fontSize': _fontSize,
       'dotScale': _dotScale,
+      'colorByStatus': _colorByStatus,
+      'singleCircleColorHex': _singleCircleColorHex,
     };
 
     bool ok = await raffleVM.updateRaffleTemplateConfig(widget.raffle.id, newConfig);
@@ -539,6 +583,77 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                                 ),
                               ],
                             ),
+                            const Divider(height: 16),
+
+                            // ROW 3: Configuración de Color de Círculos
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  '🎨 Modo de Color Círculos:',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.brown),
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: const Text('🔴 Unicolor', style: TextStyle(fontSize: 11)),
+                                  selected: !_colorByStatus,
+                                  selectedColor: Colors.amber.shade200,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _colorByStatus = false);
+                                  },
+                                ),
+                                const SizedBox(width: 6),
+                                ChoiceChip(
+                                  label: const Text('🌈 Por Estado', style: TextStyle(fontSize: 11)),
+                                  selected: _colorByStatus,
+                                  selectedColor: Colors.amber.shade200,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _colorByStatus = true);
+                                  },
+                                ),
+                                const SizedBox(width: 16),
+                                if (!_colorByStatus) ...[
+                                  const Text(
+                                    'Seleccionar Color:',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Wrap(
+                                    spacing: 4,
+                                    children: _circleColorPresets.map((preset) {
+                                      final isSelected = _singleCircleColorHex.toUpperCase() == preset['hex']!.toUpperCase();
+                                      final color = _parseHexColor(preset['hex']!);
+                                      return GestureDetector(
+                                        onTap: () => setState(() => _singleCircleColorHex = preset['hex']!),
+                                        child: Container(
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSelected ? Colors.black : Colors.white,
+                                              width: isSelected ? 2.5 : 1.0,
+                                            ),
+                                            boxShadow: isSelected
+                                                ? [BoxShadow(color: color.withOpacity(0.6), blurRadius: 4)]
+                                                : null,
+                                          ),
+                                          child: isSelected
+                                              ? const Icon(Icons.check, size: 14, color: Colors.white)
+                                              : null,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ] else ...[
+                                  const Text(
+                                    '🟢 Pagada  🟠 Abono  🟣 Reservada',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.brown),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -886,33 +1001,38 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                       ),
                     ),
 
-                    // Red Circle Overlay for TAKEN numbers (Fiadas, Apartadas, Abonadas, Pagadas, Reservadas)
+                    // Dynamic Circle Overlay for TAKEN numbers (Fiadas, Apartadas, Abonadas, Pagadas, Reservadas)
                     if (isSold)
-                      Transform.scale(
-                        scale: _dotScale,
-                        child: Container(
-                          width: _cellHeight * 0.78,
-                          height: _cellHeight * 0.78,
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade600.withValues(alpha: 0.95),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.4),
-                                blurRadius: 3,
-                                offset: const Offset(0, 1),
+                      Builder(
+                        builder: (_) {
+                          final circleColor = _getCircleColorForTicket(matchedTicket);
+                          return Transform.scale(
+                            scale: _dotScale,
+                            child: Container(
+                              width: _cellHeight * 0.78,
+                              height: _cellHeight * 0.78,
+                              decoration: BoxDecoration(
+                                color: circleColor.withValues(alpha: 0.95),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.4),
+                                    blurRadius: 3,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: Center(
-                            child: Icon(
-                              Icons.close,
-                              color: Colors.white,
-                              size: _cellHeight * 0.50,
+                              child: Center(
+                                child: Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: _cellHeight * 0.50,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                   ],
                 ),
