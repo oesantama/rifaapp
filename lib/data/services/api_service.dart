@@ -18,7 +18,7 @@ class ApiService {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl;
     if (kIsWeb) return '/api';
-    return 'http://localhost:8080/api';
+    return 'https://rifaapp-backend.onrender.com/api';
   }
 
   bool _useLocalFallback = false;

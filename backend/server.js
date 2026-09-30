@@ -330,6 +330,10 @@ async function loadDB() {
     if (!a.companyId) a.companyId = 'comp-1';
   });
 
+  if (!db.tickets || db.tickets.length === 0) {
+    generateInitialTickets();
+  }
+
   if (migrateCredentials()) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
   }
@@ -1125,15 +1129,10 @@ app.get('/api/tickets', (req, res) => {
 
   if (raffleId) {
     result = result.filter(t => t.raffleId === raffleId);
-  } else {
-    // If no raffleId specified, filter by company's active raffles
-    const availableRaffles = targetCompanyId
-      ? (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId)
-      : (db.raffles || []);
+  } else if (targetCompanyId) {
+    const availableRaffles = (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId);
     if (availableRaffles.length > 0) {
-      result = result.filter(t => t.raffleId === availableRaffles[0].id);
-    } else {
-      result = [];
+      result = result.filter(t => availableRaffles.some(r => r.id === t.raffleId));
     }
   }
 
@@ -1282,7 +1281,11 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   const policyError = security.validatePasswordPolicy(password);
   if (policyError) return res.status(400).json({ error: `Contraseña del asesor: ${policyError}` });
 
-  const targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : (companyId || 'comp-1');
+  let targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : companyId;
+  if (!targetCompanyId && (db.companies || []).length > 0) {
+    targetCompanyId = db.companies[0].id;
+  }
+  if (!targetCompanyId) targetCompanyId = 'comp-1';
 
   const newAdvisor = {
     id: `adv-${Date.now()}`,
@@ -1313,6 +1316,7 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
     return res.status(404).json({ error: 'Asesor no encontrado' });
   }
 
+  if (req.body.companyId !== undefined) advisor.companyId = req.body.companyId;
   if (req.body.name !== undefined) advisor.name = req.body.name;
   if (req.body.email !== undefined) advisor.email = req.body.email;
   if (req.body.username !== undefined) advisor.username = req.body.username;

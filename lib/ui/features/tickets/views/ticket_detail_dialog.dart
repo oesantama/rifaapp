@@ -267,28 +267,45 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           filled: true,
                         ),
                       )
-                    else
-                      DropdownButtonFormField<String>(
+                    else () {
+                      final List<DropdownMenuItem<String>> sellerDropdownItems = [
+                        const DropdownMenuItem<String>(
+                          value: 'admin',
+                          child: Text('🏢 Venta Directa (Administrador)'),
+                        ),
+                        ...advisorVM.advisors.map((adv) {
+                          return DropdownMenuItem<String>(
+                            value: adv.id,
+                            child: Text('👤 ${adv.name} (${adv.code})'),
+                          );
+                        }),
+                      ];
+                      final validSellerIds = sellerDropdownItems.map((e) => e.value).toSet();
+                      final currentSellerValue = validSellerIds.contains(_selectedSellerId) ? _selectedSellerId : 'admin';
+
+                      return DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: _selectedSellerId,
+                        value: currentSellerValue,
                         decoration: const InputDecoration(
                           labelText: 'Asesor / Vendedor',
                           prefixIcon: Icon(Icons.badge),
                           border: OutlineInputBorder(),
                         ),
-                        items: advisorVM.advisors.map((adv) {
-                          return DropdownMenuItem(
-                            value: adv.id,
-                            child: Text('${adv.name} (${adv.code})'),
-                          );
-                        }).toList(),
+                        items: sellerDropdownItems,
                         onChanged: (val) {
+                          if (val == null) return;
                           setState(() {
                             _selectedSellerId = val;
-                            _selectedSellerName = advisorVM.advisors.firstWhere((a) => a.id == val).name;
+                            if (val == 'admin') {
+                              _selectedSellerName = 'Administrador';
+                            } else {
+                              final found = advisorVM.advisors.where((a) => a.id == val).firstOrNull;
+                              _selectedSellerName = found?.name ?? 'Asesor';
+                            }
                           });
                         },
-                      ),
+                      );
+                    }(),
                     const SizedBox(height: 12),
                     if (widget.ticket.balancePending > 0) ...[
                       Text(
