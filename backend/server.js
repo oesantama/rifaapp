@@ -78,6 +78,11 @@ async function readFirestoreDb(doc, name = FIRESTORE_MANIFEST) {
   return JSON.parse(parts.join(''));
 }
 
+// Version of the Firestore database this server last read or wrote. During a deploy the old
+// and new servers run at the same time; a server whose version is outdated must not overwrite.
+let firestoreVersion = null;
+class FirestoreConflictError extends Error {}
+
 async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
   const col = firestore.collection(FIRESTORE_COLLECTION);
   const json = JSON.stringify(stored);
@@ -87,6 +92,14 @@ async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
 
   const previous = await col.doc(name).get();
   const previousManifest = previous.exists ? previous.data() : null;
+  if (name === FIRESTORE_MANIFEST && firestoreVersion !== null) {
+    const currentVersion = previousManifest ? (previousManifest.version || 'legacy') : 'none';
+    if (currentVersion !== firestoreVersion) {
+      throw new FirestoreConflictError(
+        `Otro servidor guardó datos más recientes (versión ${currentVersion}, este servidor tenía ${firestoreVersion}).`
+      );
+    }
+  }
 
   // 1) new chunks, 2) switch the manifest (readers see either the old or the new version), 3) remove old chunks
   for (let i = 0; i < chunks.length; i++) {
@@ -99,6 +112,7 @@ async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
     bytes: json.length,
     updatedAt: new Date().toISOString()
   });
+  if (name === FIRESTORE_MANIFEST) firestoreVersion = version;
   if (previousManifest && previousManifest.format === FIRESTORE_CHUNKED_FORMAT) {
     for (let i = 0; i < previousManifest.chunks; i++) {
       await col.doc(`${name}_${previousManifest.version}_${i}`).delete().catch(() => {});
@@ -130,6 +144,16 @@ function queueFirestoreSave(stored) {
         storageStatus.retrying = false;
         attempt = 0;
       } catch (err) {
+        if (err instanceof FirestoreConflictError) {
+          // Never overwrite newer data written by another server: take the newer data instead
+          console.error(`⚠️ CONFLICTO: ${err.message} No se sobrescribe; se recargan los datos de Firestore.`);
+          storageStatus.lastError = err.message;
+          storageStatus.lastErrorAt = new Date().toISOString();
+          storageStatus.retrying = false;
+          firestorePending = null;
+          await reloadFromFirestore().catch(e => console.error('Error recargando desde Firestore:', e.message));
+          continue;
+        }
         storageStatus.lastError = err.message;
         storageStatus.lastErrorAt = new Date().toISOString();
         storageStatus.retrying = true;
@@ -455,6 +479,7 @@ function migrateCredentials() {
 }
 
 let isDbLoaded = false;
+let loadedEncrypted = false;
 
 async function loadDB() {
   initEncryptionKey();
@@ -477,10 +502,12 @@ async function loadDB() {
       let docData;
       try {
         docData = await readFirestoreDb(doc);
+        firestoreVersion = doc.data().version || 'legacy';
       } catch (e) {
         fatal(`Los datos de Firestore están incompletos o dañados (${e.message}).`);
       }
       // decodeStoredDb stops the server if the data is encrypted and the key is missing or wrong
+      loadedEncrypted = security.isEncryptedEnvelope(docData);
       db = decodeStoredDb(docData, 'Firestore');
       loadedFromFirestore = true;
       isDbLoaded = true;
@@ -498,6 +525,7 @@ async function loadDB() {
       // Never replace a file that exists but cannot be read
       fatal(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
     }
+    loadedEncrypted = security.isEncryptedEnvelope(parsed);
     db = decodeStoredDb(parsed, 'data.json');
     isDbLoaded = true;
     console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
@@ -523,11 +551,32 @@ async function loadDB() {
   // Note: demo tickets are never generated on startup: it would crash without raffles and
   // would inject fake sales into a real raffle that has no tickets yet.
 
-  if (migrateCredentials()) {
+  const credentialsChanged = migrateCredentials();
+  if (credentialsChanged) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
   }
-  // Rewrite the store so it is encrypted (and plain-text passwords disappear from disk)
-  saveDB();
+  // Rewrite only when needed (new hashes, encryption or old storage format). Saving on every
+  // startup would overwrite changes made on the previous server during a deploy.
+  const needsRewrite =
+    credentialsChanged ||
+    (security.hasMasterKey() && !loadedEncrypted) ||
+    (firestore && (!loadedFromFirestore || firestoreVersion === 'legacy'));
+  if (needsRewrite) {
+    if (firestore && !loadedFromFirestore) firestoreVersion = 'none';
+    saveDB();
+  } else {
+    maybeDailySnapshot();
+  }
+}
+
+/** Replaces the in-memory data with the newest copy in Firestore (after a write conflict). */
+async function reloadFromFirestore() {
+  const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_MANIFEST).get();
+  if (!doc.exists) return;
+  const data = decodeStoredDb(await readFirestoreDb(doc), 'Firestore');
+  db = ensureDbShape(data);
+  firestoreVersion = doc.data().version || 'legacy';
+  console.log(`🔄 Datos recargados desde Firestore (versión ${firestoreVersion}).`);
 }
 
 function saveDB() {
@@ -709,6 +758,24 @@ function requireRole(...roles) {
 }
 const adminOnly = requireRole('admin', 'superadmin');
 const superAdminOnly = requireRole('superadmin');
+
+// Before any change, make sure this server has the newest data: during a deploy another server
+// may have saved in the meantime. Changes are applied on top of the newest data, so none is lost.
+app.use('/api', async (req, res, next) => {
+  if (!firestore || req.method === 'GET' || firestoreVersion === null) return next();
+  try {
+    const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_MANIFEST).get();
+    const current = doc.exists ? (doc.data().version || 'legacy') : 'none';
+    if (current !== firestoreVersion) {
+      console.log(`🔄 Datos más recientes en Firestore (${current}); se cargan antes de aplicar el cambio.`);
+      await reloadFromFirestore();
+    }
+    next();
+  } catch (err) {
+    // Without knowing the latest data, applying the change could overwrite someone else's work
+    res.status(503).json({ error: 'No fue posible verificar los datos más recientes. Intente de nuevo en unos segundos.' });
+  }
+});
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ user: sessionUser(req.auth.role, req.auth.record) });
