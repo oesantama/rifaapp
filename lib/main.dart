@@ -252,13 +252,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 children: [
                   InkWell(
                     onTap: () {
-                      if (authVM.isAdmin && !authVM.isSuperAdmin) {
+                      if (authVM.isAdmin || authVM.isSuperAdmin) {
                         showDialog(
                           context: context,
                           builder: (_) => const AdminProfileDialog(),
                         );
                       } else {
-                        // SuperAdmin and advisors: change their own password
                         ChangePasswordDialog.show(context);
                       }
                     },

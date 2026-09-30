@@ -373,6 +373,117 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     );
   }
 
+  void _confirmDeleteCompany(Company company) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded, color: AppTheme.dangerRose, size: 28),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text('Eliminar Empresa Permanente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.dangerRose)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Esta acción eliminará de forma PERMANENTE la empresa "${company.name}" (${company.code}) y TODOS los datos asociados:',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Text('• Su cuenta de Administrador principal (${company.adminUsername})'),
+              Text('• ${company.rafflesCount} Sorteo(s) / Rifa(s) creada(s)'),
+              Text('• Todas las boletas, series y ventas registradas'),
+              Text('• ${company.advisorsCount} Asesor(es) / Vendedor(es) vinculados'),
+              Text('• Historial de ganadores y movimientos de caja'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.dangerRose.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.dangerRose.withValues(alpha: 0.4)),
+                ),
+                child: const Text(
+                  '¡Esta operación NO se puede deshacer! Se recomienda descargar una copia de respaldo antes de eliminar.',
+                  style: TextStyle(fontSize: 12, color: AppTheme.dangerRose, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('SÍ, ELIMINAR EMPRESA Y DATOS'),
+              onPressed: () async {
+                try {
+                  await _apiService.deleteCompany(company.id);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  _loadCompanies();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: AppTheme.secondaryEmerald,
+                        content: Text('✓ Empresa "${company.name}" y todos sus datos asociados fueron eliminados.'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  _showError(e);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteRaffle(String raffleId, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('⚠️ Eliminar Rifa'),
+          content: Text('¿Está seguro de eliminar la rifa "$title" y todas sus boletas y ventas asociadas? Esta acción no se puede deshacer.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+              onPressed: () async {
+                try {
+                  await _apiService.deleteRaffle(raffleId);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) Navigator.pop(context);
+                  _loadCompanies();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text('✓ Rifa "$title" eliminada con éxito.')),
+                    );
+                  }
+                } catch (e) {
+                  _showError(e);
+                }
+              },
+              child: const Text('SÍ, ELIMINAR RIFA'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showCompanySummaryDialog(Company company) {
     showDialog(
       context: context,
@@ -740,6 +851,12 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                   tooltip: 'Editar Empresa y Admin',
                   visualDensity: VisualDensity.compact,
                   onPressed: () => _showEditCompanyDialog(comp),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_forever_rounded, color: AppTheme.dangerRose),
+                  tooltip: 'Eliminar Empresa y TODOS sus datos asociados',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _confirmDeleteCompany(comp),
                 ),
               ],
             ),

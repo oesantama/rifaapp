@@ -1,4 +1,5 @@
 import 'dart:html' as html;
+import 'dart:async';
 import 'dart:convert';
 
 void saveAndDownloadFile(String filename, String content, {String? mimeType}) {
@@ -17,5 +18,10 @@ void saveAndDownloadBytes(String filename, List<int> bytes, {String? mimeType}) 
   html.document.body?.children.add(anchor);
   anchor.click();
   anchor.remove();
-  html.Url.revokeObjectUrl(url);
+
+  // Delay revoking the Object URL so the browser download manager can extract the filename attribute
+  Timer(const Duration(seconds: 4), () {
+    html.Url.revokeObjectUrl(url);
+  });
 }
+

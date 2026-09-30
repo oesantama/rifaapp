@@ -94,4 +94,27 @@ class RaffleViewModel extends ChangeNotifier {
   Future<bool> updateRaffleTemplateConfig(String raffleId, Map<String, dynamic> templateConfig) async {
     return await updateRaffle(raffleId, {'templateConfig': templateConfig});
   }
+
+  Future<bool> deleteRaffle(String raffleId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      bool ok = await _repository.deleteRaffle(raffleId);
+      if (ok) {
+        _raffles.removeWhere((r) => r.id == raffleId);
+        if (_selectedRaffle?.id == raffleId) {
+          _selectedRaffle = _raffles.isNotEmpty ? _raffles.first : null;
+        }
+      }
+      return ok;
+    } catch (e) {
+      _errorMessage = 'Error al eliminar sorteo: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

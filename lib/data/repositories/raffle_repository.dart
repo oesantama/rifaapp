@@ -66,4 +66,11 @@ class RaffleRepository {
 
   Future<Map<String, dynamic>> changePassword({required String currentPassword, required String newPassword}) =>
       _apiService.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+
+  Future<Map<String, dynamic>> updateProfile({required String name, required String email, required String username}) =>
+      _apiService.updateProfile(name: name, email: email, username: username);
+
+  Future<bool> deleteCompany(String id) => _apiService.deleteCompany(id);
+
+  Future<bool> deleteRaffle(String id) => _apiService.deleteRaffle(id);
 }

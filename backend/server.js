@@ -550,6 +550,37 @@ app.post('/api/auth/change-password', (req, res) => {
   res.json({ message: 'Contraseña actualizada correctamente.', ...issueSession(role, record) });
 });
 
+app.put('/api/auth/profile', (req, res) => {
+  const { name, email, username } = req.body || {};
+  const { role, record } = req.auth;
+
+  if (role === 'superadmin') {
+    if (name !== undefined && name.trim()) record.name = name.trim();
+    if (email !== undefined) record.email = email.trim();
+    if (username !== undefined && username.trim()) {
+      if (normalize(username) !== normalize(record.username) && isUsernameTaken(username)) {
+        return res.status(409).json({ error: 'Ese nombre de usuario ya está en uso.' });
+      }
+      record.username = username.trim();
+    }
+  } else if (role === 'admin') {
+    if (name !== undefined && name.trim()) record.adminName = name.trim();
+    if (email !== undefined) record.adminEmail = email.trim();
+    if (username !== undefined && username.trim()) {
+      if (normalize(username) !== normalize(record.adminUsername) && isUsernameTaken(username)) {
+        return res.status(409).json({ error: 'Ese nombre de usuario ya está en uso.' });
+      }
+      record.adminUsername = username.trim();
+    }
+  } else if (role === 'asesor') {
+    if (name !== undefined && name.trim()) record.name = name.trim();
+    if (email !== undefined) record.email = email.trim();
+  }
+
+  saveDB();
+  res.json({ message: 'Perfil actualizado correctamente', user: sessionUser(role, record) });
+});
+
 function isUsernameTaken(username) {
   const u = normalize(username);
   if (db.superAdmin && (normalize(db.superAdmin.username) === u || normalize(db.superAdmin.email) === u)) return true;
@@ -660,10 +691,54 @@ app.put('/api/companies/:id', superAdminOnly, (req, res) => {
     company.adminMustChangePassword = true;
   }
   if (req.body.adminName !== undefined) company.adminName = req.body.adminName;
-  if (req.body.adminEmail !== undefined) company.adminEmail = req.body.adminEmail;
-
   saveDB();
   res.json(company);
+});
+
+// DELETE Company (Cascade deletes all company raffles, tickets, advisors, winners, and cash records)
+app.delete('/api/companies/:id', superAdminOnly, (req, res) => {
+  const { id } = req.params;
+  const index = (db.companies || []).findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Empresa no encontrada' });
+  }
+
+  const deletedCompany = db.companies[index];
+  db.companies.splice(index, 1);
+
+  // Collect all raffle IDs for this company
+  const companyRaffleIds = new Set((db.raffles || []).filter(r => r.companyId === id).map(r => r.id));
+  // Remove company raffles
+  db.raffles = (db.raffles || []).filter(r => r.companyId !== id && !companyRaffleIds.has(r.id));
+
+  // Remove tickets belonging to company raffles or company
+  db.tickets = (db.tickets || []).filter(t => !companyRaffleIds.has(t.raffleId) && t.companyId !== id);
+
+  // Collect all advisor IDs for this company
+  const companyAdvisorIds = new Set((db.advisors || []).filter(a => a.companyId === id).map(a => a.id));
+  // Remove company advisors
+  db.advisors = (db.advisors || []).filter(a => a.companyId !== id && !companyAdvisorIds.has(a.id));
+
+  // Remove winners
+  db.winners = (db.winners || []).filter(w => !companyRaffleIds.has(w.raffleId) && w.companyId !== id);
+
+  // Remove cash transactions
+  db.cashTransactions = (db.cashTransactions || []).filter(ct => !companyRaffleIds.has(ct.raffleId) && ct.companyId !== id);
+
+  // Remove commission payouts
+  db.commissionPayouts = (db.commissionPayouts || []).filter(cp => !companyAdvisorIds.has(cp.advisorId) && !companyRaffleIds.has(cp.raffleId));
+
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`,
+    type: 'DELETE_COMPANY',
+    targetId: id,
+    targetName: deletedCompany.name,
+    date: new Date().toISOString()
+  });
+
+  saveDB();
+  res.json({ message: `Empresa "${deletedCompany.name}" y todos sus datos asociados fueron eliminados correctamente.` });
 });
 
 // Backup & Database Management Routes (SuperAdmin)
@@ -815,6 +890,39 @@ app.put('/api/raffles/:id', adminOnly, (req, res) => {
 
   saveDB();
   res.json(raffle);
+});
+
+// DELETE Raffle
+app.delete('/api/raffles/:id', adminOnly, (req, res) => {
+  const { id } = req.params;
+  const index = (db.raffles || []).findIndex(r => r.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Sorteo no encontrado' });
+  }
+
+  const raffle = db.raffles[index];
+  if (req.auth.role === 'admin' && raffle.companyId !== req.auth.record.id) {
+    return res.status(403).json({ error: 'No tiene permisos para eliminar rifas de otra empresa.' });
+  }
+
+  db.raffles.splice(index, 1);
+  // Cascade delete tickets, winners, transactions for this raffle
+  db.tickets = (db.tickets || []).filter(t => t.raffleId !== id);
+  db.winners = (db.winners || []).filter(w => w.raffleId !== id);
+  db.cashTransactions = (db.cashTransactions || []).filter(ct => ct.raffleId !== id);
+  db.commissionPayouts = (db.commissionPayouts || []).filter(cp => cp.raffleId !== id);
+
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`,
+    type: 'DELETE_RAFFLE',
+    targetId: id,
+    targetName: raffle.title,
+    date: new Date().toISOString()
+  });
+
+  saveDB();
+  res.json({ message: `Sorteo "${raffle.title}" y sus boletas asociadas fueron eliminados exitosamente.` });
 });
 
 // POST Create Raffle

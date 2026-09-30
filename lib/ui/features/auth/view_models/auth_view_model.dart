@@ -222,12 +222,21 @@ class AuthViewModel extends ChangeNotifier {
         'Asesores: contacte a su administrador. Administradores: contacte al superadministrador.';
   }
 
-  /// Updates the name/email shown for the current admin in this session.
-  Future<void> updateCurrentAdminProfile({required String name, required String email, required String username}) async {
-    _adminName = name.trim();
-    _adminEmail = email.trim();
-    _adminUsername = username.trim();
-    notifyListeners();
+  /// Updates the name/email/username for the current logged in profile (SuperAdmin or Admin).
+  Future<String?> updateCurrentAdminProfile({required String name, required String email, required String username}) async {
+    try {
+      final res = await _repository.updateProfile(name: name, email: email, username: username);
+      if (res['user'] != null) {
+        final u = res['user'] as Map<String, dynamic>;
+        _adminName = u['name'] ?? name;
+        _adminEmail = u['email'] ?? email;
+        _adminUsername = u['username'] ?? username;
+        notifyListeners();
+      }
+      return null;
+    } catch (e) {
+      return e is ApiException ? e.message : e.toString();
+    }
   }
 
   Future<void> logout({bool notify = true}) async {

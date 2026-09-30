@@ -44,13 +44,9 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
 
   Future<void> _downloadBackupFile() async {
     try {
-      final response = await authGet(Uri.parse('$_baseUrl/backup')).timeout(const Duration(seconds: 6));
+      final response = await authGet(Uri.parse('$_baseUrl/backup/download')).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final dbData = data['database'];
-        final jsonStr = jsonEncode(dbData);
-        final bytes = utf8.encode(jsonStr);
-
+        final bytes = response.bodyBytes;
         final filename = 'backup_rifamaster_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.json';
         saveAndDownloadBytes(filename, bytes, mimeType: 'application/json');
 
@@ -62,6 +58,8 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
             ),
           );
         }
+      } else {
+        throw 'Error HTTP ${response.statusCode} al generar respaldo';
       }
     } catch (e) {
       if (mounted) {

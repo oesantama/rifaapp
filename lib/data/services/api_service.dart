@@ -967,6 +967,22 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  Future<bool> deleteCompany(String id) async {
+    final response = await authDelete(
+      Uri.parse('$baseUrl/companies/$id'),
+    ).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return true;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<bool> deleteRaffle(String id) async {
+    final response = await authDelete(
+      Uri.parse('$baseUrl/raffles/$id'),
+    ).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) return true;
+    throw ApiException.fromResponse(response);
+  }
+
   // Authentication: credentials are validated by the server only
   Future<Map<String, dynamic>> login({required String role, required String username, required String password}) async {
     final response = await http
@@ -992,6 +1008,16 @@ class ApiService {
       Uri.parse('$baseUrl/auth/change-password'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'currentPassword': currentPassword, 'newPassword': newPassword}),
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateProfile({required String name, required String email, required String username}) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/auth/profile'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'email': email, 'username': username}),
     ).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
     throw ApiException.fromResponse(response);
