@@ -169,6 +169,13 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
     final currentRaffle = raffleVM.selectedRaffle;
     final requiredDigits = currentRaffle?.digits ?? 4;
 
+    if (currentRaffle != null && !currentRaffle.hasWeeklyDraws) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este sorteo tiene deshabilitados los sorteos semanales.')),
+      );
+      return;
+    }
+
     if (winningNum.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingrese el número ganador')));
       return;
@@ -456,6 +463,14 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                   'drawDate': DateTime.now().toIso8601String(),
                 });
 
+                if (rec == null && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppTheme.dangerRose,
+                      content: Text(winnerVM.lastError ?? 'No se pudo registrar el resultado.'),
+                    ),
+                  );
+                }
                 if (rec != null && mounted) {
                   setState(() {
                     _lastResult = rec;
@@ -527,6 +542,34 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               Text(
                                 '👁️ Modo Lectura (Asesor). Consulta los ganadores oficiales de cada sorteo semanal o premio acumulado registrado por la administración.',
                                 style: TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else if (currentRaffle != null && !currentRaffle.hasWeeklyDraws) ...[
+                // Weekly winners can only be registered when the raffle has weekly draws enabled
+                Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(isMobile ? 14 : 20),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.event_busy_rounded, color: AppTheme.accentAmber, size: 30),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Sorteos semanales deshabilitados', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 4),
+                              Text(
+                                'El sorteo "${currentRaffle.title}" no tiene sorteos semanales, por eso no se pueden registrar ganadores semanales. '
+                                'Para habilitarlos: Dashboard → Gestionar Sorteo → "Habilitar Sorteos Semanales / Adicionales".',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[700], height: 1.4),
                               ),
                             ],
                           ),

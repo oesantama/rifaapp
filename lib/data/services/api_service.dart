@@ -140,6 +140,10 @@ class ApiService {
         if (response.statusCode == 200) {
           return Raffle.fromJson(jsonDecode(response.body));
         }
+        // The server answered but rejected the change: show its reason, never fake success locally
+        throw ApiException.fromResponse(response);
+      } on ApiException {
+        rethrow;
       } catch (_) {
         _useLocalFallback = true;
       }
@@ -720,6 +724,10 @@ class ApiService {
         if (response.statusCode == 201) {
           return WinnerRecord.fromJson(jsonDecode(response.body));
         }
+        // The server answered but rejected the change: show its reason, never fake success locally
+        throw ApiException.fromResponse(response);
+      } on ApiException {
+        rethrow;
       } catch (_) {
         _useLocalFallback = true;
       }
@@ -916,11 +924,10 @@ class ApiService {
     if (!_useLocalFallback) {
       try {
         final response = await authPost(
-              Uri.parse('$baseUrl/commissions/payout'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'advisorId': advisorId, 'amount': amount, 'note': note ?? '', 'raffleId': raffleId}),
-            )
-            .timeout(const Duration(seconds: 3));
+          Uri.parse('$baseUrl/commissions/payout'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'advisorId': advisorId, 'amount': amount, 'note': note ?? '', 'raffleId': raffleId}),
+        ).timeout(const Duration(seconds: 3));
         if (response.statusCode == 200 || response.statusCode == 201) {
           return true;
         }

@@ -27,8 +27,14 @@ class WinnerViewModel extends ChangeNotifier {
     }
   }
 
+  String? _lastError;
+
+  /// Reason the last registration failed (as explained by the server).
+  String? get lastError => _lastError;
+
   Future<WinnerRecord?> registerWinner(Map<String, dynamic> data) async {
     _isLoading = true;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -37,6 +43,7 @@ class WinnerViewModel extends ChangeNotifier {
       return rec;
     } catch (e) {
       debugPrint('Error al registrar ganador/sorteo: $e');
+      _lastError = e.toString();
       return null;
     } finally {
       _isLoading = false;

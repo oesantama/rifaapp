@@ -1214,6 +1214,14 @@ app.put('/api/raffles/:id', adminOnly, (req, res) => {
   if (req.body.commissionType !== undefined) raffle.commissionType = req.body.commissionType;
   if (req.body.commissionValue !== undefined) raffle.commissionValue = parseFloat(req.body.commissionValue) || 0;
   if (req.body.templateConfig !== undefined) raffle.templateConfig = req.body.templateConfig;
+  // Weekly draw settings (previously ignored, so they reverted after every reload)
+  if (req.body.hasWeeklyDraws !== undefined) raffle.hasWeeklyDraws = req.body.hasWeeklyDraws === true || req.body.hasWeeklyDraws === 'true';
+  if (req.body.weeklyDrawDay !== undefined) raffle.weeklyDrawDay = String(req.body.weeklyDrawDay);
+  if (req.body.lotteryName !== undefined) raffle.lotteryName = String(req.body.lotteryName);
+  if (['PORCENTAJE', 'VALOR_FIJO'].includes(req.body.weeklyMinAbonoType)) raffle.weeklyMinAbonoType = req.body.weeklyMinAbonoType;
+  if (req.body.weeklyMinAbonoValue !== undefined) raffle.weeklyMinAbonoValue = parseFloat(req.body.weeklyMinAbonoValue) || 0;
+  if (req.body.isWeeklyPrizeAccumulative !== undefined) raffle.isWeeklyPrizeAccumulative = req.body.isWeeklyPrizeAccumulative === true || req.body.isWeeklyPrizeAccumulative === 'true';
+  if (Array.isArray(req.body.weeklyPrizes)) raffle.weeklyPrizes = req.body.weeklyPrizes;
 
   saveDB();
   res.json(raffle);
@@ -1722,7 +1730,13 @@ app.delete('/api/winners/:id', adminOnly, (req, res) => {
 app.post('/api/winners', adminOnly, (req, res) => {
   const { raffleId, winningNumber, drawName, drawDate, prizeAmount, photoUrl } = req.body;
 
-  const raffle = db.raffles.find(r => r.id === (raffleId || db.raffles[0].id));
+  const raffle = db.raffles.find(r => r.id === (raffleId || (db.raffles[0] && db.raffles[0].id)));
+  if (!raffle) {
+    return res.status(404).json({ error: 'Sorteo no encontrado.' });
+  }
+  if (raffle.hasWeeklyDraws === false) {
+    return res.status(400).json({ error: 'Este sorteo tiene deshabilitados los sorteos semanales. Habilítelos en "Gestionar Sorteo" para registrar ganadores semanales.' });
+  }
   const rawNumStr = (winningNumber || '').toString().trim();
   const numStr = rawNumStr.padStart(raffle ? raffle.digits : 4, '0');
 

@@ -1096,6 +1096,14 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                               ),
                             );
                           }
+                          if (!ok && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: AppTheme.dangerRose,
+                                content: Text(raffleVM.errorMessage ?? 'No se pudo guardar el sorteo.'),
+                              ),
+                            );
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
