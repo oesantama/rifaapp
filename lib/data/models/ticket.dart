@@ -74,6 +74,52 @@ class AuditLog {
       };
 }
 
+/// A voided sale kept as history: who voided it, when, why, and the sale as it was.
+class TicketAnnulment {
+  final String id;
+  final String date;
+  final String by;
+  final String reason;
+  final String previousStatus;
+  final String previousBuyerName;
+  final String previousBuyerPhone;
+  final String previousAdvisorName;
+  final String previousSaleChannel;
+  final double previousTotalPaid;
+  final int previousAbonosCount;
+
+  TicketAnnulment({
+    required this.id,
+    required this.date,
+    required this.by,
+    required this.reason,
+    this.previousStatus = '',
+    this.previousBuyerName = '',
+    this.previousBuyerPhone = '',
+    this.previousAdvisorName = '',
+    this.previousSaleChannel = '',
+    this.previousTotalPaid = 0,
+    this.previousAbonosCount = 0,
+  });
+
+  factory TicketAnnulment.fromJson(Map<String, dynamic> json) {
+    final prev = json['previous'] is Map ? Map<String, dynamic>.from(json['previous']) : <String, dynamic>{};
+    return TicketAnnulment(
+      id: json['id'] ?? '',
+      date: json['date'] ?? '',
+      by: json['by'] ?? '',
+      reason: json['reason'] ?? '',
+      previousStatus: prev['status'] ?? '',
+      previousBuyerName: prev['buyerName'] ?? '',
+      previousBuyerPhone: prev['buyerPhone'] ?? '',
+      previousAdvisorName: prev['advisorName'] ?? '',
+      previousSaleChannel: prev['saleChannel'] ?? '',
+      previousTotalPaid: (prev['totalPaid'] as num?)?.toDouble() ?? 0,
+      previousAbonosCount: (prev['abonos'] as List?)?.length ?? 0,
+    );
+  }
+}
+
 class Ticket {
   /// Opportunity number(s) the buyer actually plays. Shown to users instead of the
   /// internal ticket index (ticketNumber), which only exists for storage.
@@ -95,6 +141,9 @@ class Ticket {
 
   /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
   final String saleChannel;
+
+  /// Voided sales of this ticket (oldest first); kept even after it is sold again.
+  final List<TicketAnnulment> annulments;
   final double totalPaid;
   final double balancePending;
   final bool confirmedByAdmin;
@@ -114,6 +163,7 @@ class Ticket {
     required this.buyerName,
     required this.buyerPhone,
     this.saleChannel = '',
+    this.annulments = const [],
     required this.totalPaid,
     required this.balancePending,
     required this.confirmedByAdmin,
@@ -143,6 +193,7 @@ class Ticket {
       buyerName: json['buyerName'] ?? '',
       buyerPhone: json['buyerPhone'] ?? '',
       saleChannel: json['saleChannel'] ?? '',
+      annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
       totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0.0,
       balancePending: (json['balancePending'] as num?)?.toDouble() ?? 0.0,
       confirmedByAdmin: json['confirmedByAdmin'] ?? false,

@@ -1052,4 +1052,15 @@ class ApiService {
     final response = await authDelete(Uri.parse('$baseUrl/raffles/$raffleId/templates/$type')).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200 && response.statusCode != 404) throw ApiException.fromResponse(response);
   }
+
+  /// Voids a sale (admins): the ticket becomes available and the sale is kept as history.
+  Future<Ticket> voidTicket(String ticketId, String reason) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/tickets/$ticketId/void'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason}),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
 }

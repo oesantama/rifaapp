@@ -1772,6 +1772,74 @@ app.post('/api/tickets/:id/abono', (req, res) => {
   res.json(ticket);
 });
 
+// POST Void a sale (admins only): the ticket becomes available again and the whole previous
+// sale (buyer, advisor, payments, channel) is kept in ticket.annulments with who/when/why.
+app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible; no hay venta que anular.' });
+
+  const reason = String((req.body || {}).reason || '').trim();
+  if (reason.length < 10) {
+    return res.status(400).json({ error: 'Escriba una observación que explique la anulación (mínimo 10 caracteres).' });
+  }
+
+  const { role, record } = req.auth;
+  const byName = role === 'superadmin' ? (record.name || 'SuperAdministrador') : (record.adminName || 'Administrador');
+  const now = new Date().toISOString();
+  const previous = {
+    status: ticket.status,
+    buyerName: ticket.buyerName || '',
+    buyerPhone: ticket.buyerPhone || '',
+    advisorId: ticket.advisorId || '',
+    advisorName: ticket.advisorName || '',
+    saleChannel: ticket.saleChannel || '',
+    totalPaid: ticket.totalPaid || 0,
+    balancePending: ticket.balancePending,
+    confirmedByAdmin: !!ticket.confirmedByAdmin,
+    confirmedDate: ticket.confirmedDate || null,
+    assignedDate: ticket.assignedDate || null,
+    abonos: ticket.abonos || []
+  };
+
+  if (!Array.isArray(ticket.annulments)) ticket.annulments = [];
+  ticket.annulments.push({ id: `anul-${Date.now()}`, date: now, by: byName, byRole: role, reason, previous });
+
+  // Back to available: ready to be sold again
+  ticket.status = 'DISPONIBLE';
+  ticket.buyerName = '';
+  ticket.buyerPhone = '';
+  ticket.advisorId = '';
+  ticket.advisorName = '';
+  ticket.saleChannel = '';
+  ticket.totalPaid = 0;
+  ticket.balancePending = ticket.price;
+  ticket.confirmedByAdmin = false;
+  ticket.confirmedDate = null;
+  ticket.assignedDate = null;
+  ticket.abonos = [];
+
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`,
+    type: 'VOID_TICKET',
+    targetId: ticket.id,
+    raffleId: ticket.raffleId,
+    numbers: ticket.numbers,
+    previousBuyer: previous.buyerName,
+    previousAdvisor: previous.advisorName,
+    amountVoided: previous.totalPaid,
+    reason,
+    by: byName,
+    date: now
+  });
+
+  saveDB();
+  res.json(ticket);
+});
+
 // POST Admin Confirm Ticket Payment Received
 app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   const { id } = req.params;

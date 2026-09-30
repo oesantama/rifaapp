@@ -127,6 +127,151 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
     }
   }
 
+  /// Asks for the reason and voids the sale; the previous sale stays in the ticket history.
+  Future<void> _confirmVoid(NumberFormat currency) async {
+    final reasonCtrl = TextEditingController();
+    final t = widget.ticket;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final valid = reasonCtrl.text.trim().length >= 10;
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.block, color: AppTheme.dangerRose),
+                SizedBox(width: 10),
+                Expanded(child: Text('Anular venta', style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Boleta N° ${t.displayNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 6),
+                    Text('Comprador: ${t.buyerName.isNotEmpty ? t.buyerName : "—"}${t.buyerPhone.isNotEmpty ? " (${t.buyerPhone})" : ""}'),
+                    Text('Asesor: ${t.advisorName.isNotEmpty ? t.advisorName : "—"}'),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'La boleta quedará DISPONIBLE para venderla de nuevo. La venta anulada se conserva en el '
+                      'historial de la boleta con su observación.',
+                      style: TextStyle(fontSize: 12, height: 1.35),
+                    ),
+                    if (t.totalPaid > 0) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.5)),
+                        ),
+                        child: Text(
+                          '⚠️ Esta boleta tiene ${currency.format(t.totalPaid)} abonados'
+                          '${t.confirmedByAdmin ? " y confirmados en caja" : ""}. Al anular, ese valor deja de contar en '
+                          'caja y comisiones. Indique en la observación qué pasa con ese dinero (devuelto, pasa a otra boleta...).',
+                          style: const TextStyle(fontSize: 12, height: 1.35),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonCtrl,
+                      maxLines: 3,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Observación (obligatoria) *',
+                        hintText: 'Ej: El asesor registró la venta en el número equivocado; era el 39.',
+                        helperText: 'Mínimo 10 caracteres.',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+                onPressed: valid ? () => Navigator.pop(ctx, true) : null,
+                child: const Text('Anular venta'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+    final error = await ticketVM.voidTicket(t.id, reasonCtrl.text.trim(), raffleId: t.raffleId);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error)));
+      return;
+    }
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.secondaryEmerald,
+        content: Text('Venta de la boleta N° ${t.displayNumber} anulada. Quedó disponible y el historial se conservó.'),
+      ),
+    );
+  }
+
+  Widget _buildAnnulmentsHistory(NumberFormat currency) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.dangerRose.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.dangerRose.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.history, size: 18, color: AppTheme.dangerRose),
+              const SizedBox(width: 6),
+              Text('Historial de anulaciones (${widget.ticket.annulments.length})',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ],
+          ),
+          for (final a in widget.ticket.annulments.reversed) ...[
+            const Divider(height: 16),
+            Text(
+              '${_formatDateTime(a.date)} • Anuló: ${a.by}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 2),
+            Text('Motivo: ${a.reason}', style: const TextStyle(fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(
+              'Venta anulada: ${a.previousBuyerName.isNotEmpty ? a.previousBuyerName : "—"}'
+              '${a.previousBuyerPhone.isNotEmpty ? " (${a.previousBuyerPhone})" : ""}'
+              ' • Asesor: ${a.previousAdvisorName.isNotEmpty ? a.previousAdvisorName : "—"}'
+              '${a.previousSaleChannel.isNotEmpty ? " • ${a.previousSaleChannel}" : ""}'
+              ' • Abonado: ${currency.format(a.previousTotalPaid)}',
+              style: TextStyle(fontSize: 11.5, color: Colors.grey[700]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(String iso) {
+    final d = DateTime.tryParse(iso)?.toLocal();
+    return d == null ? iso : DateFormat('dd/MM/yyyy hh:mm a').format(d);
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
@@ -504,6 +649,25 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
                       ),
                     );
                   },
+                ),
+              ],
+              if (widget.ticket.annulments.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _buildAnnulmentsHistory(currency),
+              ],
+              if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE') ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmVoid(currency),
+                    icon: const Icon(Icons.block, color: AppTheme.dangerRose),
+                    label: const Text('Anular venta de esta boleta', style: TextStyle(color: AppTheme.dangerRose)),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: AppTheme.dangerRose.withValues(alpha: 0.6)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
                 ),
               ],
               const SizedBox(height: 16),

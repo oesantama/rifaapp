@@ -95,6 +95,17 @@ class TicketViewModel extends ChangeNotifier {
     }
   }
 
+  /// Voids a sale and reloads the raffle. Returns null on success or the error message.
+  Future<String?> voidTicket(String ticketId, String reason, {String? raffleId}) async {
+    try {
+      await _repository.voidTicket(ticketId, reason);
+      await loadTickets(raffleId: raffleId);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<bool> confirmTicketPayment(String ticketId, {String? raffleId}) async {
     _isLoading = true;
     notifyListeners();
