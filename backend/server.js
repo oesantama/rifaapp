@@ -61,7 +61,9 @@ if (!forceLocalDb) {
 const FIRESTORE_COLLECTION = 'rifaapp';
 const FIRESTORE_MANIFEST = 'database';
 const FIRESTORE_CHUNKED_FORMAT = 'rifamaster-chunked';
-const FIRESTORE_CHUNK_CHARS = 700000;
+// Firestore limits documents to 1 MiB in UTF-8 bytes; a character can take up to 3 bytes (á, ñ, €),
+// so 300k characters stay under ~900 KB in the worst case.
+const FIRESTORE_CHUNK_CHARS = 300000;
 
 async function readFirestoreDb(doc, name = FIRESTORE_MANIFEST) {
   const manifest = doc.data();
