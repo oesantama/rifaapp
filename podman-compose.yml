@@ -19,4 +19,6 @@ services:
       - ./backend/secrets:/app/secrets:z
       # Automatic safety copies (daily and before restore/reset)
       - ./backend/backups:/app/backups:z
+      # Raffle templates (poster and printed ticket images)
+      - ./backend/assets:/app/assets:z
     restart: always

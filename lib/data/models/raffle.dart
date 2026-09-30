@@ -80,6 +80,9 @@ class Raffle {
   final List<String> assignedAdvisorIds;
   final String companyId;
   final Map<String, dynamic>? templateConfig;
+
+  /// Metadata of stored template images by type ('poster', 'ticket'); images are fetched separately.
+  final Map<String, dynamic> templates;
   final String createdAt;
 
   Raffle({
@@ -106,6 +109,7 @@ class Raffle {
     this.assignedAdvisorIds = const [],
     this.companyId = 'comp-1',
     this.templateConfig,
+    this.templates = const {},
     required this.createdAt,
   });
 
@@ -140,6 +144,7 @@ class Raffle {
       assignedAdvisorIds: advsList,
       companyId: json['companyId'] ?? 'comp-1',
       templateConfig: json['templateConfig'] != null ? Map<String, dynamic>.from(json['templateConfig']) : null,
+      templates: json['templates'] is Map ? Map<String, dynamic>.from(json['templates']) : const {},
       createdAt: json['createdAt'] ?? '',
     );
   }
@@ -168,6 +173,7 @@ class Raffle {
         'assignedAdvisorIds': assignedAdvisorIds,
         'companyId': companyId,
         'templateConfig': templateConfig,
+        'templates': templates,
         'createdAt': createdAt,
       };
 }

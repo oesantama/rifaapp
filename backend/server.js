@@ -368,6 +368,132 @@ const SNAPSHOT_REASONS = ['before_restore', 'before_reset', 'daily'];
 const DAILY_SNAPSHOT_MS = 24 * 60 * 60 * 1000;
 let lastDailySnapshotAt = 0;
 
+// ---------------------------------------------------------------------------
+// Raffle templates (poster and printed ticket images) live OUTSIDE the database:
+// Firestore documents template_<raffle>_<type> (chunked) in production, backend/assets/
+// locally. The raffle only keeps metadata (raffle.templates[type]), so loading raffles
+// no longer downloads megabytes of images.
+// ---------------------------------------------------------------------------
+const TEMPLATE_TYPES = ['poster', 'ticket'];
+const ASSETS_DIR = process.env.ASSETS_DIR || path.join(__dirname, 'assets');
+const MAX_TEMPLATE_BYTES = 8 * 1024 * 1024; // data URI length accepted per image
+
+function templateKey(raffleId, type) {
+  const safeId = String(raffleId).replace(/[^A-Za-z0-9_-]/g, '');
+  if (!safeId || !TEMPLATE_TYPES.includes(type)) throw new Error('Plantilla no válida');
+  return `template_${safeId}_${type}`;
+}
+
+function isImageDataUri(value) {
+  return typeof value === 'string' && /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
+}
+
+async function writeTemplate(raffleId, type, dataUri) {
+  const key = templateKey(raffleId, type);
+  const payload = security.hasMasterKey() ? security.encryptObject({ dataUri }) : { dataUri };
+  if (firestore) {
+    await writeFirestoreDb(payload, key);
+  } else {
+    fs.mkdirSync(ASSETS_DIR, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(ASSETS_DIR, `${key}.json`), JSON.stringify(payload), { mode: 0o600 });
+  }
+}
+
+async function readTemplate(raffleId, type) {
+  const key = templateKey(raffleId, type);
+  let payload = null;
+  if (firestore) {
+    const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(key).get();
+    if (!doc.exists) return null;
+    payload = await readFirestoreDb(doc, key);
+  } else {
+    const file = path.join(ASSETS_DIR, `${key}.json`);
+    if (!fs.existsSync(file)) return null;
+    payload = JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+  const data = security.isEncryptedEnvelope(payload) ? security.decryptObject(payload) : payload;
+  return data && data.dataUri ? data.dataUri : null;
+}
+
+async function deleteTemplate(raffleId, type) {
+  const key = templateKey(raffleId, type);
+  if (firestore) {
+    const col = firestore.collection(FIRESTORE_COLLECTION);
+    const doc = await col.doc(key).get();
+    if (doc.exists) {
+      const m = doc.data();
+      for (let i = 0; i < (m.chunks || 0); i++) await col.doc(`${key}_${m.version}_${i}`).delete().catch(() => {});
+      await col.doc(key).delete();
+    }
+  } else {
+    const file = path.join(ASSETS_DIR, `${key}.json`);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  }
+}
+
+/** Stores the image and records its metadata on the raffle (does not save the database). */
+async function storeRaffleTemplate(raffle, type, dataUri) {
+  await writeTemplate(raffle.id, type, dataUri);
+  if (!raffle.templates || typeof raffle.templates !== 'object') raffle.templates = {};
+  raffle.templates[type] = {
+    version: String(Date.now()),
+    mime: dataUri.slice(5, dataUri.indexOf(';')),
+    bytes: dataUri.length,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Moves images still embedded in raffles (templateConfig.templateImageBase64, from older
+ * versions or old backups) to the template store. The image is removed from the raffle
+ * only after it was stored successfully. Returns true if something moved.
+ */
+async function extractEmbeddedTemplates(target) {
+  let moved = false;
+  for (const raffle of target.raffles || []) {
+    const cfg = raffle.templateConfig;
+    if (cfg && isImageDataUri(cfg.templateImageBase64)) {
+      try {
+        await storeRaffleTemplate(raffle, 'poster', cfg.templateImageBase64);
+        delete cfg.templateImageBase64;
+        moved = true;
+        console.log(`🖼️ Plantilla del afiche de "${raffle.title}" movida al almacén de plantillas.`);
+      } catch (err) {
+        console.error(`⚠️ No se pudo mover la plantilla de "${raffle.title}" (se conserva donde estaba):`, err.message);
+      }
+    } else if (cfg && 'templateImageBase64' in cfg && !cfg.templateImageBase64) {
+      delete cfg.templateImageBase64;
+    }
+  }
+  return moved;
+}
+
+/** Every stored template of the current raffles, for backups and safety copies. */
+async function collectTemplates() {
+  const out = {};
+  for (const raffle of db.raffles || []) {
+    for (const type of Object.keys(raffle.templates || {})) {
+      try {
+        const dataUri = await readTemplate(raffle.id, type);
+        if (dataUri) (out[raffle.id] = out[raffle.id] || {})[type] = dataUri;
+      } catch (err) {
+        console.error(`⚠️ No se pudo leer la plantilla ${type} de ${raffle.id}:`, err.message);
+      }
+    }
+  }
+  return out;
+}
+
+/** Full export: database plus templates (used by backup downloads and safety copies). */
+async function buildFullExport() {
+  return { ...db, templateAssets: await collectTemplates() };
+}
+
+async function snapshotPayloadWithTemplates() {
+  const full = await buildFullExport();
+  return security.hasMasterKey() ? security.encryptObject(full, security.BACKUP_FORMAT) : full;
+}
+
 function snapshotPayload() {
   return security.hasMasterKey() ? security.encryptObject(db, security.BACKUP_FORMAT) : db;
 }
@@ -388,7 +514,7 @@ function listLocalSnapshots() {
 
 /** Saves a copy of the current database. Throws if no copy could be written anywhere. */
 async function createSnapshot(reason) {
-  const payload = snapshotPayload();
+  const payload = await snapshotPayloadWithTemplates();
   const stamp = new Date().toISOString();
   let written = 0;
   const errors = [];
@@ -551,6 +677,7 @@ async function loadDB() {
   // Note: demo tickets are never generated on startup: it would crash without raffles and
   // would inject fake sales into a real raffle that has no tickets yet.
 
+  const templatesMoved = await extractEmbeddedTemplates(db);
   const credentialsChanged = migrateCredentials();
   if (credentialsChanged) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
@@ -558,6 +685,7 @@ async function loadDB() {
   // Rewrite only when needed (new hashes, encryption or old storage format). Saving on every
   // startup would overwrite changes made on the previous server during a deploy.
   const needsRewrite =
+    templatesMoved ||
     credentialsChanged ||
     (security.hasMasterKey() && !loadedEncrypted) ||
     (firestore && (!loadedFromFirestore || firestoreVersion === 'legacy'));
@@ -968,6 +1096,11 @@ app.delete('/api/companies/:id', superAdminOnly, (req, res) => {
 
   // Collect all raffle IDs for this company
   const companyRaffleIds = new Set((db.raffles || []).filter(r => r.companyId === id).map(r => r.id));
+  for (const raffle of (db.raffles || []).filter(r => companyRaffleIds.has(r.id))) {
+    for (const type of Object.keys(raffle.templates || {})) {
+      deleteTemplate(raffle.id, type).catch(err => console.error('⚠️ No se pudo borrar la plantilla:', err.message));
+    }
+  }
   // Remove company raffles
   db.raffles = (db.raffles || []).filter(r => r.companyId !== id && !companyRaffleIds.has(r.id));
 
@@ -1076,9 +1209,10 @@ app.get('/api/backup/snapshots/:id/download', superAdminOnly, async (req, res) =
   res.send(payload);
 });
 
-app.get('/api/backup/download', superAdminOnly, (req, res) => {
-  // The backup file is encrypted with the server key: it can only be restored with that key
-  const payload = security.hasMasterKey() ? security.encryptObject(db, security.BACKUP_FORMAT) : db;
+app.get('/api/backup/download', superAdminOnly, async (req, res) => {
+  // Includes the raffle templates; encrypted with the server key when one is configured
+  const full = await buildFullExport();
+  const payload = security.hasMasterKey() ? security.encryptObject(full, security.BACKUP_FORMAT) : full;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename=backup_rifamaster_${Date.now()}.json`);
   res.send(JSON.stringify(payload));
@@ -1123,8 +1257,20 @@ app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
   try {
     // Every section of the backup is kept (including cash transactions, logs and any future data);
     // only the SuperAdmin account stays the current one so nobody is locked out.
-    const { superAdmin: _ignored, ...sections } = data;
-    db = ensureDbShape({ ...sections, superAdmin: db.superAdmin });
+    const { superAdmin: _ignored, templateAssets, ...sections } = data;
+    const restored = ensureDbShape({ ...sections, superAdmin: db.superAdmin });
+
+    // Templates from the backup (new format) or embedded in raffles (old backups)
+    if (templateAssets && typeof templateAssets === 'object') {
+      for (const raffle of restored.raffles) {
+        for (const type of TEMPLATE_TYPES) {
+          const dataUri = templateAssets[raffle.id] && templateAssets[raffle.id][type];
+          if (isImageDataUri(dataUri)) await storeRaffleTemplate(raffle, type, dataUri);
+        }
+      }
+    }
+    await extractEmbeddedTemplates(restored);
+    db = restored;
 
     migrateCredentials();
     saveDB();
@@ -1198,7 +1344,61 @@ app.get('/api/raffles', (req, res) => {
 });
 
 // PUT Update Raffle
-app.put('/api/raffles/:id', adminOnly, (req, res) => {
+function canAccessRaffle(req, raffle) {
+  if (req.auth.role === 'superadmin') return true;
+  const companyId = req.auth.role === 'admin' ? req.auth.record.id : req.auth.record.companyId;
+  return !raffle.companyId || raffle.companyId === companyId;
+}
+
+// Raffle templates: the image is downloaded only when the poster or ticket print is opened
+app.get('/api/raffles/:id/templates/:type', async (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Sorteo no encontrado.' });
+  if (!TEMPLATE_TYPES.includes(req.params.type)) return res.status(400).json({ error: 'Tipo de plantilla no válido.' });
+  const meta = (raffle.templates || {})[req.params.type];
+  if (!meta) return res.status(404).json({ error: 'Este sorteo no tiene esa plantilla.' });
+  if (req.headers['if-none-match'] === meta.version) return res.status(304).end();
+  try {
+    const dataUri = await readTemplate(raffle.id, req.params.type);
+    if (!dataUri) return res.status(404).json({ error: 'No se encontró la imagen de la plantilla.' });
+    res.setHeader('ETag', meta.version);
+    res.json({ type: req.params.type, version: meta.version, dataUri });
+  } catch (err) {
+    res.status(500).json({ error: `No se pudo leer la plantilla: ${err.message}` });
+  }
+});
+
+app.put('/api/raffles/:id/templates/:type', adminOnly, async (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Sorteo no encontrado.' });
+  if (!TEMPLATE_TYPES.includes(req.params.type)) return res.status(400).json({ error: 'Tipo de plantilla no válido.' });
+  const { dataUri } = req.body || {};
+  if (!isImageDataUri(dataUri)) return res.status(400).json({ error: 'La plantilla debe ser una imagen PNG, JPG o WEBP.' });
+  if (dataUri.length > MAX_TEMPLATE_BYTES) return res.status(413).json({ error: 'La imagen es demasiado grande (máximo ~6 MB).' });
+  try {
+    await storeRaffleTemplate(raffle, req.params.type, dataUri);
+    saveDB();
+    res.json({ message: 'Plantilla guardada.', template: raffle.templates[req.params.type] });
+  } catch (err) {
+    res.status(500).json({ error: `No se pudo guardar la plantilla: ${err.message}` });
+  }
+});
+
+app.delete('/api/raffles/:id/templates/:type', adminOnly, async (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Sorteo no encontrado.' });
+  if (!TEMPLATE_TYPES.includes(req.params.type)) return res.status(400).json({ error: 'Tipo de plantilla no válido.' });
+  try {
+    await deleteTemplate(raffle.id, req.params.type);
+    if (raffle.templates) delete raffle.templates[req.params.type];
+    saveDB();
+    res.json({ message: 'Plantilla eliminada.' });
+  } catch (err) {
+    res.status(500).json({ error: `No se pudo eliminar la plantilla: ${err.message}` });
+  }
+});
+
+app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   const { id } = req.params;
   const raffle = db.raffles.find(r => r.id === id);
   if (!raffle) {
@@ -1213,7 +1413,18 @@ app.put('/api/raffles/:id', adminOnly, (req, res) => {
   if (req.body.assignedAdvisorIds !== undefined) raffle.assignedAdvisorIds = req.body.assignedAdvisorIds;
   if (req.body.commissionType !== undefined) raffle.commissionType = req.body.commissionType;
   if (req.body.commissionValue !== undefined) raffle.commissionValue = parseFloat(req.body.commissionValue) || 0;
-  if (req.body.templateConfig !== undefined) raffle.templateConfig = req.body.templateConfig;
+  if (req.body.templateConfig !== undefined && req.body.templateConfig !== null && typeof req.body.templateConfig === 'object') {
+    const { templateImageBase64, ...settings } = req.body.templateConfig;
+    // An image sent inside the settings (older app versions) goes to the template store
+    if (isImageDataUri(templateImageBase64)) {
+      try {
+        await storeRaffleTemplate(raffle, 'poster', templateImageBase64);
+      } catch (err) {
+        return res.status(500).json({ error: `No se pudo guardar la plantilla: ${err.message}` });
+      }
+    }
+    raffle.templateConfig = settings;
+  }
   // Weekly draw settings (previously ignored, so they reverted after every reload)
   if (req.body.hasWeeklyDraws !== undefined) raffle.hasWeeklyDraws = req.body.hasWeeklyDraws === true || req.body.hasWeeklyDraws === 'true';
   if (req.body.weeklyDrawDay !== undefined) raffle.weeklyDrawDay = String(req.body.weeklyDrawDay);
@@ -1241,6 +1452,9 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
   }
 
   db.raffles.splice(index, 1);
+  for (const type of Object.keys(raffle.templates || {})) {
+    deleteTemplate(raffle.id, type).catch(err => console.error('⚠️ No se pudo borrar la plantilla:', err.message));
+  }
   // Cascade delete tickets, winners, transactions for this raffle
   db.tickets = (db.tickets || []).filter(t => t.raffleId !== id);
   db.winners = (db.winners || []).filter(w => w.raffleId !== id);

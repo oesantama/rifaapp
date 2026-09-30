@@ -58,3 +58,5 @@ app.*.map.json
 backend/secrets/
 # Automatic safety copies (contain all data)
 backend/backups/
+# Raffle template images (stored in Firebase in production)
+backend/assets/

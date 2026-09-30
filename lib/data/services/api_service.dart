@@ -1029,4 +1029,27 @@ class ApiService {
     if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
     throw ApiException.fromResponse(response);
   }
+
+  // Raffle templates (poster / printed ticket images), stored apart from the raffle data
+  /// Returns the template image as a data URI, or null when the raffle has none.
+  Future<String?> fetchRaffleTemplate(String raffleId, String type) async {
+    final response = await authGet(Uri.parse('$baseUrl/raffles/$raffleId/templates/$type')).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return (jsonDecode(response.body) as Map<String, dynamic>)['dataUri'] as String?;
+  }
+
+  Future<void> saveRaffleTemplate(String raffleId, String type, String dataUri) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/raffles/$raffleId/templates/$type'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'dataUri': dataUri}),
+    ).timeout(const Duration(seconds: 90));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<void> deleteRaffleTemplate(String raffleId, String type) async {
+    final response = await authDelete(Uri.parse('$baseUrl/raffles/$raffleId/templates/$type')).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200 && response.statusCode != 404) throw ApiException.fromResponse(response);
+  }
 }

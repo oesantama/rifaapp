@@ -4,7 +4,11 @@ import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:provider/provider.dart';
+import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/image_compress.dart';
+import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
 class TicketPrintDialog extends StatefulWidget {
@@ -26,26 +30,74 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
   String? _bgImageBase64;
   bool _showTalonario = true;
 
+  String? _templateStatus; // non-null while loading / saving the ticket design
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTicketTemplate();
+  }
+
+  /// The ticket design is saved per raffle, so it is ready every time a ticket is printed.
+  Future<void> _loadTicketTemplate() async {
+    setState(() => _templateStatus = 'Cargando diseño de la boleta...');
+    try {
+      final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.ticket.raffleId, 'ticket');
+      if (mounted) setState(() => _bgImageBase64 = dataUri);
+    } catch (_) {
+      // Printing still works without the design
+    } finally {
+      if (mounted) setState(() => _templateStatus = null);
+    }
+  }
+
   void _pickBgImage() async {
     try {
-      String? imageStr = await pickImageBase64();
-      if (imageStr != null) {
-        setState(() {
-          _bgImageBase64 = imageStr;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              backgroundColor: AppTheme.secondaryEmerald,
-              content: Text('✓ Imagen de plantilla / diseño de boleta cargada con éxito.'),
-            ),
-          );
-        }
-      }
+      String? picked = await pickImageBase64();
+      if (picked == null) return;
+      setState(() => _templateStatus = 'Optimizando y guardando el diseño...');
+      await Future.delayed(const Duration(milliseconds: 50)); // let the progress indicator paint
+      final imageStr = compressImageDataUri(picked, maxSide: 2000);
+      await RaffleRepository().saveRaffleTemplate(widget.ticket.raffleId, 'ticket', imageStr);
+      if (!mounted) return;
+      setState(() => _bgImageBase64 = imageStr);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Diseño de boleta guardado para esta rifa. Se usará en todas las impresiones.'),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: Colors.red, content: Text('Error al cargar imagen: $e')),
+          SnackBar(backgroundColor: Colors.red, content: Text('No se pudo guardar el diseño: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _templateStatus = null);
+    }
+  }
+
+  void _removeBgImage() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Quitar el diseño de la boleta?'),
+        content: const Text('Se quitará para todas las boletas de esta rifa.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Quitar')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await RaffleRepository().deleteRaffleTemplate(widget.ticket.raffleId, 'ticket');
+      if (mounted) setState(() => _bgImageBase64 = null);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('No se pudo quitar el diseño: $e')),
         );
       }
     }
@@ -126,14 +178,25 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                     label: const Text('IMPRIMIR'),
                     style: ElevatedButton.styleFrom(backgroundColor: _themeColor),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: _pickBgImage,
-                    icon: const Icon(Icons.image, size: 16),
-                    label: Text(_bgImageBase64 == null ? 'Subir Diseño/Fondo de Boleta' : 'Cambiar Imagen de Fondo'),
-                  ),
-                  if (_bgImageBase64 != null) ...[
+                  // Only administrators change the raffle's ticket design; advisors print with it
+                  if (Provider.of<AuthViewModel>(context, listen: false).isAdmin)
+                    OutlinedButton.icon(
+                      onPressed: _templateStatus != null ? null : _pickBgImage,
+                      icon: const Icon(Icons.image, size: 16),
+                      label: Text(_bgImageBase64 == null ? 'Subir Diseño/Fondo de Boleta' : 'Cambiar Imagen de Fondo'),
+                    ),
+                  if (_templateStatus != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 6),
+                        Text(_templateStatus!, style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  if (_bgImageBase64 != null && Provider.of<AuthViewModel>(context, listen: false).isAdmin) ...[
                     TextButton.icon(
-                      onPressed: () => setState(() => _bgImageBase64 = null),
+                      onPressed: _removeBgImage,
                       icon: const Icon(Icons.delete, color: Colors.red, size: 16),
                       label: const Text('Quitar Fondo', style: TextStyle(color: Colors.red, fontSize: 12)),
                     ),

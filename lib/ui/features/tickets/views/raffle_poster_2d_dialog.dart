@@ -9,6 +9,7 @@ import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
@@ -89,11 +90,16 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   List<Ticket> _allRaffleTickets = [];
 
+  // Template image is stored apart from the raffle data and loaded on demand
+  String? _templateStatus; // non-null while loading / compressing / saving the image
+  bool _templateChanged = false; // new image picked but not uploaded yet
+
   @override
   void initState() {
     super.initState();
     final config = widget.raffle.templateConfig;
     if (config != null) {
+      // Older data kept the image inside the settings; newer data keeps it in the template store
       _bgImageBase64 = config['templateImageBase64'];
       _gridTopPercent = (config['gridTopPercent'] as num?)?.toDouble() ?? 0.50;
       _gridLeftPercent = (config['gridLeftPercent'] as num?)?.toDouble() ?? 0.05;
@@ -112,6 +118,23 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     }
 
     _loadRaffleTickets();
+    if (_bgImageBase64 == null && widget.raffle.templates.containsKey('poster')) _loadPosterTemplate();
+  }
+
+  Future<void> _loadPosterTemplate() async {
+    setState(() => _templateStatus = 'Cargando plantilla del afiche...');
+    try {
+      final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.raffle.id, 'poster');
+      if (mounted) setState(() => _bgImageBase64 = dataUri);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: Colors.red, content: Text('No se pudo cargar la plantilla: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _templateStatus = null);
+    }
   }
 
   /// Swatch button that opens the color picker.
@@ -291,8 +314,24 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   void _saveTemplateConfig() async {
     final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+    if (_templateChanged && _bgImageBase64 != null) {
+      setState(() => _templateStatus = 'Guardando imagen de la plantilla...');
+      try {
+        await RaffleRepository().saveRaffleTemplate(widget.raffle.id, 'poster', _bgImageBase64!);
+        _templateChanged = false;
+      } catch (e) {
+        if (mounted) {
+          setState(() => _templateStatus = null);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(backgroundColor: Colors.red, content: Text('No se pudo guardar la imagen de la plantilla: $e')),
+          );
+        }
+        return;
+      }
+      if (mounted) setState(() => _templateStatus = null);
+    }
+    // Only the settings travel with the raffle; the image lives in the template store
     final newConfig = {
-      'templateImageBase64': _bgImageBase64,
       'gridTopPercent': _gridTopPercent,
       'gridLeftPercent': _gridLeftPercent,
       'gridWidthPercent': _gridWidthPercent,
@@ -305,6 +344,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     };
 
     bool ok = await raffleVM.updateRaffleTemplateConfig(widget.raffle.id, newConfig);
+    if (ok) await raffleVM.loadRaffles();
     if (mounted) {
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -326,9 +366,15 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
 
   void _pickBgImage() async {
     try {
-      String? imageStr = await pickImageBase64();
-      if (imageStr != null) {
+      String? picked = await pickImageBase64();
+      if (picked != null) {
+        setState(() => _templateStatus = 'Optimizando imagen...');
+        await Future.delayed(const Duration(milliseconds: 50)); // let the progress bar paint
+        final imageStr = compressImageDataUri(picked, maxSide: 2400);
+        if (!mounted) return;
         setState(() {
+          _templateStatus = null;
+          _templateChanged = true;
           _bgImageBase64 = imageStr;
           _showCustomControls = true;
           // Optimize defaults for custom image template
@@ -340,7 +386,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               backgroundColor: AppTheme.secondaryEmerald,
-              content: Text('✓ Plantilla de afiche cargada. Ajusta el Alto y Ancho de la grilla si es necesario.'),
+              content: Text('✓ Plantilla cargada. Ajuste la grilla y pulse "Guardar Plantilla" para conservarla.'),
             ),
           );
         }
@@ -583,6 +629,18 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                       ],
                     ),
 
+                    if (_templateStatus != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          const SizedBox(width: 8),
+                          Text(_templateStatus!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const LinearProgressIndicator(minHeight: 3),
+                    ],
                     // CONTROLS PANEL (COLLAPSIBLE WITH FULL DIMENSION SLIDERS)
                     if (_showCustomControls) ...[
                       const SizedBox(height: 8),

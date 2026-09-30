@@ -73,4 +73,11 @@ class RaffleRepository {
   Future<bool> deleteCompany(String id) => _apiService.deleteCompany(id);
 
   Future<bool> deleteRaffle(String id) => _apiService.deleteRaffle(id);
+
+  Future<String?> fetchRaffleTemplate(String raffleId, String type) => _apiService.fetchRaffleTemplate(raffleId, type);
+
+  Future<void> saveRaffleTemplate(String raffleId, String type, String dataUri) =>
+      _apiService.saveRaffleTemplate(raffleId, type, dataUri);
+
+  Future<void> deleteRaffleTemplate(String raffleId, String type) => _apiService.deleteRaffleTemplate(raffleId, type);
 }
