@@ -80,11 +80,10 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
         setState(() => _isRestoring = true);
 
         final response = await authPost(
-              Uri.parse('$_baseUrl/backup/restore'),
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(backupJson),
-            )
-            .timeout(const Duration(seconds: 8));
+          Uri.parse('$_baseUrl/backup/restore'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(backupJson),
+        ).timeout(const Duration(seconds: 8));
 
         if (response.statusCode == 200) {
           await _loadBackupInfo();

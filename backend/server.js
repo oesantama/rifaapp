@@ -14,9 +14,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'data.json');
 
-// Initialize Firebase Admin if credentials present and not forcing local DB
+// Data source: production (Render sets RENDER=true, or NODE_ENV=production) reads and writes
+// Firebase Firestore; local development always uses backend/data.json so it never touches
+// production data. DATA_SOURCE=firestore|local overrides the automatic choice.
 let firestore = null;
-const forceLocalDb = process.env.USE_LOCAL_DB === 'true';
+const isProduction = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
+const dataSource = String(
+  process.env.DATA_SOURCE || (process.env.USE_LOCAL_DB === 'true' ? 'local' : (isProduction ? 'firestore' : 'local'))
+).toLowerCase();
+const forceLocalDb = dataSource !== 'firestore';
+console.log(`ℹ️ Entorno: ${isProduction ? 'PRODUCCIÓN' : 'LOCAL'} • Fuente de datos: ${forceLocalDb ? 'data.json local' : 'Firebase Firestore'}`);
 
 if (!forceLocalDb) {
   try {
@@ -43,7 +50,79 @@ if (!forceLocalDb) {
     console.warn('⚠️ No se pudo conectar a Firebase, usando data.json local:', err.message);
   }
 } else {
-  console.log('ℹ️ Modo USE_LOCAL_DB activo. Usando almacenamiento local data.json');
+  console.log('ℹ️ Usando almacenamiento local data.json (Firestore desactivado en este entorno)');
+}
+
+// ---------------------------------------------------------------------------
+// Firestore storage: the database is saved as serialized JSON split into chunk
+// documents plus a manifest. Firestore rejects arrays inside arrays and documents
+// over 1 MiB; storing text chunks avoids both limits.
+// ---------------------------------------------------------------------------
+const FIRESTORE_COLLECTION = 'rifaapp';
+const FIRESTORE_MANIFEST = 'database';
+const FIRESTORE_CHUNKED_FORMAT = 'rifamaster-chunked';
+const FIRESTORE_CHUNK_CHARS = 700000;
+
+async function readFirestoreDb(doc) {
+  const manifest = doc.data();
+  if (!manifest || manifest.format !== FIRESTORE_CHUNKED_FORMAT) return manifest; // legacy single document
+  const col = firestore.collection(FIRESTORE_COLLECTION);
+  const parts = [];
+  for (let i = 0; i < manifest.chunks; i++) {
+    const chunk = await col.doc(`${FIRESTORE_MANIFEST}_${manifest.version}_${i}`).get();
+    if (!chunk.exists) throw new Error(`Falta el fragmento ${i} de la versión ${manifest.version}`);
+    parts.push(chunk.data().data);
+  }
+  return JSON.parse(parts.join(''));
+}
+
+async function writeFirestoreDb(stored) {
+  const col = firestore.collection(FIRESTORE_COLLECTION);
+  const json = JSON.stringify(stored);
+  const version = String(Date.now());
+  const chunks = [];
+  for (let i = 0; i < json.length; i += FIRESTORE_CHUNK_CHARS) chunks.push(json.slice(i, i + FIRESTORE_CHUNK_CHARS));
+
+  const previous = await col.doc(FIRESTORE_MANIFEST).get();
+  const previousManifest = previous.exists ? previous.data() : null;
+
+  // 1) new chunks, 2) switch the manifest (readers see either the old or the new version), 3) remove old chunks
+  for (let i = 0; i < chunks.length; i++) {
+    await col.doc(`${FIRESTORE_MANIFEST}_${version}_${i}`).set({ data: chunks[i] });
+  }
+  await col.doc(FIRESTORE_MANIFEST).set({
+    format: FIRESTORE_CHUNKED_FORMAT,
+    version,
+    chunks: chunks.length,
+    bytes: json.length,
+    updatedAt: new Date().toISOString()
+  });
+  if (previousManifest && previousManifest.format === FIRESTORE_CHUNKED_FORMAT) {
+    for (let i = 0; i < previousManifest.chunks; i++) {
+      await col.doc(`${FIRESTORE_MANIFEST}_${previousManifest.version}_${i}`).delete().catch(() => {});
+    }
+  }
+}
+
+// Saves are serialized and coalesced: only the latest state is written after the current write finishes
+let firestoreWriting = false;
+let firestorePending = null;
+function queueFirestoreSave(stored) {
+  firestorePending = stored;
+  if (firestoreWriting) return;
+  firestoreWriting = true;
+  (async () => {
+    while (firestorePending) {
+      const next = firestorePending;
+      firestorePending = null;
+      try {
+        await writeFirestoreDb(next);
+      } catch (err) {
+        console.error('Error respaldando datos en Cloud Firestore:', err.message);
+      }
+    }
+    firestoreWriting = false;
+  })();
 }
 
 app.use(cors({
@@ -280,6 +359,8 @@ function migrateCredentials() {
   return changed;
 }
 
+let isDbLoaded = false;
+
 async function loadDB() {
   initEncryptionKey();
   let loadedFromFirestore = false;
@@ -287,8 +368,29 @@ async function loadDB() {
     try {
       const doc = await firestore.collection('rifaapp').doc('database').get();
       if (doc.exists) {
-        db = decodeStoredDb(doc.data(), 'Firestore');
+        const docData = await readFirestoreDb(doc);
+        if (security.isEncryptedEnvelope(docData) && !security.hasMasterKey()) {
+          console.error('❌ CRÍTICO: Los datos en Firestore están cifrados pero no se encontró la llave de cifrado. Se preservan los datos sin sobrescribir.');
+          if (fs.existsSync(DB_FILE)) {
+            try {
+              const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+              if (!security.isEncryptedEnvelope(parsed) || security.hasMasterKey()) {
+                db = decodeStoredDb(parsed, 'data.json');
+                isDbLoaded = true;
+                console.log('✅ Datos cargados desde data.json local');
+                return;
+              }
+            } catch (err) {
+              console.error('No se pudo leer el archivo local:', err.message);
+            }
+          }
+          console.error('❌ Cancelando guardado para proteger los datos en Firestore.');
+          return;
+        }
+
+        db = decodeStoredDb(docData, 'Firestore');
         loadedFromFirestore = true;
+        isDbLoaded = true;
         console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
       } else {
         console.log('ℹ️ No hay datos previos en Firestore, buscando en almacenamiento local...');
@@ -303,14 +405,18 @@ async function loadDB() {
       let parsed;
       try {
         parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+        db = decodeStoredDb(parsed, 'data.json');
+        isDbLoaded = true;
+        console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
       } catch (err) {
-        fatal(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
+        console.error(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
       }
-      db = decodeStoredDb(parsed, 'data.json');
-      console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
-    } else {
-      db = emptyDb();
     }
+  }
+
+  if (!isDbLoaded) {
+    db = emptyDb();
+    isDbLoaded = true;
   }
 
   // Ensure DB arrays exist
@@ -342,6 +448,10 @@ async function loadDB() {
 }
 
 function saveDB() {
+  if (!isDbLoaded) {
+    console.warn('⚠️ saveDB ignorado: La base de datos aún no ha sido cargada.');
+    return;
+  }
   const stored = security.hasMasterKey() ? security.encryptObject(db) : db;
   try {
     // Written in place (data.json is a bind-mounted file, so it cannot be replaced by rename)
@@ -351,14 +461,9 @@ function saveDB() {
   }
 
   if (firestore) {
-    firestore.collection('rifaapp').doc('database').set(stored).catch(err => {
-      console.error('Error respaldando datos en Cloud Firestore:', err.message);
-    });
+    queueFirestoreSave(stored);
   }
 }
-
-// Initial DB load
-loadDB();
 
 // API Routes
 
@@ -1686,24 +1791,29 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
   res.status(201).json(payout);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
+async function startServer() {
+  await loadDB();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
 
-  // Keep-Alive Self-Ping Interval (Mantiene el servidor despiazado 24/7 en Render gratis)
-  const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://rifaapp-backend.onrender.com';
-  const https = require('https');
-  const http = require('http');
+    // Keep-Alive Self-Ping Interval (Mantiene el servidor despiazado 24/7 en Render gratis)
+    const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://rifaapp-backend.onrender.com';
+    const https = require('https');
+    const http = require('http');
 
-  setInterval(() => {
-    try {
-      const client = RENDER_EXTERNAL_URL.startsWith('https') ? https : http;
-      client.get(`${RENDER_EXTERNAL_URL}/api/health`, (res) => {
-        console.log(`[Keep-Alive] Ping 24/7 enviado a ${RENDER_EXTERNAL_URL}/api/health (Estado: ${res.statusCode})`);
-      }).on('error', (err) => {
-        console.warn(`[Keep-Alive] Advertencia ping: ${err.message}`);
-      });
-    } catch (err) {
-      // Ignore
-    }
-  }, 8 * 60 * 1000); // Enviar ping cada 8 minutos (evita que entre en reposo tras 15 min)
-});
+    setInterval(() => {
+      try {
+        const client = RENDER_EXTERNAL_URL.startsWith('https') ? https : http;
+        client.get(`${RENDER_EXTERNAL_URL}/api/health`, (res) => {
+          console.log(`[Keep-Alive] Ping 24/7 enviado a ${RENDER_EXTERNAL_URL}/api/health (Estado: ${res.statusCode})`);
+        }).on('error', (err) => {
+          console.warn(`[Keep-Alive] Advertencia ping: ${err.message}`);
+        });
+      } catch (err) {
+        // Ignore
+      }
+    }, 8 * 60 * 1000); // Enviar ping cada 8 minutos (evita que entre en reposo tras 15 min)
+  });
+}
+
+startServer();

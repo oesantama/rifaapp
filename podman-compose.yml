@@ -1,5 +1,7 @@
 version: '3.8'
 
+# Local development: always uses backend/data.json (never production Firebase).
+# Production (Render) selects Firestore automatically (RENDER=true).
 services:
   rifaapp-backend:
     build:
@@ -7,10 +9,12 @@ services:
       dockerfile: Containerfile
     container_name: rifaapp-backend
     ports:
-      - "8080:8080"
+      - "3000:3000"
     environment:
-      - PORT=8080
-      - USE_LOCAL_DB=true
+      - PORT=3000
+      - DATA_SOURCE=local
     volumes:
       - ./backend/data.json:/app/data.json:z
+      # Encryption key for data.json: must persist, otherwise the data cannot be read again
+      - ./backend/secrets:/app/secrets:z
     restart: always

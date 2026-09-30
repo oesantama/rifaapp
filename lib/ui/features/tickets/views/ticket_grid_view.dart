@@ -42,7 +42,7 @@ class _TicketGridViewState extends State<TicketGridView> {
       builder: (context, ticketVM, raffleVM, advisorVM, _) {
         final currentRaffle = raffleVM.selectedRaffle;
 
-        List<Ticket> displayTickets = ticketVM.tickets;
+        List<Ticket> displayTickets = ticketVM.searchedTickets;
         if (authVM.isAsesor && authVM.activeAdvisor != null) {
           final adv = authVM.activeAdvisor!;
           displayTickets = displayTickets.where((t) {
@@ -68,6 +68,11 @@ class _TicketGridViewState extends State<TicketGridView> {
             return true;
           }).toList();
         }
+
+        // Counts per status reflect exactly what this user can see (before the status filter)
+        final statusCounts = TicketViewModel.countByStatus(displayTickets);
+        displayTickets = displayTickets.where((t) => TicketViewModel.matchesStatus(t, ticketVM.selectedStatusFilter)).toList()
+          ..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
 
         return Column(
           children: [
@@ -138,7 +143,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         IconButton.filledTonal(
                           icon: const Icon(Icons.file_download_outlined, color: Colors.green),
                           onPressed: () {
-                            final ticketsToExport = ticketVM.tickets;
+                            final ticketsToExport = displayTickets;
                             if (ticketsToExport.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('No hay boletas disponibles para exportar.')),
@@ -191,15 +196,15 @@ class _TicketGridViewState extends State<TicketGridView> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _buildFilterChip(context, ticketVM, 'TODOS', currentRaffle?.id),
+                        _buildFilterChip(context, ticketVM, 'TODOS', statusCounts['TODOS'] ?? 0),
                         const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'DISPONIBLE', currentRaffle?.id),
+                        _buildFilterChip(context, ticketVM, 'DISPONIBLE', statusCounts['DISPONIBLE'] ?? 0),
                         const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'RESERVADA', currentRaffle?.id),
+                        _buildFilterChip(context, ticketVM, 'RESERVADA', statusCounts['RESERVADA'] ?? 0),
                         const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL', currentRaffle?.id),
+                        _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL', statusCounts['ABONO_PARCIAL'] ?? 0),
                         const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'PAGADA', currentRaffle?.id),
+                        _buildFilterChip(context, ticketVM, 'PAGADA', statusCounts['PAGADA'] ?? 0),
                       ],
                     ),
                   ),
@@ -234,15 +239,15 @@ class _TicketGridViewState extends State<TicketGridView> {
     );
   }
 
-  Widget _buildFilterChip(BuildContext context, TicketViewModel ticketVM, String status, String? raffleId) {
+  Widget _buildFilterChip(BuildContext context, TicketViewModel ticketVM, String status, int count) {
     bool isSelected = ticketVM.selectedStatusFilter == status;
     String label = status == 'TODOS' ? 'Todas' : AppTheme.getStatusLabel(status);
 
     return FilterChip(
-      label: Text(label),
+      label: Text('$label ($count)'),
       selected: isSelected,
       onSelected: (_) {
-        ticketVM.setStatusFilter(status, raffleId: raffleId);
+        ticketVM.setStatusFilter(status);
       },
       selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
       checkmarkColor: AppTheme.primaryBlue,
@@ -288,8 +293,9 @@ class _TicketGridViewState extends State<TicketGridView> {
                     children: [
                       Expanded(
                         child: Text(
-                          'BOLETA #${ticket.ticketNumber}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          'N° ${ticket.displayNumber}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryBlue),
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -313,13 +319,6 @@ class _TicketGridViewState extends State<TicketGridView> {
                   const SizedBox(height: 4),
                   StatusBadge(status: ticket.status, isSmall: true),
                   const SizedBox(height: 6),
-                  Text(
-                    'Números: ${ticket.numbers.join(', ')}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primaryBlue),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
                   if (ticket.buyerName.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -415,7 +414,7 @@ class _TicketGridViewState extends State<TicketGridView> {
             leading: CircleAvatar(
               backgroundColor: AppTheme.getStatusColor(ticket.status).withValues(alpha: 0.2),
               child: Text(
-                '#${ticket.ticketNumber}',
+                ticket.numbers.length == 1 ? ticket.displayNumber : '${ticket.numbers.length}',
                 style: TextStyle(
                   color: AppTheme.getStatusColor(ticket.status),
                   fontWeight: FontWeight.bold,
@@ -423,7 +422,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                 ),
               ),
             ),
-            title: Text('Números: ${ticket.numbers.join(', ')}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text('N° ${ticket.displayNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: ticket.buyerName.isNotEmpty

@@ -437,36 +437,39 @@ class ExcelCsvHelper {
 
   /// Exports a list of [Ticket] objects to an Excel (.xlsx) file with fallback to CSV
   static void exportTicketsToExcel(List<Ticket> tickets, {String title = 'Reporte_Boletas'}) {
+    // Ordered by the opportunity number the buyer plays; the internal ticket index is not exported.
+    // Money values are whole pesos (no decimals).
+    final rowsSource = [...tickets]..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+    const headers = [
+      'Número(s) Oportunidad',
+      'Estado',
+      'Comprador',
+      'Teléfono',
+      'Precio Boleta',
+      'Total Abonado',
+      'Saldo Pendiente',
+      'Asesor / Vendedor',
+      'Confirmada Admin',
+    ];
+
     try {
       var excel = Excel.createExcel();
       String defaultSheet = excel.getDefaultSheet() ?? 'Sheet1';
       excel.rename(defaultSheet, 'Boletas');
       Sheet sheet = excel['Boletas'];
 
-      List<CellValue> header = [
-        TextCellValue('N° Boleta'),
-        TextCellValue('Números Oportunidad'),
-        TextCellValue('Estado'),
-        TextCellValue('Comprador'),
-        TextCellValue('Teléfono'),
-        TextCellValue('Precio Boleta'),
-        TextCellValue('Total Abonado'),
-        TextCellValue('Saldo Pendiente'),
-        TextCellValue('Asesor / Vendedor'),
-        TextCellValue('Confirmada Admin'),
-      ];
-      sheet.appendRow(header);
+      sheet.appendRow(headers.map((h) => TextCellValue(h)).toList());
 
-      for (var t in tickets) {
+      for (var t in rowsSource) {
         sheet.appendRow([
-          IntCellValue(t.ticketNumber),
-          TextCellValue(t.numbers.join(', ')),
+          // Text keeps leading zeros (e.g. 02)
+          TextCellValue(t.displayNumber),
           TextCellValue(t.status),
           TextCellValue(t.buyerName.isNotEmpty ? t.buyerName : 'N/A'),
           TextCellValue(t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A'),
-          DoubleCellValue(t.price),
-          DoubleCellValue(t.totalPaid),
-          DoubleCellValue(t.balancePending),
+          IntCellValue(t.price.round()),
+          IntCellValue(t.totalPaid.round()),
+          IntCellValue(t.balancePending.round()),
           TextCellValue(t.advisorName.isNotEmpty ? t.advisorName : 'N/A'),
           TextCellValue(t.confirmedByAdmin ? 'SI' : 'NO'),
         ]);
@@ -479,16 +482,15 @@ class ExcelCsvHelper {
       }
     } catch (_) {
       List<List<dynamic>> rows = [
-        ['N° Boleta', 'Números Oportunidad', 'Estado', 'Comprador', 'Teléfono', 'Precio Boleta', 'Total Abonado', 'Saldo Pendiente', 'Asesor', 'Confirmada Admin'],
-        ...tickets.map((t) => [
-              t.ticketNumber,
-              t.numbers.join(', '),
+        headers,
+        ...rowsSource.map((t) => [
+              t.displayNumber,
               t.status,
               t.buyerName.isNotEmpty ? t.buyerName : 'N/A',
               t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A',
-              t.price,
-              t.totalPaid,
-              t.balancePending,
+              t.price.round(),
+              t.totalPaid.round(),
+              t.balancePending.round(),
               t.advisorName.isNotEmpty ? t.advisorName : 'N/A',
               t.confirmedByAdmin ? 'SI' : 'NO',
             ]),
@@ -497,4 +499,5 @@ class ExcelCsvHelper {
       saveAndDownloadFile('${cleanTitle}_${DateTime.now().millisecondsSinceEpoch}.csv', _rowsToCsv(rows));
     }
   }
+
 }

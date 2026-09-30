@@ -96,7 +96,7 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Impresión de Boleta - N° ${widget.ticket.ticketNumber}',
+                          'Impresión de Boleta - N° ${widget.ticket.displayNumber}',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const Text(
@@ -223,7 +223,7 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                                         ),
                                         const SizedBox(height: 6),
                                         Text(
-                                          'BOLETA N° ${widget.ticket.ticketNumber.toString().padLeft(4, '0')}',
+                                          'BOLETA N° ${widget.ticket.displayNumber}',
                                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _themeColor),
                                         ),
                                         const Divider(height: 14),
@@ -308,9 +308,13 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                                             color: _themeColor,
                                             borderRadius: BorderRadius.circular(10),
                                           ),
-                                          child: Text(
-                                            'N° ${widget.ticket.ticketNumber.toString().padLeft(4, '0')}',
-                                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                          constraints: const BoxConstraints(maxWidth: 260),
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            child: Text(
+                                              'N° ${widget.ticket.displayNumber}',
+                                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                            ),
                                           ),
                                         )
                                       ],

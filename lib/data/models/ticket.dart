@@ -75,6 +75,13 @@ class AuditLog {
 }
 
 class Ticket {
+  /// Opportunity number(s) the buyer actually plays. Shown to users instead of the
+  /// internal ticket index (ticketNumber), which only exists for storage.
+  String get displayNumber => numbers.isNotEmpty ? numbers.join(' - ') : ticketNumber.toString();
+
+  /// Numeric value of the first opportunity, used to sort tickets as users read them.
+  int get sortNumber => numbers.isNotEmpty ? (int.tryParse(numbers.first) ?? ticketNumber) : ticketNumber;
+
   final String id;
   final String raffleId;
   final int ticketNumber;

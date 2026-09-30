@@ -177,45 +177,46 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                 ),
               ),
               actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  final data = {
-                    'name': nameController.text.trim(),
-                    'code': codeController.text.trim(),
-                    'adminName': adminNameController.text.trim(),
-                    'adminEmail': adminEmailController.text.trim(),
-                    'adminUsername': adminUsernameController.text.trim(),
-                    'adminPassword': adminPasswordController.text,
-                  };
-                  final Company created;
-                  try {
-                    created = await _apiService.createCompany(data);
-                  } catch (e) {
-                    _showError(e);
-                    return;
-                  }
-                  if (context.mounted) Navigator.pop(context);
-                  {
-                    _loadCompanies();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: AppTheme.secondaryEmerald,
-                          content: Text('✓ Empresa "${created.name}" creada exitosamente con usuario Admin "${created.adminUsername}".'),
-                        ),
-                      );
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (formKey.currentState!.validate()) {
+                      final data = {
+                        'name': nameController.text.trim(),
+                        'code': codeController.text.trim(),
+                        'adminName': adminNameController.text.trim(),
+                        'adminEmail': adminEmailController.text.trim(),
+                        'adminUsername': adminUsernameController.text.trim(),
+                        'adminPassword': adminPasswordController.text,
+                      };
+                      final Company created;
+                      try {
+                        created = await _apiService.createCompany(data);
+                      } catch (e) {
+                        _showError(e);
+                        return;
+                      }
+                      if (context.mounted) Navigator.pop(context);
+                      {
+                        _loadCompanies();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: AppTheme.secondaryEmerald,
+                              content:
+                                  Text('✓ Empresa "${created.name}" creada exitosamente con usuario Admin "${created.adminUsername}".'),
+                            ),
+                          );
+                        }
+                      }
                     }
-                  }
-                }
-              },
-              child: const Text('Crear Empresa y Admin'),
-            ),
-          ],
+                  },
+                  child: const Text('Crear Empresa y Admin'),
+                ),
+              ],
             );
           },
         );
@@ -414,7 +415,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
               Icon(Icons.warning_amber_rounded, color: AppTheme.dangerRose, size: 28),
               SizedBox(width: 10),
               Expanded(
-                child: Text('Eliminar Empresa Permanente', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.dangerRose)),
+                child: Text('Eliminar Empresa Permanente',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.dangerRose)),
               ),
             ],
           ),
@@ -486,7 +488,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
       builder: (ctx) {
         return AlertDialog(
           title: const Text('⚠️ Eliminar Rifa'),
-          content: Text('¿Está seguro de eliminar la rifa "$title" y todas sus boletas y ventas asociadas? Esta acción no se puede deshacer.'),
+          content:
+              Text('¿Está seguro de eliminar la rifa "$title" y todas sus boletas y ventas asociadas? Esta acción no se puede deshacer.'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
             ElevatedButton(

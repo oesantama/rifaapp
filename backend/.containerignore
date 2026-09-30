@@ -1,0 +1,5 @@
+# Never bake credentials or keys into the image: production receives them through
+# environment variables (FIREBASE_SERVICE_ACCOUNT, DATA_ENCRYPTION_KEY) and local
+# development mounts secrets/ as a volume.
+serviceAccountKey.json
+secrets/

@@ -43,10 +43,11 @@ class _RifaAppState extends State<RifaApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => RaffleViewModel(repository: repository)..loadRaffles()),
-        ChangeNotifierProvider(create: (_) => TicketViewModel(repository: repository)..loadTickets()),
-        ChangeNotifierProvider(create: (_) => AdvisorViewModel(repository: repository)..loadAdvisors()),
-        ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)..loadWinners()),
+        // Data is loaded after login (MainShellScreen): before that the API rejects requests
+        ChangeNotifierProvider(create: (_) => RaffleViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => TicketViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => AdvisorViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -111,11 +112,30 @@ class _MainShellScreenState extends State<MainShellScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authVM = Provider.of<AuthViewModel>(context, listen: false);
-      final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
-      raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionData());
+  }
+
+  /// Loads everything the logged-in user sees, right after login or session restore.
+  Future<void> _loadSessionData() async {
+    final authVM = Provider.of<AuthViewModel>(context, listen: false);
+    final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+    final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+    final advisorVM = Provider.of<AdvisorViewModel>(context, listen: false);
+    final winnerVM = Provider.of<WinnerViewModel>(context, listen: false);
+
+    // Never show data left over from a previous session
+    raffleVM.reset();
+    ticketVM.reset();
+    advisorVM.reset();
+    winnerVM.reset();
+
+    // Advisors and winners do not depend on the selected raffle: load them in parallel
+    final independent = Future.wait([advisorVM.loadAdvisors(), winnerVM.loadWinners()]);
+    await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
+    await Future.wait([
+      ticketVM.loadTickets(raffleId: raffleVM.selectedRaffle?.id),
+      independent,
+    ]);
   }
 
   @override

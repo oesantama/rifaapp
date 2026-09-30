@@ -68,4 +68,10 @@ class WinnerViewModel extends ChangeNotifier {
 
   int get totalWinnersCount => _winners.where((w) => w.isWinner).length;
   double get totalPrizesPaid => _winners.where((w) => w.isWinner).fold(0.0, (sum, w) => sum + w.prizeAmount);
+
+  /// Drops data from a previous session so another user never sees it.
+  void reset() {
+    _winners = [];
+    notifyListeners();
+  }
 }

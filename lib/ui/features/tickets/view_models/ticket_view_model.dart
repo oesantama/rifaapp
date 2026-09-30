@@ -22,17 +22,15 @@ class TicketViewModel extends ChangeNotifier {
   String? _selectedAdvisorFilter;
   String? get selectedAdvisorFilter => _selectedAdvisorFilter;
 
+  /// Loads every ticket of the raffle. Search, status and advisor filters are applied
+  /// locally, so [tickets] always holds the full raffle (dashboard, cash, winners, poster)
+  /// and the grid can show how many tickets each status has.
   Future<void> loadTickets({String? raffleId}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      _tickets = await _repository.fetchTickets(
-        raffleId: raffleId,
-        search: _searchQuery,
-        status: _selectedStatusFilter == 'TODOS' ? null : _selectedStatusFilter,
-        advisorId: _selectedAdvisorFilter,
-      );
+      _tickets = await _repository.fetchTickets(raffleId: raffleId);
     } catch (e) {
       debugPrint('Error al cargar boletas: $e');
     } finally {
@@ -41,19 +39,43 @@ class TicketViewModel extends ChangeNotifier {
     }
   }
 
+  bool _matchesSearch(Ticket t) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return t.ticketNumber.toString().contains(q) ||
+        t.buyerName.toLowerCase().contains(q) ||
+        t.buyerPhone.contains(q) ||
+        t.numbers.any((n) => n.contains(q));
+  }
+
+  /// Tickets matching the search and advisor filter, before the status filter.
+  List<Ticket> get searchedTickets =>
+      _tickets.where((t) => (_selectedAdvisorFilter == null || t.advisorId == _selectedAdvisorFilter) && _matchesSearch(t)).toList();
+
+  static bool matchesStatus(Ticket t, String status) => status == 'TODOS' || t.status == status;
+
+  /// Number of tickets per status (plus 'TODOS') within [source].
+  static Map<String, int> countByStatus(List<Ticket> source) {
+    final counts = <String, int>{'TODOS': source.length};
+    for (final t in source) {
+      counts[t.status] = (counts[t.status] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   void setSearchQuery(String query, {String? raffleId}) {
     _searchQuery = query;
-    loadTickets(raffleId: raffleId);
+    notifyListeners();
   }
 
   void setStatusFilter(String status, {String? raffleId}) {
     _selectedStatusFilter = status;
-    loadTickets(raffleId: raffleId);
+    notifyListeners();
   }
 
   void setAdvisorFilter(String? advisorId, {String? raffleId}) {
     _selectedAdvisorFilter = advisorId;
-    loadTickets(raffleId: raffleId);
+    notifyListeners();
   }
 
   Future<bool> addAbono(String ticketId, Map<String, dynamic> body, {String? raffleId}) async {
@@ -117,4 +139,13 @@ class TicketViewModel extends ChangeNotifier {
   double get totalCollected => _tickets.fold(0.0, (sum, t) => sum + t.totalPaid);
   double get totalConfirmed => _tickets.where((t) => t.confirmedByAdmin).fold(0.0, (sum, t) => sum + t.totalPaid);
   double get totalPendingTurnIn => totalCollected - totalConfirmed;
+
+  /// Drops data from a previous session so another user never sees it.
+  void reset() {
+    _tickets = [];
+    _searchQuery = '';
+    _selectedStatusFilter = 'TODOS';
+    _selectedAdvisorFilter = null;
+    notifyListeners();
+  }
 }

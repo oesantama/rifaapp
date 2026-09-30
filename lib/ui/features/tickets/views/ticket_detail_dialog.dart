@@ -87,8 +87,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     final text = '''
 🎟️ *COMPROBANTE DE BOLETA - ${widget.raffleTitle ?? "RIFA"}*
 ----------------------------------------
-📌 *Boleta N°:* ${widget.ticket.ticketNumber}
-🔢 *Números de Oportunidad:* ${widget.ticket.numbers.join(', ')}
+🔢 *Número(s):* ${widget.ticket.displayNumber}
 👤 *Comprador:* $name
 📱 *Celular:* $phone
 💰 *Valor Boleta:* ${currency.format(widget.ticket.price)}
@@ -177,16 +176,20 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'BOLETA N° ${widget.ticket.ticketNumber.toString().padLeft(4, '0')}',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      StatusBadge(status: widget.ticket.status),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'BOLETA N° ${widget.ticket.displayNumber}',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        StatusBadge(status: widget.ticket.status),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -267,45 +270,46 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           filled: true,
                         ),
                       )
-                    else () {
-                      final List<DropdownMenuItem<String>> sellerDropdownItems = [
-                        const DropdownMenuItem<String>(
-                          value: 'admin',
-                          child: Text('🏢 Venta Directa (Administrador)'),
-                        ),
-                        ...advisorVM.advisors.map((adv) {
-                          return DropdownMenuItem<String>(
-                            value: adv.id,
-                            child: Text('👤 ${adv.name} (${adv.code})'),
-                          );
-                        }),
-                      ];
-                      final validSellerIds = sellerDropdownItems.map((e) => e.value).toSet();
-                      final currentSellerValue = validSellerIds.contains(_selectedSellerId) ? _selectedSellerId : 'admin';
+                    else
+                      () {
+                        final List<DropdownMenuItem<String>> sellerDropdownItems = [
+                          const DropdownMenuItem<String>(
+                            value: 'admin',
+                            child: Text('🏢 Venta Directa (Administrador)'),
+                          ),
+                          ...advisorVM.advisors.map((adv) {
+                            return DropdownMenuItem<String>(
+                              value: adv.id,
+                              child: Text('👤 ${adv.name} (${adv.code})'),
+                            );
+                          }),
+                        ];
+                        final validSellerIds = sellerDropdownItems.map((e) => e.value).toSet();
+                        final currentSellerValue = validSellerIds.contains(_selectedSellerId) ? _selectedSellerId : 'admin';
 
-                      return DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: currentSellerValue,
-                        decoration: const InputDecoration(
-                          labelText: 'Asesor / Vendedor',
-                          prefixIcon: Icon(Icons.badge),
-                          border: OutlineInputBorder(),
-                        ),
-                        items: sellerDropdownItems,
-                        onChanged: (val) {
-                          if (val == null) return;
-                          setState(() {
-                            _selectedSellerId = val;
-                            if (val == 'admin') {
-                              _selectedSellerName = 'Administrador';
-                            } else {
-                              final found = advisorVM.advisors.where((a) => a.id == val).firstOrNull;
-                              _selectedSellerName = found?.name ?? 'Asesor';
-                            }
-                          });
-                        },
-                      );
-                    }(),
+                        return DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: currentSellerValue,
+                          decoration: const InputDecoration(
+                            labelText: 'Asesor / Vendedor',
+                            prefixIcon: Icon(Icons.badge),
+                            border: OutlineInputBorder(),
+                          ),
+                          items: sellerDropdownItems,
+                          onChanged: (val) {
+                            if (val == null) return;
+                            setState(() {
+                              _selectedSellerId = val;
+                              if (val == 'admin') {
+                                _selectedSellerName = 'Administrador';
+                              } else {
+                                final found = advisorVM.advisors.where((a) => a.id == val).firstOrNull;
+                                _selectedSellerName = found?.name ?? 'Asesor';
+                              }
+                            });
+                          },
+                        );
+                      }(),
                     const SizedBox(height: 12),
                     if (widget.ticket.balancePending > 0) ...[
                       Text(

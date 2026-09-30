@@ -63,7 +63,27 @@ final _winner = {
 final mockClient = MockClient((req) async {
   final path = req.url.path.replaceFirst('/api', '');
   Object body;
-  if (req.method != 'GET') {
+  if (path == '/auth/login') {
+    // Server-side login: role derived from the user name used by each test
+    final creds = jsonDecode(req.body) as Map<String, dynamic>;
+    final username = creds['username'];
+    final role = username == 'superadmin' ? 'superadmin' : (creds['role'] == 'asesor' ? 'asesor' : 'admin');
+    body = {
+      'token': 'test-token',
+      'expiresAt': '2099-01-01T00:00:00.000Z',
+      'user': {
+        'role': role,
+        'id': role == 'asesor' ? 'adv-1' : 'comp-1',
+        'name': role == 'asesor' ? _advisor['name'] : 'WILLIAM SANTAMARIA',
+        'email': 'test@rifamaster.com',
+        'username': username,
+        'companyId': role == 'superadmin' ? null : 'comp-1',
+        'companyName': role == 'superadmin' ? '' : 'contruexito',
+        'mustChangePassword': false,
+        if (role == 'asesor') 'advisor': _advisor,
+      },
+    };
+  } else if (req.method != 'GET') {
     body = {};
   } else if (path == '/companies') {
     body = _companies;
@@ -182,8 +202,8 @@ Future<void> openDialogs(WidgetTester tester, String role) async {
     await openAndClose(tester, 'Gestionar Sorteo', find.text('Gestionar Sorteo'));
   }
   await goTab(tester, 'Boletas');
-  await openAndClose(tester, 'Detalle Boleta', find.text('BOLETA #1'));
-  await openAndClose(tester, 'Detalle Boleta disponible', find.text('BOLETA #5'));
+  await openAndClose(tester, 'Detalle Boleta', find.textContaining('N° 00 -'));
+  await openAndClose(tester, 'Detalle Boleta disponible', find.textContaining('N° 04 -'));
   await openAndClose(tester, 'Imprimir Boleta', find.byIcon(Icons.print_outlined));
   await openAndClose(tester, 'Afiche 2D', find.byIcon(Icons.grid_on_rounded));
   if (role == 'admin') {

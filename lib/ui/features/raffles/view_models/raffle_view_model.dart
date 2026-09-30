@@ -117,4 +117,11 @@ class RaffleViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Drops data from a previous session so another user never sees it.
+  void reset() {
+    _raffles = [];
+    _selectedRaffle = null;
+    notifyListeners();
+  }
 }

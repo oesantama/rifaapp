@@ -333,7 +333,7 @@ class _AdminCashViewState extends State<AdminCashView> {
                                   radius: 24,
                                   backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.15),
                                   child: Text(
-                                    '#${t.ticketNumber}',
+                                    t.numbers.length == 1 ? t.displayNumber : '${t.numbers.length}',
                                     style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accentAmber, fontSize: 13),
                                   ),
                                 );
@@ -345,7 +345,7 @@ class _AdminCashViewState extends State<AdminCashView> {
                                       runSpacing: 4,
                                       crossAxisAlignment: WrapCrossAlignment.center,
                                       children: [
-                                        Text('Boleta N° ${t.ticketNumber}',
+                                        Text('Boleta N° ${t.displayNumber}',
                                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -375,7 +375,7 @@ class _AdminCashViewState extends State<AdminCashView> {
                                     bool ok = await ticketVM.confirmTicketPayment(t.id, raffleId: currentRaffle?.id);
                                     if (ok && context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Pago de Boleta #${t.ticketNumber} confirmado en caja.')),
+                                        SnackBar(content: Text('Pago de Boleta N° ${t.displayNumber} confirmado en caja.')),
                                       );
                                     }
                                   },

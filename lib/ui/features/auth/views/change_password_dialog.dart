@@ -80,7 +80,14 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     if (RegExp(r'\d').hasMatch(v)) score++;
     if (RegExp(r'[^A-Za-z0-9]').hasMatch(v)) score++;
     final labels = ['Muy débil', 'Débil', 'Aceptable', 'Buena', 'Fuerte', 'Muy fuerte'];
-    final colors = [AppTheme.dangerRose, AppTheme.dangerRose, AppTheme.accentAmber, AppTheme.accentAmber, AppTheme.secondaryEmerald, AppTheme.secondaryEmerald];
+    final colors = [
+      AppTheme.dangerRose,
+      AppTheme.dangerRose,
+      AppTheme.accentAmber,
+      AppTheme.accentAmber,
+      AppTheme.secondaryEmerald,
+      AppTheme.secondaryEmerald
+    ];
     return Row(
       children: [
         Expanded(
@@ -196,9 +203,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       actions: [
         if (widget.required)
           TextButton(
-            onPressed: _saving ? null : () => Provider.of<AuthViewModel>(context, listen: false).logout().then((_) {
-                  if (context.mounted) Navigator.of(context).pop();
-                }),
+            onPressed: _saving
+                ? null
+                : () => Provider.of<AuthViewModel>(context, listen: false).logout().then((_) {
+                      if (context.mounted) Navigator.of(context).pop();
+                    }),
             child: const Text('Cerrar sesión'),
           )
         else
