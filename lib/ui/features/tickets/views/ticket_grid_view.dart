@@ -290,7 +290,7 @@ class _TicketGridViewState extends State<TicketGridView> {
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 260,
-        mainAxisExtent: 176,
+        mainAxisExtent: 186,
         crossAxisSpacing: isMobile ? 8 : 12,
         mainAxisSpacing: isMobile ? 8 : 12,
       ),
@@ -398,22 +398,38 @@ class _TicketGridViewState extends State<TicketGridView> {
                     const Text('Disponible para venta', style: TextStyle(fontSize: 11, color: Colors.grey)),
                   const SizedBox(height: 4),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        currency.format(ticket.price),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            currency.format(ticket.price),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                          if (ticket.balancePending > 0 && ticket.totalPaid > 0)
+                            Text(
+                              'Abonado: ${currency.format(ticket.totalPaid)}',
+                              style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                            ),
+                        ],
                       ),
-                      if (ticket.balancePending > 0 && ticket.totalPaid > 0) ...[
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            'Abonado: ${currency.format(ticket.totalPaid)}',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                      const SizedBox(width: 6),
+                      // Who handled the ticket (hidden while nobody has taken it)
+                      if (ticket.advisorName.trim().isNotEmpty)
+                        Expanded(
+                          child: Tooltip(
+                            message: 'Asesor: ${ticket.advisorName.trim()}',
+                            child: Text(
+                              'Asesor: ${ticket.advisorName.trim()}',
+                              textAlign: TextAlign.right,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 10.5, color: Colors.grey[700], fontWeight: FontWeight.w600),
+                            ),
                           ),
                         ),
-                      ],
                     ],
                   )
                 ],
