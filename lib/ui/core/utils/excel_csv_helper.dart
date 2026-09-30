@@ -449,6 +449,7 @@ class ExcelCsvHelper {
       'Total Abonado',
       'Saldo Pendiente',
       'Asesor / Vendedor',
+      'Medio de Venta',
       'Confirmada Admin',
     ];
 
@@ -471,6 +472,7 @@ class ExcelCsvHelper {
           IntCellValue(t.totalPaid.round()),
           IntCellValue(t.balancePending.round()),
           TextCellValue(t.advisorName.isNotEmpty ? t.advisorName : 'N/A'),
+          TextCellValue(t.saleChannel.isNotEmpty ? t.saleChannel : 'N/A'),
           TextCellValue(t.confirmedByAdmin ? 'SI' : 'NO'),
         ]);
       }
@@ -492,6 +494,7 @@ class ExcelCsvHelper {
               t.totalPaid.round(),
               t.balancePending.round(),
               t.advisorName.isNotEmpty ? t.advisorName : 'N/A',
+              t.saleChannel.isNotEmpty ? t.saleChannel : 'N/A',
               t.confirmedByAdmin ? 'SI' : 'NO',
             ]),
       ];

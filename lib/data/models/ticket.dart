@@ -92,6 +92,9 @@ class Ticket {
   final String advisorName;
   final String buyerName;
   final String buyerPhone;
+
+  /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
+  final String saleChannel;
   final double totalPaid;
   final double balancePending;
   final bool confirmedByAdmin;
@@ -110,6 +113,7 @@ class Ticket {
     required this.advisorName,
     required this.buyerName,
     required this.buyerPhone,
+    this.saleChannel = '',
     required this.totalPaid,
     required this.balancePending,
     required this.confirmedByAdmin,
@@ -138,6 +142,7 @@ class Ticket {
       advisorName: json['advisorName'] ?? '',
       buyerName: json['buyerName'] ?? '',
       buyerPhone: json['buyerPhone'] ?? '',
+      saleChannel: json['saleChannel'] ?? '',
       totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0.0,
       balancePending: (json['balancePending'] as num?)?.toDouble() ?? 0.0,
       confirmedByAdmin: json['confirmedByAdmin'] ?? false,
@@ -158,6 +163,7 @@ class Ticket {
         'advisorName': advisorName,
         'buyerName': buyerName,
         'buyerPhone': buyerPhone,
+        'saleChannel': saleChannel,
         'totalPaid': totalPaid,
         'balancePending': balancePending,
         'confirmedByAdmin': confirmedByAdmin,

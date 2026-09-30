@@ -1711,9 +1711,11 @@ app.get('/api/tickets', (req, res) => {
 });
 
 // POST Register Ticket Sale or Abono
+const SALE_CHANNELS = ['Facebook', 'WhatsApp', 'Familiar', 'Conocido', 'Voz a voz', 'Otro'];
+
 app.post('/api/tickets/:id/abono', (req, res) => {
   const { id } = req.params;
-  const { amount, buyerName, buyerPhone, sellerId, sellerName, note } = req.body;
+  const { amount, buyerName, buyerPhone, sellerId, sellerName, note, saleChannel } = req.body;
 
   const ticket = db.tickets.find(t => t.id === id);
   if (!ticket) {
@@ -1727,6 +1729,8 @@ app.post('/api/tickets/:id/abono', (req, res) => {
 
   if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();
   if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
+  // How the buyer was reached (Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro)
+  if (SALE_CHANNELS.includes(saleChannel)) ticket.saleChannel = saleChannel;
   if (sellerId) ticket.advisorId = sellerId;
   if (sellerName) ticket.advisorName = sellerName;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();

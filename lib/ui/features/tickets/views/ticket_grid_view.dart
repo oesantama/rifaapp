@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
+import 'package:rifaapp/ui/core/sale_channels.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
@@ -346,7 +347,15 @@ class _TicketGridViewState extends State<TicketGridView> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  StatusBadge(status: ticket.status, isSmall: true),
+                  Row(
+                    children: [
+                      StatusBadge(status: ticket.status, isSmall: true),
+                      if (ticket.saleChannel.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(child: _buildChannelChip(ticket.saleChannel)),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   if (ticket.buyerName.isNotEmpty)
                     Container(
@@ -438,6 +447,51 @@ class _TicketGridViewState extends State<TicketGridView> {
           ),
         );
       },
+    );
+  }
+
+  /// Small label with how the buyer was reached (Facebook, WhatsApp, ...).
+  Widget _buildChannelChip(String channel) {
+    final color = SaleChannels.color(channel);
+    return Tooltip(
+      message: 'Medio de venta: $channel',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Narrow cards (phones) show only the colored icon; wider ones show the name too
+          if (constraints.maxWidth < 64) {
+            if (constraints.maxWidth < 20) return const SizedBox.shrink();
+            return Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(SaleChannels.icon(channel), size: 12, color: color),
+            );
+          }
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(SaleChannels.icon(channel), size: 11, color: color),
+                const SizedBox(width: 3),
+                Flexible(
+                  child: Text(
+                    channel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: color),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

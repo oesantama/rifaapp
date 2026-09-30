@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
+import 'package:rifaapp/ui/core/sale_channels.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
@@ -26,6 +27,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _buyerNameController;
   late TextEditingController _buyerPhoneController;
+  String? _saleChannel; // how the buyer was reached
   late TextEditingController _amountController;
   late TextEditingController _noteController;
   String? _selectedSellerId;
@@ -36,6 +38,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     super.initState();
     _buyerNameController = TextEditingController(text: widget.ticket.buyerName);
     _buyerPhoneController = TextEditingController(text: widget.ticket.buyerPhone);
+    _saleChannel = widget.ticket.saleChannel.isNotEmpty ? widget.ticket.saleChannel : null;
     _amountController = TextEditingController(text: '0');
     _noteController = TextEditingController();
     _selectedSellerId = widget.ticket.advisorId.isNotEmpty ? widget.ticket.advisorId : null;
@@ -279,6 +282,32 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
                       validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese teléfono' : null,
                     ),
                     const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: _saleChannel,
+                      decoration: InputDecoration(
+                        labelText: widget.ticket.status == 'DISPONIBLE' ? 'Medio de venta / contacto *' : 'Medio de venta / contacto',
+                        prefixIcon: const Icon(Icons.campaign_outlined),
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final channel in SaleChannels.all)
+                          DropdownMenuItem(
+                            value: channel,
+                            child: Row(
+                              children: [
+                                Icon(SaleChannels.icon(channel), size: 18, color: SaleChannels.color(channel)),
+                                const SizedBox(width: 8),
+                                Text(channel),
+                              ],
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _saleChannel = v),
+                      // Required for new sales; older sold tickets may not have it recorded
+                      validator: (v) => (widget.ticket.status == 'DISPONIBLE' && v == null) ? 'Seleccione cómo se contactó o vendió' : null,
+                    ),
+                    const SizedBox(height: 10),
                     if (authVM.isAsesor)
                       TextFormField(
                         initialValue: '${authVM.currentUserName} (${authVM.currentUserCode})',
@@ -423,6 +452,7 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
                                 'amount': amt,
                                 'buyerName': _buyerNameController.text.trim(),
                                 'buyerPhone': _buyerPhoneController.text.trim(),
+                                if (_saleChannel != null) 'saleChannel': _saleChannel,
                                 'sellerId': newSellerId,
                                 'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
                                 'note': _noteController.text.trim().isNotEmpty
