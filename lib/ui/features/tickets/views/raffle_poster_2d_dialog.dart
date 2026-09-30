@@ -46,13 +46,40 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   bool _colorByStatus = false; // false = unicolor, true = color per status
   String _singleCircleColorHex = '#DC2626'; // Default red
 
-  static const List<Map<String, String>> _circleColorPresets = [
-    {'name': 'Rojo', 'hex': '#DC2626'},
-    {'name': 'Verde', 'hex': '#10B981'},
-    {'name': 'Azul', 'hex': '#2563EB'},
-    {'name': 'Morado', 'hex': '#8B5CF6'},
-    {'name': 'Naranja', 'hex': '#F59E0B'},
-    {'name': 'Negro', 'hex': '#1F2937'},
+  // Circle color per ticket status (used when _colorByStatus is on); editable and saved with the template
+  Map<String, String> _statusCircleColors = Map.of(_defaultStatusCircleColors);
+  static const Map<String, String> _defaultStatusCircleColors = {
+    'PAGADA': '#10B981',
+    'ABONO_PARCIAL': '#F59E0B',
+    'RESERVADA': '#8B5CF6',
+  };
+  static const Map<String, String> _statusColorLabels = {
+    'PAGADA': 'Pagada',
+    'ABONO_PARCIAL': 'Abono',
+    'RESERVADA': 'Reservada',
+  };
+
+  static const List<String> _colorPalette = [
+    '#DC2626',
+    '#EF4444',
+    '#F97316',
+    '#F59E0B',
+    '#EAB308',
+    '#FACC15',
+    '#84CC16',
+    '#22C55E',
+    '#10B981',
+    '#14B8A6',
+    '#06B6D4',
+    '#0EA5E9',
+    '#2563EB',
+    '#4F46E5',
+    '#8B5CF6',
+    '#A855F7',
+    '#D946EF',
+    '#EC4899',
+    '#1F2937',
+    '#FFFFFF',
   ];
 
   final bool _fillCellBg = true;
@@ -76,10 +103,144 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       _dotScale = (config['dotScale'] as num?)?.toDouble() ?? 1.0;
       _colorByStatus = (config['colorByStatus'] as bool?) ?? false;
       _singleCircleColorHex = (config['singleCircleColorHex'] as String?) ?? '#DC2626';
+      final savedStatusColors = config['statusCircleColors'];
+      if (savedStatusColors is Map) {
+        savedStatusColors.forEach((k, v) {
+          if (_defaultStatusCircleColors.containsKey(k) && v is String) _statusCircleColors[k.toString()] = v;
+        });
+      }
     }
 
     _loadRaffleTickets();
   }
+
+  /// Swatch button that opens the color picker.
+  Widget _buildColorButton({required String label, required String hex, required ValueChanged<String> onPicked}) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () async {
+        final picked = await _showColorPicker(label, hex);
+        if (picked != null) onPicked(picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: _parseHexColor(hex),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black26),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
+            const SizedBox(width: 4),
+            const Icon(Icons.edit, size: 12, color: Colors.black45),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Palette plus exact hex code; returns the chosen color as #RRGGBB or null if cancelled.
+  Future<String?> _showColorPicker(String title, String currentHex) {
+    String selected = currentHex.toUpperCase();
+    final hexController = TextEditingController(text: selected);
+    final hexPattern = RegExp(r'^#?[0-9A-Fa-f]{6}$');
+
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final valid = hexPattern.hasMatch(hexController.text.trim());
+          return AlertDialog(
+            title: Text('Color: $title'),
+            content: SizedBox(
+              width: 320,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final hex in _colorPalette)
+                        GestureDetector(
+                          onTap: () => setDialogState(() {
+                            selected = hex;
+                            hexController.text = hex;
+                          }),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: _parseHexColor(hex),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected == hex ? Colors.black : Colors.black26,
+                                width: selected == hex ? 3 : 1,
+                              ),
+                            ),
+                            child:
+                                selected == hex ? Icon(Icons.check, size: 16, color: hex == '#FFFFFF' ? Colors.black : Colors.white) : null,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: valid ? _parseHexColor(hexController.text.trim()) : Colors.transparent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black26),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: hexController,
+                          decoration: InputDecoration(
+                            labelText: 'Código exacto (#RRGGBB)',
+                            errorText: valid ? null : 'Ejemplo: #FF5722',
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setDialogState(() {
+                            if (hexPattern.hasMatch(v.trim())) selected = _normalizeHex(v.trim());
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+              ElevatedButton(
+                onPressed: valid ? () => Navigator.pop(ctx, _normalizeHex(hexController.text.trim())) : null,
+                child: const Text('Aplicar'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  String _normalizeHex(String value) => '#${value.replaceFirst('#', '').toUpperCase()}';
 
   Color _parseHexColor(String hexString) {
     try {
@@ -97,13 +258,13 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       switch (matchedTicket.status) {
         case 'CONFIRMADA':
         case 'PAGADA':
-          return const Color(0xFF10B981); // Emerald / Green
+          return _parseHexColor(_statusCircleColors['PAGADA']!);
         case 'ABONO_PARCIAL':
-          return const Color(0xFFF59E0B); // Amber / Orange
+          return _parseHexColor(_statusCircleColors['ABONO_PARCIAL']!);
         case 'RESERVADA':
-          return const Color(0xFF8B5CF6); // Purple / Violet
+          return _parseHexColor(_statusCircleColors['RESERVADA']!);
         default:
-          return const Color(0xFFDC2626); // Red
+          return _parseHexColor(_singleCircleColorHex);
       }
     } else {
       return _parseHexColor(_singleCircleColorHex);
@@ -140,6 +301,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       'dotScale': _dotScale,
       'colorByStatus': _colorByStatus,
       'singleCircleColorHex': _singleCircleColorHex,
+      'statusCircleColors': _statusCircleColors,
     };
 
     bool ok = await raffleVM.updateRaffleTemplateConfig(widget.raffle.id, newConfig);
@@ -585,74 +747,51 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                             ),
                             const Divider(height: 16),
 
-                            // ROW 3: Configuración de Color de Círculos
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                            // ROW 3: Circle colors (one color for all, or one editable color per status)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 const Text(
-                                  '🎨 Modo de Color Círculos:',
+                                  '🎨 Color de Círculos:',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.brown),
                                 ),
-                                const SizedBox(width: 8),
                                 ChoiceChip(
-                                  label: const Text('🔴 Unicolor', style: TextStyle(fontSize: 11)),
+                                  label: const Text('Todos iguales', style: TextStyle(fontSize: 11)),
                                   selected: !_colorByStatus,
                                   selectedColor: Colors.amber.shade200,
                                   onSelected: (val) {
                                     if (val) setState(() => _colorByStatus = false);
                                   },
                                 ),
-                                const SizedBox(width: 6),
                                 ChoiceChip(
-                                  label: const Text('🌈 Por Estado', style: TextStyle(fontSize: 11)),
+                                  label: const Text('Por estado', style: TextStyle(fontSize: 11)),
                                   selected: _colorByStatus,
                                   selectedColor: Colors.amber.shade200,
                                   onSelected: (val) {
                                     if (val) setState(() => _colorByStatus = true);
                                   },
                                 ),
-                                const SizedBox(width: 16),
-                                if (!_colorByStatus) ...[
-                                  const Text(
-                                    'Seleccionar Color:',
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Wrap(
-                                    spacing: 4,
-                                    children: _circleColorPresets.map((preset) {
-                                      final isSelected = _singleCircleColorHex.toUpperCase() == preset['hex']!.toUpperCase();
-                                      final color = _parseHexColor(preset['hex']!);
-                                      return GestureDetector(
-                                        onTap: () => setState(() => _singleCircleColorHex = preset['hex']!),
-                                        child: Container(
-                                          width: 24,
-                                          height: 24,
-                                          decoration: BoxDecoration(
-                                            color: color,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: isSelected ? Colors.black : Colors.white,
-                                              width: isSelected ? 2.5 : 1.0,
-                                            ),
-                                            boxShadow: isSelected
-                                                ? [BoxShadow(color: color.withOpacity(0.6), blurRadius: 4)]
-                                                : null,
-                                          ),
-                                          child: isSelected
-                                              ? const Icon(Icons.check, size: 14, color: Colors.white)
-                                              : null,
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                                ] else ...[
-                                  const Text(
-                                    '🟢 Pagada  🟠 Abono  🟣 Reservada',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.brown),
-                                  ),
-                                ],
+                                if (!_colorByStatus)
+                                  _buildColorButton(
+                                    label: 'Color',
+                                    hex: _singleCircleColorHex,
+                                    onPicked: (hex) => setState(() => _singleCircleColorHex = hex),
+                                  )
+                                else
+                                  for (final status in _statusColorLabels.keys)
+                                    _buildColorButton(
+                                      label: _statusColorLabels[status]!,
+                                      hex: _statusCircleColors[status]!,
+                                      onPicked: (hex) => setState(() => _statusCircleColors[status] = hex),
+                                    ),
                               ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Toque un color para cambiarlo. Pulse "Guardar Plantilla" para conservar la configuración.',
+                              style: TextStyle(fontSize: 11, color: Colors.brown.shade400),
                             ),
                           ],
                         ),
