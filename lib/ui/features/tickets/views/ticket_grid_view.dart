@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
@@ -93,6 +94,7 @@ class _TicketGridViewState extends State<TicketGridView> {
 
         return Column(
           children: [
+            const CurrentRaffleBanner(),
             Container(
               padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 16),
               color: Theme.of(context).cardColor,

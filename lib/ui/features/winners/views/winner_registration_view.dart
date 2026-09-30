@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/winner.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:rifaapp/ui/core/utils/pdf_report_generator.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
@@ -516,6 +517,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const CurrentRaffleBanner(),
+              SizedBox(height: isMobile ? 12 : 16),
               // VISTA REGISTRO SOLO PARA ADMINISTRADOR / LECTURA PARA ASESORES
               if (isAsesor) ...[
                 Card(

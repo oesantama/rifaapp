@@ -204,7 +204,7 @@ Future<void> openDialogs(WidgetTester tester, String role) async {
   }
   await goTab(tester, 'Boletas');
   await openAndClose(tester, 'Detalle Boleta', find.textContaining('N° 00 -'));
-  await openAndClose(tester, 'Detalle Boleta disponible', find.textContaining('N° 04 -'));
+  await openAndClose(tester, 'Detalle Boleta disponible', find.textContaining('N° 03 -'));
   await openAndClose(tester, 'Imprimir Boleta', find.byIcon(Icons.print_outlined));
   await openAndClose(tester, 'Afiche 2D', find.byIcon(Icons.grid_on_rounded));
   if (role == 'admin') {

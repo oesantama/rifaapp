@@ -6,6 +6,7 @@ import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 
 class AdminCashView extends StatefulWidget {
@@ -153,6 +154,8 @@ class _AdminCashViewState extends State<AdminCashView> {
           child: ListView(
             padding: EdgeInsets.all(isMobile ? 12 : 20),
             children: [
+              const CurrentRaffleBanner(),
+              SizedBox(height: isMobile ? 12 : 16),
               // Summary Cards Header
               if (isMobile) ...[
                 pendingCard,
