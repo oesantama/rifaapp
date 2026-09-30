@@ -55,6 +55,14 @@ class _RifaAppState extends State<RifaApp> {
         themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
         home: Consumer<AuthViewModel>(
           builder: (context, authVM, _) {
+            if (authVM.isRestoringSession) {
+              return const Scaffold(
+                backgroundColor: Color(0xFF0F172A),
+                body: Center(
+                  child: CircularProgressIndicator(color: Colors.amber),
+                ),
+              );
+            }
             if (!authVM.isLoggedIn) {
               return const LoginView();
             }

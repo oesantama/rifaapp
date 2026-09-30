@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_saver_web.dart' if (dart.library.io) 'package:rifaapp/ui/core/utils/file_saver_stub.dart';
@@ -14,7 +15,7 @@ class DatabaseBackupView extends StatefulWidget {
 }
 
 class _DatabaseBackupViewState extends State<DatabaseBackupView> {
-  final String _baseUrl = 'http://localhost:3000/api';
+  late final String _baseUrl = ApiService().baseUrl;
   Map<String, dynamic>? _backupStats;
   bool _isLoading = true;
   bool _isRestoring = false;

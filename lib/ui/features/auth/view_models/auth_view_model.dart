@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rifaapp/data/models/advisor.dart';
 import 'package:rifaapp/data/models/company.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
@@ -8,10 +10,15 @@ enum UserRole { superadmin, admin, asesor }
 class AuthViewModel extends ChangeNotifier {
   final RaffleRepository _repository;
 
-  AuthViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository();
+  AuthViewModel({RaffleRepository? repository}) : _repository = repository ?? RaffleRepository() {
+    restoreSession();
+  }
 
   bool _isLoggedIn = false;
   bool get isLoggedIn => _isLoggedIn;
+
+  bool _isRestoringSession = true;
+  bool get isRestoringSession => _isRestoringSession;
 
   UserRole _role = UserRole.admin;
   UserRole get role => _role;
@@ -44,8 +51,78 @@ class AuthViewModel extends ChangeNotifier {
   bool get isAdmin => _role == UserRole.admin || _role == UserRole.superadmin;
   bool get isAsesor => _role == UserRole.asesor;
 
+  // Session inactivity timeout: 8 hours (in milliseconds)
+  static const int _inactivityTimeoutMs = 8 * 60 * 60 * 1000;
+
+  Future<void> restoreSession() async {
+    _isRestoringSession = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final loggedIn = prefs.getBool('session_logged_in') ?? false;
+      final lastActivity = prefs.getInt('session_last_activity') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      if (loggedIn && lastActivity > 0 && (now - lastActivity) < _inactivityTimeoutMs) {
+        _isLoggedIn = true;
+        final roleIndex = prefs.getInt('session_role') ?? 1;
+        _role = UserRole.values[roleIndex.clamp(0, UserRole.values.length - 1)];
+        _adminName = prefs.getString('session_admin_name') ?? 'Administrador General';
+        _adminEmail = prefs.getString('session_admin_email') ?? 'admin@rifamaster.com';
+        _adminUsername = prefs.getString('session_admin_username') ?? 'admin';
+        _selectedCompanyId = prefs.getString('session_selected_company_id') ?? 'comp-1';
+        _companyName = prefs.getString('session_company_name') ?? 'Empresa Principal';
+
+        final advisorJsonStr = prefs.getString('session_active_advisor');
+        if (advisorJsonStr != null && advisorJsonStr.isNotEmpty) {
+          try {
+            _activeAdvisor = Advisor.fromJson(jsonDecode(advisorJsonStr));
+          } catch (_) {}
+        }
+        await touchSession();
+      } else {
+        await logout(notify: false);
+      }
+    } catch (e) {
+      debugPrint('Error restoring session: $e');
+    } finally {
+      _isRestoringSession = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('session_logged_in', _isLoggedIn);
+      await prefs.setInt('session_role', _role.index);
+      await prefs.setString('session_admin_name', _adminName);
+      await prefs.setString('session_admin_email', _adminEmail);
+      await prefs.setString('session_admin_username', _adminUsername);
+      await prefs.setString('session_selected_company_id', _selectedCompanyId);
+      await prefs.setString('session_company_name', _companyName);
+      await prefs.setInt('session_last_activity', DateTime.now().millisecondsSinceEpoch);
+
+      if (_activeAdvisor != null) {
+        await prefs.setString('session_active_advisor', jsonEncode(_activeAdvisor!.toJson()));
+      } else {
+        await prefs.remove('session_active_advisor');
+      }
+    } catch (e) {
+      debugPrint('Error saving session: $e');
+    }
+  }
+
+  Future<void> touchSession() async {
+    if (!_isLoggedIn) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('session_last_activity', DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
   void setSelectedCompanyId(String companyId) {
     _selectedCompanyId = companyId;
+    saveSession();
     notifyListeners();
   }
 
@@ -89,6 +166,7 @@ class AuthViewModel extends ChangeNotifier {
       _adminEmail = 'superadmin@rifamaster.com';
       _adminUsername = 'superadmin';
       _activeAdvisor = null;
+      await saveSession();
       notifyListeners();
       return true;
     }
@@ -119,6 +197,7 @@ class AuthViewModel extends ChangeNotifier {
         _selectedCompanyId = matchedCompany.id;
         _companyName = matchedCompany.name;
         _activeAdvisor = null;
+        await saveSession();
         notifyListeners();
         return true;
       }
@@ -192,6 +271,7 @@ class AuthViewModel extends ChangeNotifier {
           }
         } catch (_) {}
 
+        await saveSession();
         notifyListeners();
         return true;
       }
@@ -261,14 +341,34 @@ class AuthViewModel extends ChangeNotifier {
       if (phone != null) _adminUsers[0]['phone'] = phone;
     }
 
+    await saveSession();
     notifyListeners();
   }
 
-  void logout() {
+  Future<void> logout({bool notify = true}) async {
     _isLoggedIn = false;
     _activeAdvisor = null;
     _role = UserRole.admin;
     _loginErrorMessage = '';
-    notifyListeners();
+    _adminName = 'Administrador General';
+    _adminEmail = 'admin@rifamaster.com';
+    _adminUsername = 'admin';
+    _selectedCompanyId = 'comp-1';
+    _companyName = 'Empresa Principal';
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('session_logged_in');
+      await prefs.remove('session_role');
+      await prefs.remove('session_admin_name');
+      await prefs.remove('session_admin_email');
+      await prefs.remove('session_admin_username');
+      await prefs.remove('session_selected_company_id');
+      await prefs.remove('session_company_name');
+      await prefs.remove('session_active_advisor');
+      await prefs.remove('session_last_activity');
+    } catch (_) {}
+
+    if (notify) notifyListeners();
   }
 }

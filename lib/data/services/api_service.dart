@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/raffle.dart';
 import '../models/ticket.dart';
@@ -13,7 +14,7 @@ class ApiService {
       : baseUrl = baseUrl ??
             const String.fromEnvironment(
               'API_URL',
-              defaultValue: 'http://localhost:3000/api',
+              defaultValue: kIsWeb ? '/api' : 'http://localhost:8080/api',
             );
 
   bool _useLocalFallback = false;
