@@ -3,3 +3,4 @@
 # development mounts secrets/ as a volume.
 serviceAccountKey.json
 secrets/
+backups/

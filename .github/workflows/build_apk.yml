@@ -25,6 +25,31 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The signing key lives in the ANDROID_KEYSTORE_BASE64 secret (never in the public repo):
+      # every APK gets the same signature, so updates install over the previous version.
+      - name: Restore Release Keystore from secret
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            echo "Keystore restaurado desde el secreto de GitHub."
+          else
+            echo "::warning::Falta el secreto ANDROID_KEYSTORE_BASE64: se generará una firma temporal y el APK no se podrá instalar encima de versiones anteriores."
+          fi
+
+      - name: Ensure Release Keystore
+        run: |
+          if [ ! -f android/app/release.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore android/app/release.keystore \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias rifamasterkey \
+              -storepass rifamaster123 \
+              -keypass rifamaster123 \
+              -dname "CN=RifaMaster, OU=Development, O=RifaMaster, L=City, S=State, C=CO"
+          fi
+
       - name: Build APK
         run: flutter build apk --release --dart-define=API_URL=https://rifaapp-backend.onrender.com/api
 

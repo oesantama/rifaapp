@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
 import 'package:rifaapp/data/services/auth_http.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -20,6 +19,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
   Map<String, dynamic>? _backupStats;
   bool _isLoading = true;
   bool _isRestoring = false;
+  List<Map<String, dynamic>> _snapshots = [];
 
   @override
   void initState() {
@@ -36,10 +36,54 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
           _backupStats = jsonDecode(response.body);
         });
       }
+      final snaps = await authGet(Uri.parse('$_baseUrl/backup/snapshots')).timeout(const Duration(seconds: 10));
+      if (snaps.statusCode == 200 && mounted) {
+        setState(() => _snapshots = (jsonDecode(snaps.body) as List).cast<Map<String, dynamic>>());
+      }
     } catch (_) {
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _downloadSnapshot(Map<String, dynamic> snapshot) async {
+    try {
+      final id = Uri.encodeComponent(snapshot['id'].toString());
+      final response = await authGet(Uri.parse('$_baseUrl/backup/snapshots/$id/download')).timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) throw ApiException.fromResponse(response);
+      final date = DateTime.tryParse(snapshot['createdAt']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+      final filename = 'copia_automatica_${snapshot['reason']}_${DateFormat('yyyyMMdd_HHmmss').format(date)}.json';
+      saveAndDownloadBytes(filename, response.bodyBytes, mimeType: 'application/json');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('No se pudo descargar la copia: $e')),
+        );
+      }
+    }
+  }
+
+  Future<bool> _confirmRestore() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Restaurar esta copia?'),
+        content: const Text(
+          'Todos los datos actuales serán reemplazados por los de la copia seleccionada.\n\n'
+          'Antes de restaurar, el sistema guarda automáticamente una copia de los datos actuales, '
+          'que podrá descargar en "Copias automáticas" si necesita deshacer el cambio.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentAmber, foregroundColor: Colors.black87),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí, restaurar'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
   }
 
   Future<void> _downloadBackupFile() async {
@@ -76,6 +120,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
       if (bytes != null && bytes.isNotEmpty) {
         String jsonStr = utf8.decode(bytes);
         Map<String, dynamic> backupJson = jsonDecode(jsonStr);
+        if (!await _confirmRestore()) return;
 
         setState(() => _isRestoring = true);
 
@@ -83,7 +128,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
           Uri.parse('$_baseUrl/backup/restore'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(backupJson),
-        ).timeout(const Duration(seconds: 8));
+        ).timeout(const Duration(seconds: 60));
 
         if (response.statusCode == 200) {
           await _loadBackupInfo();
@@ -96,7 +141,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
             );
           }
         } else {
-          throw 'Respuesta del servidor: ${response.body}';
+          throw ApiException.fromResponse(response);
         }
       }
     } catch (e) {
@@ -143,6 +188,10 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildStatusHero(stats, isOnline, isMobile),
+                  if (_storageError != null) ...[
+                    const SizedBox(height: 12),
+                    _buildStorageWarning(_storageError!),
+                  ],
                   const SizedBox(height: 20),
                   _buildSectionTitle('Contenido de la base de datos'),
                   const SizedBox(height: 10),
@@ -166,6 +215,15 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
                     onTap: _isRestoring ? null : _restoreBackupFromFile,
                     busy: _isRestoring,
                   ),
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Copias automáticas'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Se crean solas cada día y antes de restaurar o limpiar la base. Descárguelas y restáurelas como cualquier copia.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSnapshotsList(),
                   const SizedBox(height: 20),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -376,6 +434,74 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String? get _storageError {
+    final storage = _backupStats?['storage'];
+    if (storage is Map && storage['lastError'] != null) return storage['lastError'].toString();
+    return null;
+  }
+
+  Widget _buildStorageWarning(String error) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.dangerRose.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.dangerRose.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: AppTheme.dangerRose),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Los últimos cambios aún no se han guardado en la nube. El sistema lo sigue intentando '
+              'automáticamente; mientras tanto descargue una copia de seguridad.\nDetalle: $error',
+              style: const TextStyle(fontSize: 12, height: 1.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const _snapshotLabels = {
+    'daily': 'Copia diaria',
+    'before_restore': 'Antes de restaurar',
+    'before_reset': 'Antes de limpiar la base',
+  };
+
+  Widget _buildSnapshotsList() {
+    if (_snapshots.isEmpty) {
+      return Text('Aún no hay copias automáticas.', style: TextStyle(fontSize: 12, color: Colors.grey[600]));
+    }
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          for (final snap in _snapshots.take(10))
+            ListTile(
+              dense: true,
+              leading: Icon(
+                snap['location'] == 'firestore' ? Icons.cloud_done_outlined : Icons.inventory_2_outlined,
+                color: AppTheme.primaryBlue,
+              ),
+              title: Text(_snapshotLabels[snap['reason']] ?? snap['reason'].toString(), style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                '${_formatDate(snap['createdAt']?.toString())} • ${_formatSize(snap['bytes'] as num?)}'
+                '${snap['location'] == 'firestore' ? ' • en la nube' : ''}',
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.download_rounded),
+                tooltip: 'Descargar',
+                onPressed: () => _downloadSnapshot(snap),
+              ),
+            ),
+        ],
       ),
     );
   }

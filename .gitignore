@@ -56,3 +56,5 @@ app.*.map.json
 
 # Local encryption key (back it up outside the repo)
 backend/secrets/
+# Automatic safety copies (contain all data)
+backend/backups/

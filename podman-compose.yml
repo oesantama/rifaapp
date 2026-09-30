@@ -17,4 +17,6 @@ services:
       - ./backend/data.json:/app/data.json:z
       # Encryption key for data.json: must persist, otherwise the data cannot be read again
       - ./backend/secrets:/app/secrets:z
+      # Automatic safety copies (daily and before restore/reset)
+      - ./backend/backups:/app/backups:z
     restart: always

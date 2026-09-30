@@ -63,34 +63,34 @@ const FIRESTORE_MANIFEST = 'database';
 const FIRESTORE_CHUNKED_FORMAT = 'rifamaster-chunked';
 const FIRESTORE_CHUNK_CHARS = 700000;
 
-async function readFirestoreDb(doc) {
+async function readFirestoreDb(doc, name = FIRESTORE_MANIFEST) {
   const manifest = doc.data();
   if (!manifest || manifest.format !== FIRESTORE_CHUNKED_FORMAT) return manifest; // legacy single document
   const col = firestore.collection(FIRESTORE_COLLECTION);
   const parts = [];
   for (let i = 0; i < manifest.chunks; i++) {
-    const chunk = await col.doc(`${FIRESTORE_MANIFEST}_${manifest.version}_${i}`).get();
+    const chunk = await col.doc(`${name}_${manifest.version}_${i}`).get();
     if (!chunk.exists) throw new Error(`Falta el fragmento ${i} de la versión ${manifest.version}`);
     parts.push(chunk.data().data);
   }
   return JSON.parse(parts.join(''));
 }
 
-async function writeFirestoreDb(stored) {
+async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
   const col = firestore.collection(FIRESTORE_COLLECTION);
   const json = JSON.stringify(stored);
   const version = String(Date.now());
   const chunks = [];
   for (let i = 0; i < json.length; i += FIRESTORE_CHUNK_CHARS) chunks.push(json.slice(i, i + FIRESTORE_CHUNK_CHARS));
 
-  const previous = await col.doc(FIRESTORE_MANIFEST).get();
+  const previous = await col.doc(name).get();
   const previousManifest = previous.exists ? previous.data() : null;
 
   // 1) new chunks, 2) switch the manifest (readers see either the old or the new version), 3) remove old chunks
   for (let i = 0; i < chunks.length; i++) {
-    await col.doc(`${FIRESTORE_MANIFEST}_${version}_${i}`).set({ data: chunks[i] });
+    await col.doc(`${name}_${version}_${i}`).set({ data: chunks[i] });
   }
-  await col.doc(FIRESTORE_MANIFEST).set({
+  await col.doc(name).set({
     format: FIRESTORE_CHUNKED_FORMAT,
     version,
     chunks: chunks.length,
@@ -99,12 +99,16 @@ async function writeFirestoreDb(stored) {
   });
   if (previousManifest && previousManifest.format === FIRESTORE_CHUNKED_FORMAT) {
     for (let i = 0; i < previousManifest.chunks; i++) {
-      await col.doc(`${FIRESTORE_MANIFEST}_${previousManifest.version}_${i}`).delete().catch(() => {});
+      await col.doc(`${name}_${previousManifest.version}_${i}`).delete().catch(() => {});
     }
   }
 }
 
-// Saves are serialized and coalesced: only the latest state is written after the current write finishes
+// Saves are serialized and coalesced: only the latest state is written. A failed write is
+// retried with increasing waits (the data stays in memory and in data.json meanwhile) and the
+// status is exposed in /api/backup so a failure is never silent.
+const storageStatus = { lastSavedAt: null, lastError: null, lastErrorAt: null, retrying: false };
+const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
 let firestoreWriting = false;
 let firestorePending = null;
 function queueFirestoreSave(stored) {
@@ -112,13 +116,27 @@ function queueFirestoreSave(stored) {
   if (firestoreWriting) return;
   firestoreWriting = true;
   (async () => {
+    let attempt = 0;
     while (firestorePending) {
       const next = firestorePending;
       firestorePending = null;
       try {
         await writeFirestoreDb(next);
+        if (attempt > 0) console.log(`✅ Datos guardados en Cloud Firestore tras ${attempt} reintento(s).`);
+        storageStatus.lastSavedAt = new Date().toISOString();
+        storageStatus.lastError = null;
+        storageStatus.retrying = false;
+        attempt = 0;
       } catch (err) {
-        console.error('Error respaldando datos en Cloud Firestore:', err.message);
+        storageStatus.lastError = err.message;
+        storageStatus.lastErrorAt = new Date().toISOString();
+        storageStatus.retrying = true;
+        const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        attempt++;
+        console.error(`❌ Error guardando en Cloud Firestore (reintento ${attempt} en ${delay / 1000}s):`, err.message);
+        await new Promise(r => setTimeout(r, delay));
+        // Retry this state unless a newer one arrived meanwhile
+        if (!firestorePending) firestorePending = next;
       }
     }
     firestoreWriting = false;
@@ -313,6 +331,81 @@ function decodeStoredDb(raw, source) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Automatic safety copies ("snapshots"): taken before a restore or reset and once a day.
+// Local: backups/ folder (last 30 files). Firestore: one copy per reason (snapshot_<reason>).
+// They use the same (encrypted) format as a downloaded backup, so they restore the same way.
+// ---------------------------------------------------------------------------
+const SNAPSHOT_DIR = process.env.SNAPSHOT_DIR || path.join(__dirname, 'backups');
+const MAX_LOCAL_SNAPSHOTS = 30;
+const SNAPSHOT_REASONS = ['before_restore', 'before_reset', 'daily'];
+const DAILY_SNAPSHOT_MS = 24 * 60 * 60 * 1000;
+let lastDailySnapshotAt = 0;
+
+function snapshotPayload() {
+  return security.hasMasterKey() ? security.encryptObject(db, security.BACKUP_FORMAT) : db;
+}
+
+function listLocalSnapshots() {
+  try {
+    return fs.readdirSync(SNAPSHOT_DIR)
+      .filter(f => /^snapshot_[a-z_]+_.+\.json$/.test(f))
+      .map(f => {
+        const st = fs.statSync(path.join(SNAPSHOT_DIR, f));
+        return { id: `local:${f}`, reason: f.replace(/^snapshot_/, '').replace(/_\d{4}-.*$/, ''), createdAt: st.mtime.toISOString(), bytes: st.size, location: 'local' };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } catch (_) {
+    return [];
+  }
+}
+
+/** Saves a copy of the current database. Throws if no copy could be written anywhere. */
+async function createSnapshot(reason) {
+  const payload = snapshotPayload();
+  const stamp = new Date().toISOString();
+  let written = 0;
+  const errors = [];
+
+  try {
+    fs.mkdirSync(SNAPSHOT_DIR, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(SNAPSHOT_DIR, `snapshot_${reason}_${stamp.replace(/[:.]/g, '-')}.json`), JSON.stringify(payload), { mode: 0o600 });
+    written++;
+    listLocalSnapshots().slice(MAX_LOCAL_SNAPSHOTS).forEach(s => {
+      try { fs.unlinkSync(path.join(SNAPSHOT_DIR, s.id.slice('local:'.length))); } catch (_) {}
+    });
+  } catch (err) {
+    errors.push(`local: ${err.message}`);
+  }
+
+  if (firestore) {
+    try {
+      await writeFirestoreDb(payload, `snapshot_${reason}`);
+      written++;
+    } catch (err) {
+      errors.push(`Firestore: ${err.message}`);
+    }
+  }
+
+  if (reason === 'daily') lastDailySnapshotAt = Date.now();
+  if (written === 0) throw new Error(`No se pudo crear la copia de seguridad automática (${errors.join('; ')})`);
+  console.log(`🗂️ Copia automática "${reason}" creada${errors.length ? ` (con advertencias: ${errors.join('; ')})` : ''}.`);
+}
+
+function maybeDailySnapshot() {
+  if (Date.now() - lastDailySnapshotAt < DAILY_SNAPSHOT_MS) return;
+  lastDailySnapshotAt = Date.now();
+  createSnapshot('daily').catch(err => console.error('⚠️', err.message));
+}
+
+/** Every known collection exists; unknown sections from backups are kept untouched. */
+function ensureDbShape(target) {
+  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts']) {
+    if (!Array.isArray(target[key])) target[key] = [];
+  }
+  return target;
+}
+
 function emptyDb() {
   return {
     companies: [],
@@ -365,68 +458,57 @@ async function loadDB() {
   initEncryptionKey();
   let loadedFromFirestore = false;
   if (firestore) {
-    try {
-      const doc = await firestore.collection('rifaapp').doc('database').get();
-      if (doc.exists) {
-        const docData = await readFirestoreDb(doc);
-        if (security.isEncryptedEnvelope(docData) && !security.hasMasterKey()) {
-          console.error('❌ CRÍTICO: Los datos en Firestore están cifrados pero no se encontró la llave de cifrado. Se preservan los datos sin sobrescribir.');
-          if (fs.existsSync(DB_FILE)) {
-            try {
-              const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-              if (!security.isEncryptedEnvelope(parsed) || security.hasMasterKey()) {
-                db = decodeStoredDb(parsed, 'data.json');
-                isDbLoaded = true;
-                console.log('✅ Datos cargados desde data.json local');
-                return;
-              }
-            } catch (err) {
-              console.error('No se pudo leer el archivo local:', err.message);
-            }
-          }
-          console.error('❌ Cancelando guardado para proteger los datos en Firestore.');
-          return;
-        }
-
-        db = decodeStoredDb(docData, 'Firestore');
-        loadedFromFirestore = true;
-        isDbLoaded = true;
-        console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
-      } else {
-        console.log('ℹ️ No hay datos previos en Firestore, buscando en almacenamiento local...');
+    // Production source of truth. If it cannot be read the server must NOT continue with an
+    // older local copy: the next save would overwrite the real data in Firestore.
+    let doc = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        doc = await firestore.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_MANIFEST).get();
+        break;
+      } catch (e) {
+        console.error(`Error leyendo Firestore (intento ${attempt}/5):`, e.message);
+        if (attempt === 5) fatal('No se pudo leer la base de datos de Firestore.');
+        await new Promise(r => setTimeout(r, attempt * 3000));
       }
-    } catch (e) {
-      console.error('Error cargando datos desde Firestore:', e.message);
+    }
+    if (doc.exists) {
+      let docData;
+      try {
+        docData = await readFirestoreDb(doc);
+      } catch (e) {
+        fatal(`Los datos de Firestore están incompletos o dañados (${e.message}).`);
+      }
+      // decodeStoredDb stops the server if the data is encrypted and the key is missing or wrong
+      db = decodeStoredDb(docData, 'Firestore');
+      loadedFromFirestore = true;
+      isDbLoaded = true;
+      console.log('✅ Datos cargados exitosamente desde Google Cloud Firestore');
+    } else {
+      console.log('ℹ️ No hay datos previos en Firestore, buscando en almacenamiento local...');
     }
   }
 
-  if (!loadedFromFirestore) {
-    if (fs.existsSync(DB_FILE)) {
-      let parsed;
-      try {
-        parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-        db = decodeStoredDb(parsed, 'data.json');
-        isDbLoaded = true;
-        console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
-      } catch (err) {
-        console.error(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
-      }
+  if (!loadedFromFirestore && fs.existsSync(DB_FILE)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    } catch (err) {
+      // Never replace a file that exists but cannot be read
+      fatal(`El archivo ${DB_FILE} no se pudo leer (${err.message}).`);
     }
+    db = decodeStoredDb(parsed, 'data.json');
+    isDbLoaded = true;
+    console.log(`✅ Datos cargados exitosamente desde data.json local${security.isEncryptedEnvelope(parsed) ? ' (cifrado)' : ''}`);
   }
 
   if (!isDbLoaded) {
+    // Only when there is truly no data anywhere (first installation)
     db = emptyDb();
     isDbLoaded = true;
   }
 
-  // Ensure DB arrays exist
-  if (!db.companies) db.companies = [];
-  if (!db.raffles) db.raffles = [];
-  if (!db.tickets) db.tickets = [];
-  if (!db.advisors) db.advisors = [];
-  if (!db.winners) db.winners = [];
-  if (!db.cashTransactions) db.cashTransactions = [];
-  if (!db.logs) db.logs = [];
+  // Ensure DB arrays exist (unknown sections are kept as they are)
+  ensureDbShape(db);
 
   db.raffles.forEach(r => {
     if (!r.companyId) r.companyId = 'comp-1';
@@ -436,9 +518,8 @@ async function loadDB() {
     if (!a.companyId) a.companyId = 'comp-1';
   });
 
-  if (!db.tickets || db.tickets.length === 0) {
-    generateInitialTickets();
-  }
+  // Note: demo tickets are never generated on startup: it would crash without raffles and
+  // would inject fake sales into a real raffle that has no tickets yet.
 
   if (migrateCredentials()) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
@@ -463,6 +544,7 @@ function saveDB() {
   if (firestore) {
     queueFirestoreSave(stored);
   }
+  maybeDailySnapshot();
 }
 
 // API Routes
@@ -873,10 +955,56 @@ app.get('/api/backup', superAdminOnly, (req, res) => {
       advisorsCount: (db.advisors || []).length,
       winnersCount: (db.winners || []).length,
       auditLogsCount: (db.auditLogs || []).length,
+      cashTransactionsCount: (db.cashTransactions || []).length,
       ...stats
     },
-    encrypted: security.hasMasterKey()
+    encrypted: security.hasMasterKey(),
+    dataSource: firestore ? 'firestore' : 'local',
+    storage: storageStatus
   });
+});
+
+// Automatic safety copies: list and download (downloaded files restore like any backup)
+app.get('/api/backup/snapshots', superAdminOnly, async (req, res) => {
+  const list = listLocalSnapshots();
+  if (firestore) {
+    for (const reason of SNAPSHOT_REASONS) {
+      try {
+        const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(`snapshot_${reason}`).get();
+        if (doc.exists) {
+          const m = doc.data();
+          list.push({ id: `firestore:${reason}`, reason, createdAt: m.updatedAt, bytes: m.bytes, location: 'firestore' });
+        }
+      } catch (_) {}
+    }
+  }
+  list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  res.json(list);
+});
+
+app.get('/api/backup/snapshots/:id/download', superAdminOnly, async (req, res) => {
+  const id = String(req.params.id || '');
+  let payload = null;
+  try {
+    if (id.startsWith('local:')) {
+      const file = path.basename(id.slice('local:'.length));
+      if (!/^snapshot_[a-z_]+_.+\.json$/.test(file)) return res.status(400).json({ error: 'Copia no válida.' });
+      payload = fs.readFileSync(path.join(SNAPSHOT_DIR, file), 'utf8');
+    } else if (id.startsWith('firestore:') && firestore) {
+      const reason = id.slice('firestore:'.length);
+      if (!SNAPSHOT_REASONS.includes(reason)) return res.status(400).json({ error: 'Copia no válida.' });
+      const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(`snapshot_${reason}`).get();
+      if (!doc.exists) return res.status(404).json({ error: 'Copia no encontrada.' });
+      payload = JSON.stringify(await readFirestoreDb(doc, `snapshot_${reason}`));
+    } else {
+      return res.status(404).json({ error: 'Copia no encontrada.' });
+    }
+  } catch (err) {
+    return res.status(404).json({ error: `No se pudo leer la copia: ${err.message}` });
+  }
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename=copia_automatica_${Date.now()}.json`);
+  res.send(payload);
 });
 
 app.get('/api/backup/download', superAdminOnly, (req, res) => {
@@ -887,44 +1015,60 @@ app.get('/api/backup/download', superAdminOnly, (req, res) => {
   res.send(JSON.stringify(payload));
 });
 
-app.post('/api/backup/restore', superAdminOnly, (req, res) => {
-  try {
-    let backupData = req.body;
-    if (security.isEncryptedEnvelope(backupData)) {
-      if (!security.hasMasterKey()) {
-        return res.status(400).json({ error: 'La copia está cifrada y este servidor no tiene la llave de cifrado configurada.' });
-      }
-      try {
-        backupData = security.decryptObject(backupData);
-      } catch (_) {
-        return res.status(400).json({ error: 'No se pudo descifrar la copia: fue creada con otra llave de cifrado o está dañada.' });
-      }
-    }
-    if (!backupData || typeof backupData !== 'object') {
-      return res.status(400).json({ error: 'Formato de copia de seguridad inválido' });
-    }
+const KNOWN_SECTIONS = ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts'];
 
-    db = {
-      auditLogs: backupData.auditLogs || [],
-      companies: backupData.companies || [],
-      raffles: backupData.raffles || [],
-      advisors: backupData.advisors || [],
-      tickets: backupData.tickets || [],
-      winners: backupData.winners || [],
-      commissionPayouts: backupData.commissionPayouts || [],
-      // Restoring an older copy must never lock the current SuperAdmin out
-      superAdmin: db.superAdmin
-    };
+/** Decodes an uploaded or stored backup; returns { data } or { error } without touching the database. */
+function decodeBackup(backupData) {
+  if (security.isEncryptedEnvelope(backupData)) {
+    if (!security.hasMasterKey()) {
+      return { error: 'La copia está cifrada y este servidor no tiene la llave de cifrado configurada.' };
+    }
+    try {
+      backupData = security.decryptObject(backupData);
+    } catch (_) {
+      return { error: 'No se pudo descifrar la copia: fue creada con otra llave de cifrado o está dañada.' };
+    }
+  }
+  if (!backupData || typeof backupData !== 'object' || Array.isArray(backupData)) {
+    return { error: 'Formato de copia de seguridad inválido.' };
+  }
+  // A wrong JSON file must never replace the database with nothing
+  const present = KNOWN_SECTIONS.filter(k => Array.isArray(backupData[k]));
+  if (present.length < 3) {
+    return { error: 'El archivo no parece una copia de seguridad de Rifa Master (faltan secciones de datos). No se modificó nada.' };
+  }
+  return { data: backupData };
+}
+
+app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
+  const { data, error } = decodeBackup(req.body);
+  if (error) return res.status(400).json({ error });
+
+  try {
+    // Copy of the current data first: if this fails, nothing is restored
+    await createSnapshot('before_restore');
+  } catch (err) {
+    return res.status(500).json({ error: `${err.message}. Por seguridad no se restauró la copia.` });
+  }
+
+  try {
+    // Every section of the backup is kept (including cash transactions, logs and any future data);
+    // only the SuperAdmin account stays the current one so nobody is locked out.
+    const { superAdmin: _ignored, ...sections } = data;
+    db = ensureDbShape({ ...sections, superAdmin: db.superAdmin });
 
     migrateCredentials();
     saveDB();
     res.json({
-      message: 'Base de datos restaurada exitosamente.',
+      message: 'Base de datos restaurada exitosamente. Se guardó una copia automática de los datos anteriores.',
       timestamp: new Date().toISOString(),
       stats: {
         companiesCount: db.companies.length,
         rafflesCount: db.raffles.length,
-        ticketsCount: db.tickets.length
+        ticketsCount: db.tickets.length,
+        advisorsCount: db.advisors.length,
+        winnersCount: db.winners.length,
+        cashTransactionsCount: db.cashTransactions.length
       }
     });
   } catch (err) {
@@ -932,7 +1076,12 @@ app.post('/api/backup/restore', superAdminOnly, (req, res) => {
   }
 });
 
-app.post('/api/backup/reset', superAdminOnly, (req, res) => {
+app.post('/api/backup/reset', superAdminOnly, async (req, res) => {
+  try {
+    await createSnapshot('before_reset');
+  } catch (err) {
+    return res.status(500).json({ error: `${err.message}. Por seguridad no se limpió la base.` });
+  }
   const currentSuperAdmin = db.superAdmin;
   db = {
     companies: [],
@@ -948,7 +1097,7 @@ app.post('/api/backup/reset', superAdminOnly, (req, res) => {
   };
   saveDB();
   res.json({
-    message: 'Base de datos limpiada por completo. Sólo SuperAdmin activo.',
+    message: 'Base de datos limpiada por completo. Sólo SuperAdmin activo. Se guardó una copia automática antes de limpiar.',
     timestamp: new Date().toISOString(),
     stats: { companiesCount: 0, rafflesCount: 0, ticketsCount: 0, advisorsCount: 0 }
   });
@@ -1792,7 +1941,7 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
 });
 
 async function startServer() {
-  await loadDB();
+  await loadDB(); // the first save after loading also takes the daily safety copy
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
 
