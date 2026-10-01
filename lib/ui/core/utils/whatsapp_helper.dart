@@ -21,26 +21,25 @@ class WhatsAppHelper {
   }
 
   /// Opens WhatsApp with a pre-filled message.
-  ///
-  /// The link is opened right away, without asking first whether it can be opened:
-  /// - iPhone/iPad Safari only allows opening it during the tap itself (any wait before blocks it).
-  /// - Android 11+ answers "no" to that question unless the app declares the links it opens.
+  /// If phone is empty, opens WhatsApp contact selector with the message pre-filled.
   static Future<bool> sendWhatsAppMessage({
     required String phone,
     required String message,
   }) async {
     final cleanPhone = cleanPhoneNumber(phone);
-    if (cleanPhone.isEmpty) return false;
-
     final encodedMsg = Uri.encodeComponent(message);
-    final waUrl = Uri.parse('https://wa.me/$cleanPhone?text=$encodedMsg');
+    final waUrl = Uri.parse(cleanPhone.isNotEmpty
+        ? 'https://wa.me/$cleanPhone?text=$encodedMsg'
+        : 'https://wa.me/?text=$encodedMsg');
 
     try {
       if (await launchUrl(waUrl, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank')) return true;
     } catch (_) {}
     try {
-      // Direct deep link to the installed app
-      return await launchUrl(Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encodedMsg'), mode: LaunchMode.externalApplication);
+      final deepLink = cleanPhone.isNotEmpty
+          ? 'whatsapp://send?phone=$cleanPhone&text=$encodedMsg'
+          : 'whatsapp://send?text=$encodedMsg';
+      return await launchUrl(Uri.parse(deepLink), mode: LaunchMode.externalApplication);
     } catch (_) {}
     return false;
   }
@@ -90,7 +89,7 @@ class WhatsAppHelper {
             '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
         if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');
       }
-      if (isDebt && raffle.transferAccounts.isNotEmpty) {
+      if (raffle.transferAccounts.isNotEmpty) {
         b.writeln('----------------------------------------');
         b.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
         for (final acc in raffle.transferAccounts) {
@@ -137,7 +136,7 @@ class WhatsAppHelper {
     }
 
     buffer.writeln('📊 *Estado:* $statusLabel');
-    if (isDebt && raffle != null && raffle.transferAccounts.isNotEmpty) {
+    if (raffle != null && raffle.transferAccounts.isNotEmpty) {
       buffer.writeln('----------------------------------------');
       buffer.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
       for (final acc in raffle.transferAccounts) {

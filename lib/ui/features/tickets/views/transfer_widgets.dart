@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'package:rifaapp/ui/features/banks/view_models/bank_view_model.dart';
 
 /// Colombia has no daylight saving time: always UTC-5. Wall-clock times are handled as
@@ -136,14 +138,94 @@ class TransferAccountsEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void copySingleAccount(TransferAccount acc) {
+      final text = '🏦 *${acc.bank}*\n'
+          '• ${[acc.accountType, acc.accountNumber, if (acc.key.isNotEmpty) "Llave: ${acc.key}", acc.holder].where((p) => p.isNotEmpty).join(" • ")}';
+      Clipboard.setData(ClipboardData(text: text));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Cuenta de ${acc.bank} copiada al portapapeles.'),
+        ),
+      );
+    }
+
+    void shareSingleAccountWhatsApp(TransferAccount acc) {
+      final text = '🏦 *CUENTA PARA TRANSFERENCIA*\n'
+          '----------------------------------------\n'
+          '• *Banco:* ${acc.bank}\n'
+          '${acc.accountType.isNotEmpty ? "• *Tipo:* ${acc.accountType}\n" : ""}'
+          '${acc.accountNumber.isNotEmpty ? "• *Número:* ${acc.accountNumber}\n" : ""}'
+          '${acc.key.isNotEmpty ? "• *Llave:* ${acc.key}\n" : ""}'
+          '${acc.holder.isNotEmpty ? "• *Titular:* ${acc.holder}\n" : ""}'
+          '----------------------------------------';
+      Clipboard.setData(ClipboardData(text: text));
+      WhatsAppHelper.sendWhatsAppMessage(phone: '', message: text);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Texto de cuenta copiado y listo para enviar por WhatsApp.'),
+        ),
+      );
+    }
+
+    void copyAllAccounts() {
+      if (accounts.isEmpty) return;
+      final buffer = StringBuffer();
+      buffer.writeln('🏦 *CUENTAS DE TRANSFERENCIA*');
+      buffer.writeln('----------------------------------------');
+      for (final a in accounts) {
+        buffer.writeln('• ${a.label}');
+      }
+      Clipboard.setData(ClipboardData(text: buffer.toString()));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Cuentas de transferencia copiadas al portapapeles.'),
+        ),
+      );
+    }
+
+    void shareAllAccountsWhatsApp() {
+      if (accounts.isEmpty) return;
+      final buffer = StringBuffer();
+      buffer.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO*');
+      buffer.writeln('----------------------------------------');
+      for (final a in accounts) {
+        buffer.writeln('• ${a.label}');
+      }
+      buffer.writeln('----------------------------------------');
+      final text = buffer.toString();
+      Clipboard.setData(ClipboardData(text: text));
+      WhatsAppHelper.sendWhatsAppMessage(phone: '', message: text);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Cuentas copiadas y listos para enviar por WhatsApp.'),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.account_balance, color: Colors.deepPurple, size: 22),
-            SizedBox(width: 8),
-            Expanded(child: Text('Cuentas para transferencias', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+            const Icon(Icons.account_balance, color: Colors.deepPurple, size: 22),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Cuentas para transferencias', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+            if (accounts.isNotEmpty) ...[
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, size: 18, color: AppTheme.primaryBlue),
+                tooltip: 'Copiar todas las cuentas',
+                onPressed: copyAllAccounts,
+              ),
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline, size: 18, color: Colors.green),
+                tooltip: 'Enviar todas por WhatsApp',
+                onPressed: shareAllAccountsWhatsApp,
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 4),
@@ -170,6 +252,16 @@ class TransferAccountsEditor extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 18, color: AppTheme.primaryBlue),
+                    tooltip: 'Copiar esta cuenta',
+                    onPressed: () => copySingleAccount(accounts[i]),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18, color: Colors.green),
+                    tooltip: 'Enviar por WhatsApp',
+                    onPressed: () => shareSingleAccountWhatsApp(accounts[i]),
+                  ),
                   IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: 'Editar', onPressed: () => _edit(context, i)),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
