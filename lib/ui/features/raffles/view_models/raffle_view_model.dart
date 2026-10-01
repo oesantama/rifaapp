@@ -67,6 +67,17 @@ class RaffleViewModel extends ChangeNotifier {
     }
   }
 
+  void updateRaffleInList(Raffle updated) {
+    int idx = _raffles.indexWhere((r) => r.id == updated.id);
+    if (idx != -1) {
+      _raffles[idx] = updated;
+    }
+    if (_selectedRaffle?.id == updated.id) {
+      _selectedRaffle = updated;
+    }
+    notifyListeners();
+  }
+
   Future<bool> updateRaffle(String raffleId, Map<String, dynamic> data) async {
     _isLoading = true;
     _errorMessage = null;

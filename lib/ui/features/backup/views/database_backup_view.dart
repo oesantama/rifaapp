@@ -19,6 +19,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
   Map<String, dynamic>? _backupStats;
   bool _isLoading = true;
   bool _isRestoring = false;
+  bool _isCreatingDriveBackup = false;
   List<Map<String, dynamic>> _snapshots = [];
 
   @override
@@ -43,6 +44,31 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _createDriveBackupNow() async {
+    setState(() => _isCreatingDriveBackup = true);
+    try {
+      final response = await authPost(Uri.parse('$_baseUrl/backup/snapshot-now')).timeout(const Duration(seconds: 45));
+      if (response.statusCode != 200) throw ApiException.fromResponse(response);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppTheme.secondaryEmerald,
+            content: Text('✅ Copia de seguridad guardada exitosamente en Google Drive y localmente.'),
+          ),
+        );
+        _loadBackupInfo();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error al crear la copia: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCreatingDriveBackup = false);
     }
   }
 
@@ -208,6 +234,15 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
                   ),
                   const SizedBox(height: 10),
                   _buildActionTile(
+                    icon: Icons.cloud_upload_rounded,
+                    color: AppTheme.secondaryEmerald,
+                    title: 'Crear copia en Google Drive ahora',
+                    subtitle: 'Guarda una copia de seguridad inmediatamente en la carpeta Backups_BaseDatos en Drive.',
+                    onTap: _isCreatingDriveBackup ? null : _createDriveBackupNow,
+                    busy: _isCreatingDriveBackup,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildActionTile(
                     icon: Icons.settings_backup_restore_rounded,
                     color: AppTheme.accentAmber,
                     title: 'Restaurar desde archivo',
@@ -219,7 +254,7 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
                   _buildSectionTitle('Copias automáticas'),
                   const SizedBox(height: 4),
                   Text(
-                    'Se crean solas cada día y antes de restaurar o limpiar la base. Descárguelas y restáurelas como cualquier copia.',
+                    'Se crean automáticamente 2 veces al día (cada 12 horas) en Google Drive y antes de restaurar o limpiar la base. Descárguelas y restáurelas como cualquier copia.',
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 10),
@@ -471,9 +506,23 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
 
   static const _snapshotLabels = {
     'daily': 'Copia diaria',
+    'programado_12h': 'Copia programada (12h)',
+    'manual': 'Copia manual (Drive)',
     'before_restore': 'Antes de restaurar',
     'before_reset': 'Antes de limpiar la base',
   };
+
+  IconData _snapshotIcon(String? location) {
+    if (location == 'drive') return Icons.cloud_done_rounded;
+    if (location == 'firestore') return Icons.cloud_done_outlined;
+    return Icons.inventory_2_outlined;
+  }
+
+  String _locationText(String? location) {
+    if (location == 'drive') return ' • en Google Drive';
+    if (location == 'firestore') return ' • en la nube';
+    return '';
+  }
 
   Widget _buildSnapshotsList() {
     if (_snapshots.isEmpty) {
@@ -487,13 +536,13 @@ class _DatabaseBackupViewState extends State<DatabaseBackupView> {
             ListTile(
               dense: true,
               leading: Icon(
-                snap['location'] == 'firestore' ? Icons.cloud_done_outlined : Icons.inventory_2_outlined,
-                color: AppTheme.primaryBlue,
+                _snapshotIcon(snap['location']?.toString()),
+                color: snap['location'] == 'drive' ? AppTheme.secondaryEmerald : AppTheme.primaryBlue,
               ),
               title: Text(_snapshotLabels[snap['reason']] ?? snap['reason'].toString(), style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
                 '${_formatDate(snap['createdAt']?.toString())} • ${_formatSize(snap['bytes'] as num?)}'
-                '${snap['location'] == 'firestore' ? ' • en la nube' : ''}',
+                '${_locationText(snap['location']?.toString())}',
               ),
               trailing: IconButton(
                 icon: const Icon(Icons.download_rounded),

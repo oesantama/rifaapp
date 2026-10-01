@@ -49,6 +49,9 @@ class RaffleRepository {
 
   Future<void> dismissRangeRequest(String advisorId) => _apiService.dismissRangeRequest(advisorId);
 
+  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) =>
+      _apiService.checkTransferApproval(raffleId, approvalNumber);
+
   Future<List<WinnerRecord>> fetchWinners() => _apiService.getWinners();
 
   Future<WinnerRecord> registerWinner(Map<String, dynamic> data) => _apiService.registerWinner(data);

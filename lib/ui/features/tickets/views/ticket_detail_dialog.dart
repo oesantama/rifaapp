@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
+import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
 import 'package:rifaapp/ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
@@ -14,7 +15,11 @@ import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'ticket_print_dialog.dart';
+import 'transfer_widgets.dart';
 
 class TicketDetailDialog extends StatefulWidget {
   final Ticket ticket;
@@ -39,6 +44,20 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   static String _newRequestId() => '${DateTime.now().microsecondsSinceEpoch}-${math.Random().nextInt(1 << 31)}';
   late TextEditingController _amountController;
   late TextEditingController _noteController;
+  late TextEditingController _cuentaDestinoController;
+  String _metodoPago = 'efectivo';
+  String? _soporteBase64;
+  bool _uploadingSoporte = false;
+  // Bank transfer details
+  String? _transferAccountId;
+  DateTime? _transferDate; // Colombian wall-clock time
+  final _transferDateController = TextEditingController();
+  final _originBankController = TextEditingController();
+  final _approvalController = TextEditingController();
+  final _approvalFocus = FocusNode();
+  String? _approvalCheckedKey; // approval number already checked (or confirmed as repeated)
+  bool _approvalDuplicateConfirmed = false;
+  bool _checkingApproval = false;
   String? _selectedSellerId;
   String? _selectedSellerName;
 
@@ -51,6 +70,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     _saleChannel = widget.ticket.saleChannel.isNotEmpty ? widget.ticket.saleChannel : null;
     _amountController = TextEditingController(text: '0');
     _noteController = TextEditingController();
+    _cuentaDestinoController = TextEditingController();
+    // Leaving the approval field checks whether that number was already used
+    _approvalFocus.addListener(() {
+      if (!_approvalFocus.hasFocus) _checkApproval();
+    });
     _selectedSellerId = widget.ticket.advisorId.isNotEmpty ? widget.ticket.advisorId : null;
     _selectedSellerName = widget.ticket.advisorName;
   }
@@ -62,7 +86,226 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     _buyerDocumentController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _cuentaDestinoController.dispose();
+    _transferDateController.dispose();
+    _originBankController.dispose();
+    _approvalController.dispose();
+    _approvalFocus.dispose();
     super.dispose();
+  }
+
+  List<TransferAccount> get _transferAccounts =>
+      context.read<RaffleViewModel>().raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull?.transferAccounts ?? const [];
+
+  Future<void> _pickTransferDate() async {
+    final today = ColombiaTime.today();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _transferDate ?? today,
+      firstDate: ColombiaTime.oldestTransferDay(),
+      lastDate: today,
+      helpText: 'Fecha de la transferencia',
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_transferDate ?? ColombiaTime.now()),
+      helpText: 'Hora de la transferencia (hora de Colombia)',
+    );
+    if (time == null || !mounted) return;
+    final picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    setState(() {
+      _transferDate = picked;
+      _transferDateController.text = DateFormat('dd/MM/yyyy hh:mm a').format(picked);
+    });
+  }
+
+  String? _validateTransferDate(String? _) {
+    final date = _transferDate;
+    if (date == null) return 'Indique la fecha y hora de la transferencia';
+    if (date.isAfter(ColombiaTime.now())) return 'No puede ser posterior a la hora actual (Colombia)';
+    if (date.isBefore(ColombiaTime.oldestTransferDay())) {
+      return 'No puede tener más de ${ColombiaTime.maxTransferAgeDays} días de antigüedad';
+    }
+    return null;
+  }
+
+  /// Looks for the approval number in other payments. Returns true when it is free or the user
+  /// chose to continue anyway; false when they cancel to correct it or the check could not run.
+  Future<bool> _checkApproval() async {
+    final text = _approvalController.text.trim();
+    final key = approvalKey(text);
+    if (key.length < 3) return false;
+    if (key == _approvalCheckedKey) return true;
+    if (_checkingApproval) return false;
+    setState(() => _checkingApproval = true);
+    try {
+      final matches = await context.read<TicketViewModel>().checkTransferApproval(widget.ticket.raffleId, text);
+      if (!mounted) return false;
+      setState(() => _checkingApproval = false);
+      if (matches.isEmpty) {
+        setState(() {
+          _approvalCheckedKey = key;
+          _approvalDuplicateConfirmed = false;
+        });
+        return true;
+      }
+      final proceed = await showApprovalMatchesDialog(context, text, matches);
+      if (!mounted) return false;
+      setState(() {
+        _approvalCheckedKey = proceed ? key : null;
+        _approvalDuplicateConfirmed = proceed;
+      });
+      if (!proceed) {
+        // Back to the field so the user can correct the number
+        _approvalController.selection = TextSelection(baseOffset: 0, extentOffset: _approvalController.text.length);
+        _approvalFocus.requestFocus();
+      }
+      return proceed;
+    } catch (e) {
+      if (mounted) {
+        setState(() => _checkingApproval = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('No se pudo verificar el número de aprobación: $e')),
+        );
+      }
+      return false;
+    }
+  }
+
+  Widget _transferAccountField() {
+    final accounts = _transferAccounts;
+    if (accounts.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Esta rifa no tiene cuentas configuradas. El administrador puede agregarlas en la configuración de la rifa '
+            '(Cuentas para transferencias).',
+            style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _cuentaDestinoController,
+            decoration: const InputDecoration(
+              labelText: 'Cuenta de destino (opcional)',
+              hintText: 'Ej. Nequi 3001234567',
+              prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      );
+    }
+    final selected =
+        accounts.any((a) => a.id == _transferAccountId) ? _transferAccountId : (accounts.length == 1 ? accounts.first.id : null);
+    _transferAccountId = selected;
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: selected,
+      decoration: const InputDecoration(
+        labelText: 'Cuenta destino *',
+        helperText: 'Cuenta de la rifa a la que llegó el dinero',
+        prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        for (final a in accounts) DropdownMenuItem(value: a.id, child: Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ],
+      onChanged: (v) => setState(() => _transferAccountId = v),
+      validator: (v) => v == null ? 'Seleccione la cuenta' : null,
+    );
+  }
+
+  void _showReceiptDialog(BuildContext context, Abono abono) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Soporte de Transferencia - \$${NumberFormat.currency(symbol: '', decimalDigits: 0).format(abono.amount)}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (abono.cuentaDestino != null && abono.cuentaDestino!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Cuenta/Destino: ${abono.cuentaDestino}',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                ),
+              if (abono.soporteUrl != null || abono.soporteWebViewUrl != null)
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      abono.soporteUrl ?? abono.soporteWebViewUrl!,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (ctx, child, progress) {
+                        if (progress == null) return child;
+                        return const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      },
+                      errorBuilder: (ctx, err, stack) {
+                        return Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                              const SizedBox(height: 8),
+                              const Text('No se pudo cargar la imagen del soporte desde Google Drive.'),
+                              if (abono.soporteWebViewUrl != null)
+                                TextButton(
+                                  onPressed: () => launchUrl(Uri.parse(abono.soporteWebViewUrl!), mode: LaunchMode.externalApplication),
+                                  child: const Text('Abrir en Google Drive'),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          if (abono.soporteWebViewUrl != null || abono.soporteUrl != null)
+            TextButton.icon(
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('Abrir Enlace Web'),
+              onPressed: () {
+                final url = abono.soporteWebViewUrl ?? abono.soporteUrl;
+                if (url != null) launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+              },
+            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _copyReceiptToClipboard(BuildContext context) async {
@@ -665,6 +908,134 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         },
                       ),
                       const SizedBox(height: 10),
+                      const Text('Método de Pago:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      SegmentedButton<String>(
+                        showSelectedIcon: false, // keeps "Transferencia" on one line on phones
+                        segments: const [
+                          ButtonSegment<String>(
+                            value: 'efectivo',
+                            label: Text('Efectivo'),
+                            icon: Icon(Icons.payments_outlined),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'transferencia',
+                            label: Text('Transferencia'),
+                            icon: Icon(Icons.account_balance_outlined),
+                          ),
+                        ],
+                        selected: {_metodoPago},
+                        onSelectionChanged: (val) {
+                          setState(() {
+                            _metodoPago = val.first;
+                          });
+                        },
+                      ),
+                      if (_metodoPago == 'transferencia' && amt <= 0) ...[
+                        const SizedBox(height: 8),
+                        Text('Ingrese el monto para registrar los datos de la transferencia.',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      ],
+                      if (_metodoPago == 'transferencia' && amt > 0) ...[
+                        const SizedBox(height: 12),
+                        _transferAccountField(),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _transferDateController,
+                          readOnly: true,
+                          onTap: _pickTransferDate,
+                          decoration: const InputDecoration(
+                            labelText: 'Fecha y hora *',
+                            helperText: 'De la transferencia, hora de Colombia (máximo 15 días atrás)',
+                            helperMaxLines: 2,
+                            prefixIcon: Icon(Icons.event),
+                            suffixIcon: Icon(Icons.edit_calendar_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateTransferDate,
+                        ),
+                        const SizedBox(height: 10),
+                        BankField(
+                          controller: _originBankController,
+                          label: 'Banco origen *',
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Indique el banco' : null,
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _approvalController,
+                          focusNode: _approvalFocus,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            labelText: 'N° de aprobación *',
+                            helperMaxLines: 2,
+                            prefixIcon: const Icon(Icons.confirmation_number_outlined),
+                            border: const OutlineInputBorder(),
+                            helperText: _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                ? 'Número repetido: usted decidió continuar'
+                                : 'Se verifica que no esté registrado en otro pago',
+                            helperStyle: TextStyle(
+                                color: _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                    ? Colors.orange.shade900
+                                    : null),
+                            suffixIcon: _checkingApproval
+                                ? const Padding(
+                                    padding: EdgeInsets.all(14),
+                                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                  )
+                                : _approvalCheckedKey != null && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                    ? (_approvalDuplicateConfirmed
+                                        ? Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800)
+                                        : const Icon(Icons.verified, color: AppTheme.secondaryEmerald))
+                                    : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          onFieldSubmitted: (_) => _checkApproval(),
+                          validator: (v) => approvalKey(v ?? '').length < 3 ? 'Ingrese el número de aprobación' : null,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _uploadingSoporte
+                                    ? null
+                                    : () async {
+                                        setState(() => _uploadingSoporte = true);
+                                        try {
+                                          final picked = await pickImageBase64();
+                                          if (picked != null) {
+                                            final compressed = compressImageDataUri(picked, maxSide: 1600);
+                                            setState(() {
+                                              _soporteBase64 = compressed;
+                                            });
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(backgroundColor: Colors.red, content: Text('Error al seleccionar la imagen: $e')),
+                                            );
+                                          }
+                                        } finally {
+                                          if (mounted) setState(() => _uploadingSoporte = false);
+                                        }
+                                      },
+                                icon: _uploadingSoporte
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.attach_file),
+                                label: Text(
+                                    _soporteBase64 != null ? '✓ Soporte adjunto (Cambiar)' : 'Adjuntar soporte de pago (Google Drive)'),
+                              ),
+                            ),
+                            if (_soporteBase64 != null)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                tooltip: 'Quitar soporte adjunto',
+                                onPressed: () => setState(() => _soporteBase64 = null),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
                     ] else ...[
                       Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -718,6 +1089,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                     return;
                                   }
 
+                                  // Transfers: the approval number must be checked (or confirmed as repeated) first
+                                  final isTransfer = _metodoPago == 'transferencia' && amt > 0;
+                                  if (isTransfer && !await _checkApproval()) return;
+                                  if (!context.mounted) return;
+
                                   final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
                                   setState(() => _saving = true);
                                   bool success = await ticketVM.addAbono(
@@ -734,6 +1110,16 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                       'note': _noteController.text.trim().isNotEmpty
                                           ? _noteController.text.trim()
                                           : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
+                                      'metodoPago': isTransfer ? 'transferencia' : 'efectivo',
+                                      if (isTransfer) ...{
+                                        'transferDate': ColombiaTime.toIsoUtc(_transferDate!),
+                                        'approvalNumber': _approvalController.text.trim(),
+                                        'originBank': _originBankController.text.trim(),
+                                        if (_transferAccountId != null) 'transferAccountId': _transferAccountId,
+                                        'cuentaDestino': _cuentaDestinoController.text.trim(),
+                                        'allowDuplicateApproval': _approvalDuplicateConfirmed,
+                                        if (_soporteBase64 != null) 'soporteImageBase64': _soporteBase64,
+                                      },
                                     },
                                     raffleId: widget.ticket.raffleId,
                                   );
@@ -786,20 +1172,73 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   itemCount: widget.ticket.abonos.length,
                   itemBuilder: (context, i) {
                     final ab = widget.ticket.abonos[i];
+                    final isTransfer = ab.metodoPago == 'transferencia';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 6),
                       child: ListTile(
                         dense: true,
-                        leading: const Icon(Icons.receipt, color: AppTheme.primaryBlue),
-                        title: Text('${currency.format(ab.amount)} - ${ab.sellerName}'),
-                        subtitle: Text('${ab.note.isNotEmpty ? ab.note : "Abono"} • ${ab.date.split('T')[0]}'),
-                        trailing: authVM.isAdmin && ab.amount > 0
-                            ? IconButton(
+                        leading: Icon(
+                          isTransfer ? Icons.account_balance : Icons.payments_outlined,
+                          color: isTransfer ? Colors.deepPurple : AppTheme.secondaryEmerald,
+                        ),
+                        title: Wrap(
+                          spacing: 6,
+                          runSpacing: 2,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text('${currency.format(ab.amount)} - ${ab.sellerName}'),
+                            if (ab.amount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isTransfer ? Colors.deepPurple.shade50 : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: isTransfer ? Colors.deepPurple.shade200 : Colors.green.shade200),
+                                ),
+                                child: Text(
+                                  isTransfer ? 'TRANSFERENCIA' : 'EFECTIVO',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: isTransfer ? Colors.deepPurple : Colors.green.shade800,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${ab.note.isNotEmpty ? ab.note : "Abono"} • ${ab.date.split('T')[0]}'),
+                            if (ab.cuentaDestino != null && ab.cuentaDestino!.isNotEmpty)
+                              Text('Cuenta: ${ab.cuentaDestino}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                            if (isTransfer && (ab.approvalNumber ?? '').isNotEmpty)
+                              Text(
+                                'Aprobación ${ab.approvalNumber} • ${ab.originBank ?? ''} • ${ColombiaTime.format(ab.transferDate)}',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            if (ab.duplicateApprovalConfirmed)
+                              Text('⚠ Aprobación repetida, confirmada al registrar',
+                                  style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (ab.soporteUrl != null || ab.soporteWebViewUrl != null)
+                              IconButton(
+                                icon: const Icon(Icons.image_search, color: AppTheme.primaryBlue),
+                                tooltip: 'Ver Soporte (Google Drive)',
+                                onPressed: () => _showReceiptDialog(context, ab),
+                              ),
+                            if (authVM.isAdmin && ab.amount > 0)
+                              IconButton(
                                 icon: const Icon(Icons.remove_circle_outline, color: AppTheme.dangerRose),
                                 tooltip: 'Anular este abono (por ejemplo, si quedó repetido)',
                                 onPressed: () => _confirmVoidAbono(ab, currency),
-                              )
-                            : null,
+                              ),
+                          ],
+                        ),
                       ),
                     );
                   },

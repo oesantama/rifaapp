@@ -1175,9 +1175,70 @@ class ApiService {
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
   }
 
+  /// Payments already registered with this transfer approval number (current, voided or of voided sales).
+  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) async {
+    final uri = Uri.parse('$baseUrl/transfers/check').replace(queryParameters: {'raffleId': raffleId, 'approvalNumber': approvalNumber});
+    final response = await authGet(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    final body = jsonDecode(response.body);
+    return [for (final m in (body['matches'] as List? ?? [])) Map<String, dynamic>.from(m)];
+  }
+
   /// The admin discards an advisor's request for more numbers.
   Future<void> dismissRangeRequest(String advisorId) async {
     final response = await authDelete(Uri.parse('$baseUrl/advisors/$advisorId/range-request')).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  /// Subir o reemplazar el Afiche 2D de una Rifa en Google Drive
+  Future<Raffle> uploadRaffleAfiche(String raffleId, String imageBase64) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/raffles/$raffleId/afiche'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'imageBase64': imageBase64}),
+    ).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return Raffle.fromJson(json['raffle']);
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Eliminar Afiche 2D de una Rifa en Google Drive
+  Future<Raffle> deleteRaffleAfiche(String raffleId) async {
+    final response = await authDelete(
+      Uri.parse('$baseUrl/raffles/$raffleId/afiche'),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return Raffle.fromJson(json['raffle']);
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Subir o reemplazar el Fondo de Boleta (plantilla de impresión) en Google Drive
+  Future<Raffle> uploadRaffleFondoBoleta(String raffleId, String imageBase64) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/raffles/$raffleId/fondo-boleta'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'imageBase64': imageBase64}),
+    ).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return Raffle.fromJson(json['raffle']);
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Eliminar Fondo de Boleta en Google Drive
+  Future<Raffle> deleteRaffleFondoBoleta(String raffleId) async {
+    final response = await authDelete(
+      Uri.parse('$baseUrl/raffles/$raffleId/fondo-boleta'),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return Raffle.fromJson(json['raffle']);
+    }
+    throw ApiException.fromResponse(response);
   }
 }

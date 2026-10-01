@@ -11,6 +11,7 @@ import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
 class TicketPrintDialog extends StatefulWidget {
@@ -40,12 +41,18 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
     _loadTicketTemplate();
   }
 
-  /// The ticket design is saved per raffle, so it is ready every time a ticket is printed.
+  /// The ticket design is saved per raffle in Google Drive, so it is ready every time a ticket is printed.
   Future<void> _loadTicketTemplate() async {
     setState(() => _templateStatus = 'Cargando diseño de la boleta...');
     try {
-      final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.ticket.raffleId, 'ticket');
-      if (mounted) setState(() => _bgImageBase64 = dataUri);
+      final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+      final raffle = raffleVM.raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull;
+      if (raffle?.fondoBoletaUrl != null) {
+        if (mounted) setState(() => _bgImageBase64 = raffle!.fondoBoletaUrl);
+      } else {
+        final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.ticket.raffleId, 'ticket');
+        if (mounted) setState(() => _bgImageBase64 = dataUri);
+      }
     } catch (_) {
       // Printing still works without the design
     } finally {
@@ -57,16 +64,19 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
     try {
       String? picked = await pickImageBase64();
       if (picked == null) return;
-      setState(() => _templateStatus = 'Optimizando y guardando el diseño...');
+      setState(() => _templateStatus = 'Optimizando y guardando el diseño en Google Drive...');
       await Future.delayed(const Duration(milliseconds: 50)); // let the progress indicator paint
       final imageStr = compressImageDataUri(picked, maxSide: 2000);
+      final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+      final updatedRaffle = await ApiService().uploadRaffleFondoBoleta(widget.ticket.raffleId, imageStr);
+      raffleVM.updateRaffleInList(updatedRaffle);
       await RaffleRepository().saveRaffleTemplate(widget.ticket.raffleId, 'ticket', imageStr);
       if (!mounted) return;
-      setState(() => _bgImageBase64 = imageStr);
+      setState(() => _bgImageBase64 = updatedRaffle.fondoBoletaUrl ?? imageStr);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppTheme.secondaryEmerald,
-          content: Text('✓ Diseño de boleta guardado para esta rifa. Se usará en todas las impresiones.'),
+          content: Text('✓ Diseño de boleta guardado en Google Drive. Se aplicará a todas las impresiones.'),
         ),
       );
     } catch (e) {

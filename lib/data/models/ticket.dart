@@ -5,6 +5,16 @@ class Abono {
   final String sellerId;
   final String sellerName;
   final String note;
+  final String metodoPago;
+  final String? cuentaDestino;
+  final String? soporteUrl;
+  final String? soporteDriveId;
+  final String? soporteWebViewUrl;
+  // Bank transfer details (only for transfers)
+  final String? transferDate; // when the buyer made the transfer (ISO, UTC)
+  final String? approvalNumber;
+  final String? originBank;
+  final bool duplicateApprovalConfirmed; // saved although the approval number already existed
 
   Abono({
     required this.id,
@@ -13,6 +23,15 @@ class Abono {
     required this.sellerId,
     required this.sellerName,
     required this.note,
+    this.metodoPago = 'efectivo',
+    this.cuentaDestino,
+    this.soporteUrl,
+    this.soporteDriveId,
+    this.soporteWebViewUrl,
+    this.transferDate,
+    this.approvalNumber,
+    this.originBank,
+    this.duplicateApprovalConfirmed = false,
   });
 
   factory Abono.fromJson(Map<String, dynamic> json) {
@@ -23,6 +42,15 @@ class Abono {
       sellerId: json['sellerId'] ?? '',
       sellerName: json['sellerName'] ?? '',
       note: json['note'] ?? '',
+      metodoPago: json['metodoPago'] ?? 'efectivo',
+      cuentaDestino: json['cuentaDestino'],
+      soporteUrl: json['soporteUrl'],
+      soporteDriveId: json['soporteDriveId'],
+      soporteWebViewUrl: json['soporteWebViewUrl'],
+      transferDate: json['transferDate'],
+      approvalNumber: json['approvalNumber'],
+      originBank: json['originBank'],
+      duplicateApprovalConfirmed: json['duplicateApprovalConfirmed'] == true,
     );
   }
 
@@ -33,6 +61,15 @@ class Abono {
         'sellerId': sellerId,
         'sellerName': sellerName,
         'note': note,
+        'metodoPago': metodoPago,
+        'cuentaDestino': cuentaDestino,
+        'soporteUrl': soporteUrl,
+        'soporteDriveId': soporteDriveId,
+        'soporteWebViewUrl': soporteWebViewUrl,
+        'transferDate': transferDate,
+        'approvalNumber': approvalNumber,
+        'originBank': originBank,
+        'duplicateApprovalConfirmed': duplicateApprovalConfirmed,
       };
 }
 

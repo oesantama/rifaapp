@@ -13,6 +13,7 @@ import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/utils/file_saver.dart';
 import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
@@ -125,8 +126,12 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   Future<void> _loadPosterTemplate() async {
     setState(() => _templateStatus = 'Cargando plantilla del afiche...');
     try {
-      final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.raffle.id, 'poster');
-      if (mounted) setState(() => _bgImageBase64 = dataUri);
+      if (widget.raffle.aficheUrl != null) {
+        if (mounted) setState(() => _bgImageBase64 = widget.raffle.aficheUrl);
+      } else {
+        final dataUri = await RaffleRepository().fetchRaffleTemplate(widget.raffle.id, 'poster');
+        if (mounted) setState(() => _bgImageBase64 = dataUri);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -316,15 +321,17 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   void _saveTemplateConfig() async {
     final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
     if (_templateChanged && _bgImageBase64 != null) {
-      setState(() => _templateStatus = 'Guardando imagen de la plantilla...');
+      setState(() => _templateStatus = 'Guardando imagen del afiche en Google Drive...');
       try {
+        final updatedRaffle = await ApiService().uploadRaffleAfiche(widget.raffle.id, _bgImageBase64!);
+        raffleVM.updateRaffleInList(updatedRaffle);
         await RaffleRepository().saveRaffleTemplate(widget.raffle.id, 'poster', _bgImageBase64!);
         _templateChanged = false;
       } catch (e) {
         if (mounted) {
           setState(() => _templateStatus = null);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(backgroundColor: Colors.red, content: Text('No se pudo guardar la imagen de la plantilla: $e')),
+            SnackBar(backgroundColor: Colors.red, content: Text('No se pudo guardar la imagen en Google Drive: $e')),
           );
         }
         return;

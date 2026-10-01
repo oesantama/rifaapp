@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const security = require('./security');
+const driveService = require('./driveService');
 let admin;
 try {
   admin = require('firebase-admin');
@@ -699,6 +700,23 @@ async function createSnapshot(reason) {
     errors.push(`local: ${err.message}`);
   }
 
+  // Backup automático en Google Drive
+  try {
+    const backupsFolderId = await driveService.getBackupsFolder();
+    const filename = `backup_rifamaster_${reason}_${stamp.replace(/[:.]/g, '-')}.json`;
+    const jsonStr = JSON.stringify(payload);
+    await driveService.uploadFileToDrive({
+      buffer: Buffer.from(jsonStr, 'utf8'),
+      filename,
+      mimeType: 'application/json',
+      parentFolderId: backupsFolderId
+    });
+    written++;
+    console.log(`☁️ Copia de seguridad guardada exitosamente en Google Drive (${filename}).`);
+  } catch (err) {
+    errors.push(`Google Drive: ${err.message}`);
+  }
+
   if (firestore) {
     try {
       await writeFirestoreDb(payload, `snapshot_${reason}`);
@@ -708,16 +726,21 @@ async function createSnapshot(reason) {
     }
   }
 
-  if (reason === 'daily') lastDailySnapshotAt = Date.now();
+  if (reason === 'daily' || reason === 'programado_12h') lastDailySnapshotAt = Date.now();
   if (written === 0) throw new Error(`No se pudo crear la copia de seguridad automática (${errors.join('; ')})`);
   console.log(`🗂️ Copia automática "${reason}" creada${errors.length ? ` (con advertencias: ${errors.join('; ')})` : ''}.`);
 }
 
+const TWICE_DAILY_SNAPSHOT_MS = 12 * 60 * 60 * 1000; // 12 horas (2 veces al día)
+
 function maybeDailySnapshot() {
-  if (Date.now() - lastDailySnapshotAt < DAILY_SNAPSHOT_MS) return;
+  if (Date.now() - lastDailySnapshotAt < TWICE_DAILY_SNAPSHOT_MS) return;
   lastDailySnapshotAt = Date.now();
-  createSnapshot('daily').catch(err => console.error('⚠️', err.message));
+  createSnapshot('programado_12h').catch(err => console.error('⚠️ Error en copia programada 12h:', err.message));
 }
+
+// Verificación periódica cada 15 minutos para asegurar backups 2 veces al día
+setInterval(maybeDailySnapshot, 15 * 60 * 1000);
 
 /** Every known collection exists; unknown sections from backups are kept untouched. */
 function ensureDbShape(target) {
@@ -1055,6 +1078,15 @@ app.post('/api/auth/login', (req, res) => {
   res.json(issueSession(kind, record));
 });
 
+app.get('/api/drive/status', async (req, res) => {
+  try {
+    const status = await driveService.testDriveConnection();
+    res.json({ success: true, status });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Every other API route requires a valid session
 app.use('/api', (req, res, next) => {
   const header = req.headers.authorization || '';
@@ -1361,6 +1393,12 @@ app.get('/api/backup', superAdminOnly, (req, res) => {
 // Automatic safety copies: list and download (downloaded files restore like any backup)
 app.get('/api/backup/snapshots', superAdminOnly, async (req, res) => {
   const list = listLocalSnapshots();
+  try {
+    const driveSnapshots = await driveService.listDriveBackups();
+    list.push(...driveSnapshots);
+  } catch (err) {
+    console.warn('⚠️ No se pudieron incluir copias de Google Drive:', err.message);
+  }
   if (firestore) {
     for (const reason of SNAPSHOT_REASONS) {
       try {
@@ -1384,6 +1422,9 @@ app.get('/api/backup/snapshots/:id/download', superAdminOnly, async (req, res) =
       const file = path.basename(id.slice('local:'.length));
       if (!/^snapshot_[a-z_]+_.+\.json$/.test(file)) return res.status(400).json({ error: 'Copia no válida.' });
       payload = fs.readFileSync(path.join(SNAPSHOT_DIR, file), 'utf8');
+    } else if (id.startsWith('drive:')) {
+      const fileId = id.slice('drive:'.length);
+      payload = await driveService.downloadDriveBackup(fileId);
     } else if (id.startsWith('firestore:') && firestore) {
       const reason = id.slice('firestore:'.length);
       if (!SNAPSHOT_REASONS.includes(reason)) return res.status(400).json({ error: 'Copia no válida.' });
@@ -1399,6 +1440,15 @@ app.get('/api/backup/snapshots/:id/download', superAdminOnly, async (req, res) =
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename=copia_automatica_${Date.now()}.json`);
   res.send(payload);
+});
+
+app.post('/api/backup/snapshot-now', superAdminOnly, async (req, res) => {
+  try {
+    await createSnapshot('manual');
+    res.json({ success: true, message: 'Copia de seguridad guardada exitosamente en Google Drive y localmente.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/backup/download', superAdminOnly, async (req, res) => {
@@ -1685,9 +1735,26 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   if (!raffle) {
     return res.status(404).json({ error: 'Sorteo no encontrado' });
   }
+  let transferAccounts = null;
+  if (req.body.transferAccounts !== undefined) {
+    const checked = normalizeTransferAccounts(req.body.transferAccounts);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    transferAccounts = checked.accounts;
+  }
 
   if (req.body.status !== undefined) raffle.status = req.body.status;
-  if (req.body.title !== undefined) raffle.title = req.body.title;
+  if (req.body.title !== undefined) {
+    const oldTitle = raffle.title;
+    const newTitle = String(req.body.title).trim();
+    raffle.title = newTitle;
+    if (oldTitle !== newTitle && (raffle.driveFolderId || raffle.id)) {
+      const company = (db.companies || []).find(c => c.id === raffle.companyId);
+      const companyName = company ? (company.name || company.companyName || 'Empresa') : 'Empresa General';
+      driveService.getRaffleFolders(companyName, raffle.companyId, newTitle, raffle.id, raffle.driveFolderId)
+        .then(folders => { raffle.driveFolderId = folders.raffleFolderId; saveDB(); })
+        .catch(err => console.error('⚠️ Error actualizando nombre de carpeta en Drive:', err.message));
+    }
+  }
   if (req.body.description !== undefined) raffle.description = req.body.description;
   if (req.body.mainDrawDate !== undefined) raffle.mainDrawDate = req.body.mainDrawDate;
   if (req.body.weeklyPrizesStartDate !== undefined) raffle.weeklyPrizesStartDate = req.body.weeklyPrizesStartDate;
@@ -1706,6 +1773,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
     }
     raffle.templateConfig = settings;
   }
+  if (transferAccounts) raffle.transferAccounts = transferAccounts;
   Object.assign(raffle, normalizeWinningConfig(req.body, raffle.digits));
   // Weekly draw settings (previously ignored, so they reverted after every reload)
   if (req.body.hasWeeklyDraws !== undefined) raffle.hasWeeklyDraws = req.body.hasWeeklyDraws === true || req.body.hasWeeklyDraws === 'true';
@@ -1756,6 +1824,177 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
   res.json({ message: `Sorteo "${raffle.title}" y sus boletas asociadas fueron eliminados exitosamente.` });
 });
 
+// ---------------------------------------------------------------------------
+// GOOGLE DRIVE INTEGRATION ENDPOINTS (Afiche 2D, Fondo Boleta, Soportes)
+// ---------------------------------------------------------------------------
+
+app.get('/api/drive/status', async (req, res) => {
+  try {
+    const status = await driveService.testDriveConnection();
+    res.json({ success: true, status });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST Subir / Reemplazar Afiche 2D
+app.post('/api/raffles/:id/afiche', adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageBase64, mimeType = 'image/jpeg' } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Debes proporcionar la imagen en formato Base64 (imageBase64).' });
+    }
+
+    const raffle = db.raffles.find(r => r.id === id);
+    if (!raffle) {
+      return res.status(404).json({ error: 'Rifa no encontrada' });
+    }
+
+    // 1. Obtener carpetas de la empresa y rifa en Drive
+    const company = (db.companies || []).find(c => c.id === raffle.companyId);
+    const companyName = company ? (company.name || company.companyName || 'Empresa') : 'Empresa General';
+    const folders = await driveService.getRaffleFolders(companyName, raffle.companyId, raffle.title, raffle.id, raffle.driveFolderId);
+    raffle.driveFolderId = folders.raffleFolderId;
+
+    // 2. Eliminar afiche viejo de Drive si existía
+    if (raffle.aficheDriveId) {
+      await driveService.deleteFileFromDrive(raffle.aficheDriveId);
+    }
+
+    // 3. Convertir base64 a Buffer
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    // 4. Subir nuevo archivo a subcarpeta Afiche_2D
+    const filename = `afiche_${raffle.id}_${Date.now()}.jpg`;
+    const uploadRes = await driveService.uploadFileToDrive({
+      buffer,
+      filename,
+      mimeType,
+      parentFolderId: folders.aficheFolderId
+    });
+
+    // 5. Actualizar la rifa en BD
+    raffle.aficheUrl = uploadRes.directUrl;
+    raffle.aficheDriveId = uploadRes.fileId;
+    raffle.aficheWebViewUrl = uploadRes.webViewUrl;
+
+    saveDB();
+
+    res.json({
+      message: 'Afiche 2D subido y reemplazado exitosamente en Google Drive.',
+      aficheUrl: uploadRes.directUrl,
+      aficheDriveId: uploadRes.fileId,
+      aficheWebViewUrl: uploadRes.webViewUrl,
+      raffle
+    });
+  } catch (error) {
+    console.error('⚠️ Error al subir afiche a Google Drive:', error);
+    res.status(500).json({ error: `Error al subir afiche: ${error.message}` });
+  }
+});
+
+// DELETE Eliminar Afiche 2D
+app.delete('/api/raffles/:id/afiche', adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const raffle = db.raffles.find(r => r.id === id);
+    if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada' });
+
+    if (raffle.aficheDriveId) {
+      await driveService.deleteFileFromDrive(raffle.aficheDriveId);
+    }
+    raffle.aficheUrl = null;
+    raffle.aficheDriveId = null;
+    raffle.aficheWebViewUrl = null;
+    saveDB();
+    res.json({ message: 'Afiche eliminado exitosamente.', raffle });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST Subir / Reemplazar Fondo de Boleta (Diseño general de impresión)
+app.post('/api/raffles/:id/fondo-boleta', adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { imageBase64, mimeType = 'image/jpeg' } = req.body;
+
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'Debes proporcionar la imagen en formato Base64 (imageBase64).' });
+    }
+
+    const raffle = db.raffles.find(r => r.id === id);
+    if (!raffle) {
+      return res.status(404).json({ error: 'Rifa no encontrada' });
+    }
+
+    // 1. Obtener carpetas de la empresa y rifa en Drive
+    const company = (db.companies || []).find(c => c.id === raffle.companyId);
+    const companyName = company ? (company.name || company.companyName || 'Empresa') : 'Empresa General';
+    const folders = await driveService.getRaffleFolders(companyName, raffle.companyId, raffle.title, raffle.id, raffle.driveFolderId);
+    raffle.driveFolderId = folders.raffleFolderId;
+
+    // 2. Eliminar fondo de boleta viejo de Drive si existía
+    if (raffle.fondoBoletaDriveId) {
+      await driveService.deleteFileFromDrive(raffle.fondoBoletaDriveId);
+    }
+
+    // 3. Convertir base64 a Buffer
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    // 4. Subir nuevo archivo a subcarpeta Fondo_Boleta
+    const filename = `fondo_boleta_${raffle.id}_${Date.now()}.jpg`;
+    const uploadRes = await driveService.uploadFileToDrive({
+      buffer,
+      filename,
+      mimeType,
+      parentFolderId: folders.fondoBoletaFolderId
+    });
+
+    // 5. Actualizar la rifa en BD
+    raffle.fondoBoletaUrl = uploadRes.directUrl;
+    raffle.fondoBoletaDriveId = uploadRes.fileId;
+    raffle.fondoBoletaWebViewUrl = uploadRes.webViewUrl;
+
+    saveDB();
+
+    res.json({
+      message: 'Fondo de boleta subido y reemplazado exitosamente en Google Drive.',
+      fondoBoletaUrl: uploadRes.directUrl,
+      fondoBoletaDriveId: uploadRes.fileId,
+      fondoBoletaWebViewUrl: uploadRes.webViewUrl,
+      raffle
+    });
+  } catch (error) {
+    console.error('⚠️ Error al subir fondo de boleta a Google Drive:', error);
+    res.status(500).json({ error: `Error al subir fondo de boleta: ${error.message}` });
+  }
+});
+
+// DELETE Eliminar Fondo de Boleta
+app.delete('/api/raffles/:id/fondo-boleta', adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const raffle = db.raffles.find(r => r.id === id);
+    if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada' });
+
+    if (raffle.fondoBoletaDriveId) {
+      await driveService.deleteFileFromDrive(raffle.fondoBoletaDriveId);
+    }
+    raffle.fondoBoletaUrl = null;
+    raffle.fondoBoletaDriveId = null;
+    raffle.fondoBoletaWebViewUrl = null;
+    saveDB();
+    res.json({ message: 'Fondo de boleta eliminado exitosamente.', raffle });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // POST Create Raffle
 app.post('/api/raffles', adminOnly, (req, res) => {
   const { title, description, mainDrawDate, weeklyPrizesStartDate, digits, totalTickets, ticketPrice, weeklyPrizes, generationMode, customNumbers, preSoldTickets, commissionType, commissionValue, companyId } = req.body;
@@ -1786,9 +2025,17 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     winningDigitsPosition: 'ULTIMAS',
     allowCombined: false,
     ...normalizeWinningConfig(req.body, numDigits),
+    // Accounts where buyers pay by bank transfer
+    transferAccounts: [],
     status: 'ACTIVA',
     createdAt: new Date().toISOString()
   };
+
+  if (req.body.transferAccounts !== undefined) {
+    const checked = normalizeTransferAccounts(req.body.transferAccounts);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    newRaffle.transferAccounts = checked.accounts;
+  }
 
   db.raffles.unshift(newRaffle);
 
@@ -2082,13 +2329,17 @@ app.put('/api/sale-channels/:id', superAdminOnly, (req, res) => {
 
 // Recently seen submission ids (10 minutes) so a repeated request is never applied twice
 const recentRequests = new Map();
-function isDuplicateRequest(requestId) {
+/** Whether this submission was already applied (does not record it). */
+function wasRequestApplied(requestId) {
   if (typeof requestId !== 'string' || requestId.length < 8 || requestId.length > 100) return false;
   const now = Date.now();
   for (const [key, at] of recentRequests) if (now - at > 10 * 60 * 1000) recentRequests.delete(key);
-  if (recentRequests.has(requestId)) return true;
-  recentRequests.set(requestId, now);
-  return false;
+  return recentRequests.has(requestId);
+}
+
+/** Records a submission right before applying it, so a repeat of it is ignored. */
+function rememberRequest(requestId) {
+  if (typeof requestId === 'string' && requestId.length >= 8 && requestId.length <= 100) recentRequests.set(requestId, Date.now());
 }
 
 /** Recomputes paid / pending / status from the (non-voided) payments. */
@@ -2151,22 +2402,210 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
   res.json(ticket);
 });
 
-app.post('/api/tickets/:id/abono', (req, res) => {
-  const { id } = req.params;
-  const { amount, buyerName, buyerPhone, buyerDocument, sellerId, sellerName, note, saleChannel, requestId } = req.body;
+// ── Bank transfers ──
+// Colombia has no daylight saving time: always UTC-5.
+const COLOMBIA_OFFSET_MS = 5 * 60 * 60 * 1000;
+const TRANSFER_MAX_AGE_DAYS = 15;
 
+/** Earliest accepted transfer time: 00:00 (Colombia) of the day 15 days ago. */
+function oldestTransferAllowed(now = Date.now()) {
+  const col = new Date(now - COLOMBIA_OFFSET_MS);
+  const startOfTodayCol = Date.UTC(col.getUTCFullYear(), col.getUTCMonth(), col.getUTCDate()) + COLOMBIA_OFFSET_MS;
+  return startOfTodayCol - TRANSFER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/** Approval numbers are compared without spaces, dashes or case. */
+function approvalKey(value) {
+  return String(value || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+}
+
+function transferAccountLabel(account) {
+  return [account.bank, account.accountType, account.accountNumber, account.key ? `llave ${account.key}` : '', account.holder]
+    .filter(Boolean).join(' • ');
+}
+
+/** Accounts where a raffle receives transfers (configured in the raffle settings). */
+function normalizeTransferAccounts(list) {
+  if (!Array.isArray(list)) return { error: 'Las cuentas de transferencia deben ser una lista.' };
+  const clean = s => String(s || '').trim().slice(0, 80);
+  const accounts = [];
+  for (const raw of list.slice(0, 10)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const account = {
+      id: clean(raw.id) || `cta-${Date.now()}-${accounts.length}`,
+      bank: clean(raw.bank),
+      accountType: clean(raw.accountType),
+      accountNumber: clean(raw.accountNumber),
+      holder: clean(raw.holder),
+      key: clean(raw.key)
+    };
+    if (!account.bank) return { error: 'Cada cuenta de transferencia necesita el banco.' };
+    if (!account.accountNumber && !account.key) {
+      return { error: `La cuenta de ${account.bank} necesita el número de cuenta o la llave.` };
+    }
+    accounts.push(account);
+  }
+  return { accounts };
+}
+
+/** Checks the transfer data sent with a payment; returns { error } or { transfer }. */
+function validateTransfer(body, raffle) {
+  const transferAt = Date.parse(body.transferDate || '');
+  if (isNaN(transferAt)) return { error: 'Indique la fecha y hora de la transferencia.' };
+  if (transferAt > Date.now() + 2 * 60 * 1000) {
+    return { error: 'La fecha de la transferencia no puede ser posterior a la fecha y hora actual (hora de Colombia).' };
+  }
+  if (transferAt < oldestTransferAllowed()) {
+    return { error: `La transferencia no puede tener más de ${TRANSFER_MAX_AGE_DAYS} días de antigüedad.` };
+  }
+  const approvalNumber = String(body.approvalNumber || '').trim().slice(0, 40);
+  if (approvalKey(approvalNumber).length < 3) return { error: 'Ingrese el número de aprobación de la transferencia.' };
+  const originBank = String(body.originBank || '').trim().slice(0, 60);
+  if (!originBank) return { error: 'Indique el banco desde el que se hizo la transferencia.' };
+
+  const accounts = (raffle && raffle.transferAccounts) || [];
+  let cuentaDestino = String(body.cuentaDestino || '').trim().slice(0, 200);
+  let transferAccountId = null;
+  if (accounts.length) {
+    const account = accounts.find(a => a.id === body.transferAccountId);
+    if (!account) return { error: 'Seleccione la cuenta de la rifa a la que se hizo la transferencia.' };
+    transferAccountId = account.id;
+    cuentaDestino = transferAccountLabel(account);
+  }
+  return {
+    transfer: {
+      transferDate: new Date(transferAt).toISOString(),
+      approvalNumber,
+      originBank,
+      cuentaDestino,
+      transferAccountId
+    }
+  };
+}
+
+/**
+ * Every payment of the company registered with this approval number: current payments,
+ * voided payments and payments of voided sales, so the user can judge whether it is a repeat.
+ */
+function findApprovalMatches(key, companyId, maskContact) {
+  if (!key) return [];
+  const raffles = new Map((db.raffles || []).filter(r => !companyId || r.companyId === companyId).map(r => [r.id, r]));
+  const mask = value => {
+    const text = String(value || '');
+    return maskContact && text.length > 3 ? `${'•'.repeat(text.length - 3)}${text.slice(-3)}` : text;
+  };
+  const matches = [];
+  const collect = (ticket, raffle, abono, state, sale, extra = {}) => {
+    if (approvalKey(abono.approvalNumber) !== key) return;
+    matches.push({
+      state,
+      raffleTitle: raffle.title,
+      ticketId: ticket.id,
+      numbers: ticket.numbers || [],
+      buyerName: sale.buyerName || '',
+      buyerPhone: mask(sale.buyerPhone),
+      buyerDocument: mask(sale.buyerDocument),
+      advisorName: sale.advisorName || '',
+      amount: abono.amount || 0,
+      registeredAt: abono.date || null,
+      registeredBy: abono.sellerName || '',
+      transferDate: abono.transferDate || null,
+      approvalNumber: abono.approvalNumber,
+      originBank: abono.originBank || '',
+      cuentaDestino: abono.cuentaDestino || '',
+      soporteWebViewUrl: abono.soporteWebViewUrl || null,
+      ...extra
+    });
+  };
+  for (const ticket of db.tickets || []) {
+    const raffle = raffles.get(ticket.raffleId);
+    if (!raffle) continue;
+    for (const ab of ticket.abonos || []) collect(ticket, raffle, ab, 'VIGENTE', ticket);
+    for (const ab of ticket.voidedAbonos || []) {
+      collect(ticket, raffle, ab, 'ABONO ANULADO', ticket, { voidReason: ab.voidReason || ab.reason || '', voidedAt: ab.voidedAt || null });
+    }
+    for (const annulment of ticket.annulments || []) {
+      const prev = annulment.previous || {};
+      const extra = { voidReason: annulment.reason || '', voidedAt: annulment.date || null };
+      for (const ab of prev.abonos || []) collect(ticket, raffle, ab, 'VENTA ANULADA', prev, extra);
+      for (const ab of prev.voidedAbonos || []) collect(ticket, raffle, ab, 'VENTA ANULADA', prev, extra);
+    }
+  }
+  return matches.sort((a, b) => String(b.registeredAt).localeCompare(String(a.registeredAt)));
+}
+
+// Checks an approval number before saving (the app asks when the user leaves the field)
+app.get('/api/transfers/check', (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.query.raffleId);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada' });
+  const key = approvalKey(req.query.approvalNumber);
+  if (key.length < 3) return res.json({ matches: [] });
+  res.json({ matches: findApprovalMatches(key, raffle.companyId, req.auth.role === 'asesor') });
+});
+
+app.post('/api/tickets/:id/abono', async (req, res) => {
+  const { id } = req.params;
+  const { amount, buyerName, buyerPhone, buyerDocument, sellerId, sellerName, note, saleChannel, requestId, metodoPago, soporteImageBase64, soporteBase64 } = req.body;
+
+  const found = db.tickets.find(t => t.id === id);
+  if (!found) {
+    return res.status(404).json({ error: 'Boleta no encontrada' });
+  }
+  if (wasRequestApplied(requestId)) return res.json(withVerification(found));
+
+  // Transfer data is checked before uploading anything
+  const isTransfer = metodoPago === 'transferencia' && (parseFloat(amount) || 0) > 0;
+  let transfer = null;
+  if (isTransfer) {
+    const checked = validateTransfer(req.body, db.raffles.find(r => r.id === found.raffleId));
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    transfer = checked.transfer;
+  }
+
+  // The payment proof goes to Google Drive first. Nothing below waits, so the checks and the
+  // changes happen on the same, current data (no other request or reload can run in between).
+  let soporte = { soporteUrl: null, soporteDriveId: null, soporteWebViewUrl: null };
+  const rawBase64 = soporteImageBase64 || soporteBase64;
+  if (rawBase64) {
+    try {
+      const raffle = db.raffles.find(r => r.id === found.raffleId);
+      const company = raffle ? (db.companies || []).find(c => c.id === raffle.companyId) : null;
+      const companyName = company ? (company.name || company.companyName || 'Empresa') : 'Empresa General';
+      const folders = await driveService.getRaffleFolders(
+        companyName,
+        raffle ? raffle.companyId : 'comp_1',
+        raffle ? raffle.title : 'Rifa',
+        found.raffleId,
+        raffle ? raffle.driveFolderId : null
+      );
+      const current = db.raffles.find(r => r.id === found.raffleId);
+      if (current) current.driveFolderId = folders.raffleFolderId;
+      const cleanBase64 = rawBase64.replace(/^data:image\/\w+;base64,/, '');
+      const uploadRes = await driveService.uploadFileToDrive({
+        buffer: Buffer.from(cleanBase64, 'base64'),
+        filename: `soporte_boleta_${found.ticketNumber || found.id}_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+        parentFolderId: folders.soportesFolderId
+      });
+      soporte = { soporteUrl: uploadRes.directUrl, soporteDriveId: uploadRes.fileId, soporteWebViewUrl: uploadRes.webViewUrl };
+    } catch (err) {
+      console.error('⚠️ Error al subir soporte de transferencia a Google Drive:', err);
+      return res.status(502).json({ error: 'No se pudo subir el soporte a Google Drive. Intente de nuevo o registre el pago sin el soporte.' });
+    }
+  }
+
+  // Data may have been reloaded while uploading: work on the current ticket
   const ticket = db.tickets.find(t => t.id === id);
   if (!ticket) {
     return res.status(404).json({ error: 'Boleta no encontrada' });
   }
+  // Same submission received again (double tap, slow network retry): it was already applied
+  if (wasRequestApplied(requestId)) {
+    return res.json(withVerification(ticket));
+  }
   // An advisor working with assigned numbers can only sell inside them
   if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record)) {
     return res.status(403).json({ error: 'Esta boleta no está en sus números asignados. Solicite más boletas al administrador.' });
-  }
-
-  // Same submission received again (double tap, slow network retry): apply it only once
-  if (isDuplicateRequest(requestId)) {
-    return res.json(ticket);
   }
 
   const abonoAmount = parseFloat(amount) || 0;
@@ -2182,18 +2621,47 @@ app.post('/api/tickets/:id/abono', (req, res) => {
     });
   }
 
+  // The same approval number may mean the same transfer reported twice: the user must confirm it
+  if (transfer && req.body.allowDuplicateApproval !== true) {
+    const raffle = db.raffles.find(r => r.id === ticket.raffleId);
+    const matches = findApprovalMatches(approvalKey(transfer.approvalNumber), raffle && raffle.companyId, req.auth.role === 'asesor');
+    if (matches.length) {
+      return res.status(409).json({
+        error: `El número de aprobación ${transfer.approvalNumber} ya está registrado. Revise antes de continuar.`,
+        code: 'DUPLICATE_APPROVAL',
+        matches
+      });
+    }
+  }
+
+  // Recorded only now: a submission rejected above can be corrected and sent again
+  rememberRequest(requestId);
+
   if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();
   if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
   // Optional ID number (cédula); letters/digits only, as typed
   if (typeof buyerDocument === 'string') ticket.buyerDocument = buyerDocument.replace(/[^0-9A-Za-z]/g, '').slice(0, 20);
   // How the buyer was reached: an active channel from the SuperAdmin's master list
-  // (a ticket may keep a channel that was deactivated after it was sold)
   if (typeof saleChannel === 'string' && (isActiveSaleChannel(saleChannel) || saleChannel === ticket.saleChannel)) {
     ticket.saleChannel = saleChannel;
   }
   if (sellerId) ticket.advisorId = sellerId;
   if (sellerName) ticket.advisorName = sellerName;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();
+
+  const payMethod = transfer ? 'transferencia' : (metodoPago === 'transferencia' ? 'efectivo' : (metodoPago || 'efectivo'));
+  const paymentDetails = {
+    metodoPago: payMethod,
+    cuentaDestino: transfer ? transfer.cuentaDestino : '',
+    ...(transfer ? {
+      transferDate: transfer.transferDate,
+      approvalNumber: transfer.approvalNumber,
+      originBank: transfer.originBank,
+      transferAccountId: transfer.transferAccountId,
+      ...(req.body.allowDuplicateApproval === true ? { duplicateApprovalConfirmed: true } : {})
+    } : {}),
+    ...soporte
+  };
 
   if (abonoAmount > 0) {
     const newAbono = {
@@ -2202,7 +2670,8 @@ app.post('/api/tickets/:id/abono', (req, res) => {
       date: new Date().toISOString(),
       sellerId: sellerId || 'admin',
       sellerName: sellerName || 'Administrador',
-      note: note || 'Abono registrado'
+      note: note || 'Abono registrado',
+      ...paymentDetails
     };
     ticket.abonos.push(newAbono);
     ticket.totalPaid += abonoAmount;
@@ -2214,7 +2683,8 @@ app.post('/api/tickets/:id/abono', (req, res) => {
       date: new Date().toISOString(),
       sellerId: sellerId || 'admin',
       sellerName: sellerName || 'Administrador',
-      note: note || 'Boleta apartada / fiada sin abono inicial'
+      note: note || 'Boleta apartada / fiada sin abono inicial',
+      ...paymentDetails
     });
   }
 

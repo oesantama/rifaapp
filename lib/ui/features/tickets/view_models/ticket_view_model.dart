@@ -125,6 +125,10 @@ class TicketViewModel extends ChangeNotifier {
     }
   }
 
+  /// Payments already registered with this transfer approval number; throws if the check fails.
+  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) =>
+      _repository.checkTransferApproval(raffleId, approvalNumber);
+
   /// Voids one payment and reloads the raffle. Returns null on success or the error message.
   Future<String?> voidAbono(String ticketId, String abonoId, String reason, {String? raffleId}) async {
     try {

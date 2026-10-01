@@ -12,6 +12,7 @@ import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/date_formatter.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/features/tickets/views/transfer_widgets.dart';
 
 class RaffleEditDialog extends StatefulWidget {
   final Raffle raffle;
@@ -45,6 +46,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   late TextEditingController _weeklyMinAbonoValueController;
   late bool _isWeeklyPrizeAccumulative;
   late List<WeeklyPrize> _weeklyPrizes;
+  late List<TransferAccount> _transferAccounts;
 
   List<Map<String, dynamic>>? _importedRecords;
   String? _importedFileName;
@@ -70,6 +72,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _weeklyMinAbonoValueController = TextEditingController(text: widget.raffle.weeklyMinAbonoValue.toStringAsFixed(0));
     _isWeeklyPrizeAccumulative = widget.raffle.isWeeklyPrizeAccumulative;
     _weeklyPrizes = List.from(widget.raffle.weeklyPrizes);
+    _transferAccounts = List.from(widget.raffle.transferAccounts);
   }
 
   @override
@@ -848,6 +851,15 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   onCombinedChanged: (v) => setState(() => _allowCombined = v),
                 ),
                 const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                TransferAccountsEditor(
+                  accounts: _transferAccounts,
+                  onChanged: (v) => setState(() => _transferAccounts = v),
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     const Icon(Icons.stars, color: Colors.purple, size: 22),
@@ -1096,6 +1108,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             'weeklyMinAbonoValue': double.tryParse(_weeklyMinAbonoValueController.text) ?? 50.0,
                             'isWeeklyPrizeAccumulative': _isWeeklyPrizeAccumulative,
                             'weeklyPrizes': _weeklyPrizes.map((p) => p.toJson()).toList(),
+                            'transferAccounts': _transferAccounts.map((a) => a.toJson()).toList(),
                           });
 
                           if (_importedRecords != null && _importedRecords!.isNotEmpty) {

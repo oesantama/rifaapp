@@ -87,6 +87,16 @@ class Raffle {
   final String companyId;
   final Map<String, dynamic>? templateConfig;
 
+  /// Accounts where buyers pay by bank transfer.
+  final List<TransferAccount> transferAccounts;
+
+  /// Drive URLs and Folder metadata
+  final String? aficheUrl;
+  final String? aficheDriveId;
+  final String? fondoBoletaUrl;
+  final String? fondoBoletaDriveId;
+  final String? driveFolderId;
+
   /// Metadata of stored template images by type ('poster', 'ticket'); images are fetched separately.
   final Map<String, dynamic> templates;
   final String createdAt;
@@ -117,6 +127,12 @@ class Raffle {
     this.assignedAdvisorIds = const [],
     this.companyId = 'comp-1',
     this.templateConfig,
+    this.transferAccounts = const [],
+    this.aficheUrl,
+    this.aficheDriveId,
+    this.fondoBoletaUrl,
+    this.fondoBoletaDriveId,
+    this.driveFolderId,
     this.templates = const {},
     required this.createdAt,
   });
@@ -154,6 +170,15 @@ class Raffle {
       assignedAdvisorIds: advsList,
       companyId: json['companyId'] ?? 'comp-1',
       templateConfig: json['templateConfig'] != null ? Map<String, dynamic>.from(json['templateConfig']) : null,
+      transferAccounts: [
+        for (final a in (json['transferAccounts'] as List? ?? []))
+          if (a is Map) TransferAccount.fromJson(Map<String, dynamic>.from(a)),
+      ],
+      aficheUrl: json['aficheUrl'],
+      aficheDriveId: json['aficheDriveId'],
+      fondoBoletaUrl: json['fondoBoletaUrl'],
+      fondoBoletaDriveId: json['fondoBoletaDriveId'],
+      driveFolderId: json['driveFolderId'],
       templates: json['templates'] is Map ? Map<String, dynamic>.from(json['templates']) : const {},
       createdAt: json['createdAt'] ?? '',
     );
@@ -185,6 +210,12 @@ class Raffle {
         'assignedAdvisorIds': assignedAdvisorIds,
         'companyId': companyId,
         'templateConfig': templateConfig,
+        'transferAccounts': transferAccounts.map((a) => a.toJson()).toList(),
+        'aficheUrl': aficheUrl,
+        'aficheDriveId': aficheDriveId,
+        'fondoBoletaUrl': fondoBoletaUrl,
+        'fondoBoletaDriveId': fondoBoletaDriveId,
+        'driveFolderId': driveFolderId,
         'templates': templates,
         'createdAt': createdAt,
       };
@@ -216,4 +247,44 @@ class Raffle {
         return clean.substring(clean.length - digits);
     }
   }
+}
+
+/// A bank account (or key) where a raffle receives transfers.
+class TransferAccount {
+  final String id;
+  final String bank;
+  final String accountType;
+  final String accountNumber;
+  final String holder;
+  final String key; // "llave" (Bre-B) or similar
+
+  const TransferAccount({
+    this.id = '',
+    required this.bank,
+    this.accountType = '',
+    this.accountNumber = '',
+    this.holder = '',
+    this.key = '',
+  });
+
+  factory TransferAccount.fromJson(Map<String, dynamic> json) => TransferAccount(
+        id: json['id'] ?? '',
+        bank: json['bank'] ?? '',
+        accountType: json['accountType'] ?? '',
+        accountNumber: json['accountNumber'] ?? '',
+        holder: json['holder'] ?? '',
+        key: json['key'] ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        if (id.isNotEmpty) 'id': id,
+        'bank': bank,
+        'accountType': accountType,
+        'accountNumber': accountNumber,
+        'holder': holder,
+        'key': key,
+      };
+
+  /// One line, e.g. "Bancolombia • Ahorros • 123-456789-01 • llave @rifa • William S".
+  String get label => [bank, accountType, accountNumber, if (key.isNotEmpty) 'llave $key', holder].where((p) => p.isNotEmpty).join(' • ');
 }
