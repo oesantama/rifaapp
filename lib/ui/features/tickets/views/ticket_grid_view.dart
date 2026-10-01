@@ -63,7 +63,21 @@ class _TicketGridViewState extends State<TicketGridView> {
       builder: (context, ticketVM, raffleVM, advisorVM, _) {
         final currentRaffle = raffleVM.selectedRaffle;
 
+        // Auto-fix if tickets in memory belong to another raffle (e.g. loaded without raffleId in another view)
+        if (currentRaffle != null &&
+            !ticketVM.isLoading &&
+            ticketVM.tickets.isNotEmpty &&
+            ticketVM.tickets.any((t) => t.raffleId != currentRaffle.id)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) ticketVM.loadTickets(raffleId: currentRaffle.id);
+          });
+        }
+
         List<Ticket> displayTickets = ticketVM.searchedTickets;
+        if (currentRaffle != null) {
+          displayTickets = displayTickets.where((t) => t.raffleId == currentRaffle.id).toList();
+        }
+
         if (authVM.isAsesor && authVM.activeAdvisor != null) {
           final adv = authVM.activeAdvisor!;
           displayTickets = displayTickets.where((t) {

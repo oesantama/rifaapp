@@ -36,8 +36,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final selectedRaffleId = Provider.of<RaffleViewModel>(context, listen: false).selectedRaffle?.id;
       Provider.of<WinnerViewModel>(context, listen: false).loadWinners();
-      Provider.of<TicketViewModel>(context, listen: false).loadTickets();
+      Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: selectedRaffleId);
     });
   }
 
