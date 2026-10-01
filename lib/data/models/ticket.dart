@@ -120,6 +120,37 @@ class TicketAnnulment {
   }
 }
 
+/// A payment voided by an admin, with who/when/why.
+class VoidedAbono {
+  final String id;
+  final double amount;
+  final String date;
+  final String sellerName;
+  final String voidedAt;
+  final String voidedBy;
+  final String voidReason;
+
+  VoidedAbono({
+    required this.id,
+    required this.amount,
+    required this.date,
+    required this.sellerName,
+    required this.voidedAt,
+    required this.voidedBy,
+    required this.voidReason,
+  });
+
+  factory VoidedAbono.fromJson(Map<String, dynamic> json) => VoidedAbono(
+        id: json['id'] ?? '',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        date: json['date'] ?? '',
+        sellerName: json['sellerName'] ?? '',
+        voidedAt: json['voidedAt'] ?? '',
+        voidedBy: json['voidedBy'] ?? '',
+        voidReason: json['voidReason'] ?? '',
+      );
+}
+
 class Ticket {
   /// Opportunity number(s) the buyer actually plays. Shown to users instead of the
   /// internal ticket index (ticketNumber), which only exists for storage.
@@ -144,6 +175,9 @@ class Ticket {
 
   /// Voided sales of this ticket (oldest first); kept even after it is sold again.
   final List<TicketAnnulment> annulments;
+
+  /// Payments voided by an admin (e.g. registered twice); kept for traceability.
+  final List<VoidedAbono> voidedAbonos;
   final double totalPaid;
   final double balancePending;
   final bool confirmedByAdmin;
@@ -164,6 +198,7 @@ class Ticket {
     required this.buyerPhone,
     this.saleChannel = '',
     this.annulments = const [],
+    this.voidedAbonos = const [],
     required this.totalPaid,
     required this.balancePending,
     required this.confirmedByAdmin,
@@ -194,6 +229,7 @@ class Ticket {
       buyerPhone: json['buyerPhone'] ?? '',
       saleChannel: json['saleChannel'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
+      voidedAbonos: (json['voidedAbonos'] as List? ?? []).map((a) => VoidedAbono.fromJson(Map<String, dynamic>.from(a))).toList(),
       totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0.0,
       balancePending: (json['balancePending'] as num?)?.toDouble() ?? 0.0,
       confirmedByAdmin: json['confirmedByAdmin'] ?? false,

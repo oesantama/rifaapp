@@ -144,8 +144,9 @@ class ApiService {
         throw ApiException.fromResponse(response);
       } on ApiException {
         rethrow;
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -198,8 +199,10 @@ class ApiService {
         if (response.statusCode == 201) {
           return Raffle.fromJson(jsonDecode(response.body));
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -367,8 +370,10 @@ class ApiService {
         if (response.statusCode == 200) {
           return true;
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -473,8 +478,10 @@ class ApiService {
         if (response.statusCode == 200) {
           return Ticket.fromJson(jsonDecode(response.body));
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -544,8 +551,10 @@ class ApiService {
         if (response.statusCode == 200) {
           return Ticket.fromJson(jsonDecode(response.body));
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -605,8 +614,9 @@ class ApiService {
         throw ApiException.fromResponse(response);
       } on ApiException {
         rethrow;
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -640,8 +650,9 @@ class ApiService {
         throw ApiException.fromResponse(response);
       } on ApiException {
         rethrow;
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -685,8 +696,10 @@ class ApiService {
           _localAdvisors.removeWhere((a) => a.id == advisorId);
           return true;
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
     _localAdvisors.removeWhere((a) => a.id == advisorId);
@@ -705,8 +718,10 @@ class ApiService {
           _localWinners.removeWhere((w) => w.id == winnerId);
           return true;
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
     _localWinners.removeWhere((w) => w.id == winnerId);
@@ -728,8 +743,9 @@ class ApiService {
         throw ApiException.fromResponse(response);
       } on ApiException {
         rethrow;
-      } catch (_) {
-        _useLocalFallback = true;
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
 
@@ -931,8 +947,10 @@ class ApiService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           return true;
         }
-      } catch (_) {
-        _useLocalFallback = true;
+        throw ApiException.fromResponse(response);
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(0, 'Sin conexión con el servidor. Verifique su internet e intente de nuevo (no se guardó nada).');
       }
     }
     return true;
@@ -1057,6 +1075,17 @@ class ApiService {
   Future<Ticket> voidTicket(String ticketId, String reason) async {
     final response = await authPost(
       Uri.parse('$baseUrl/tickets/$ticketId/void'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason}),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Voids one payment (admins); it stays in the ticket history.
+  Future<Ticket> voidAbono(String ticketId, String abonoId, String reason) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/tickets/$ticketId/abonos/$abonoId/void'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'reason': reason}),
     ).timeout(const Duration(seconds: 30));

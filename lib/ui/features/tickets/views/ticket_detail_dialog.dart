@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
@@ -28,6 +30,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   late TextEditingController _buyerNameController;
   late TextEditingController _buyerPhoneController;
   String? _saleChannel; // how the buyer was reached
+  bool _saving = false; // blocks repeated taps while the payment is being saved
+  // One id per submission: if the same request reaches the server twice, it is applied once
+  String _requestId = _newRequestId();
+
+  static String _newRequestId() => '${DateTime.now().microsecondsSinceEpoch}-${math.Random().nextInt(1 << 31)}';
   late TextEditingController _amountController;
   late TextEditingController _noteController;
   String? _selectedSellerId;
@@ -88,20 +95,17 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       }
     }
 
-    final isDebt = pending > 0;
-    final text = '''
-${isDebt ? '⚠️ *RECORDATORIO DE PAGO - DEUDA*' : '🎟️ *COMPROBANTE DE BOLETA*'} - ${widget.raffleTitle ?? "RIFA"}
-----------------------------------------
-🔢 *Número(s):* ${widget.ticket.displayNumber}
-👤 *Comprador:* $name
-📱 *Celular:* $phone
-💰 *Valor Boleta:* ${currency.format(widget.ticket.price)}
-✅ *Total Abonado:* ${currency.format(currentPaid)}
-${pending > 0 ? '🔴 *SALDO PENDIENTE:* ${currency.format(pending)}' : '🎉 *PAGO COMPLETO:* ${currency.format(widget.ticket.price)}'}
-📊 *Estado:* ${AppTheme.getStatusLabel(calculatedStatus)}
-----------------------------------------
-${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar tu número en el próximo sorteo! 🍀' : '¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀'}
-''';
+    final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+    final raffleMatches = raffleVM.raffles.where((r) => r.id == widget.ticket.raffleId);
+    final text = WhatsAppHelper.buildTicketReceipt(
+      ticket: widget.ticket,
+      raffle: raffleMatches.isNotEmpty ? raffleMatches.first : null,
+      raffleTitle: widget.raffleTitle ?? 'RIFA',
+      buyerName: name,
+      buyerPhone: phone,
+      totalPaid: currentPaid,
+      status: calculatedStatus,
+    );
 
     Clipboard.setData(ClipboardData(text: text));
 
@@ -125,6 +129,59 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
         ),
       );
     }
+  }
+
+  /// Voids one payment (e.g. saved twice) after asking for the reason; it stays in the history.
+  Future<void> _confirmVoidAbono(Abono abono, NumberFormat currency) async {
+    final reasonCtrl = TextEditingController(text: 'Abono registrado dos veces por error');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('¿Anular este abono?'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${currency.format(abono.amount)} — ${abono.sellerName} — ${abono.date.split('T')[0]}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('Dejará de sumar al total abonado. Quedará en el historial como abono anulado.', style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: reasonCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Observación (obligatoria) *', helperText: 'Mínimo 10 caracteres.'),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
+              onPressed: reasonCtrl.text.trim().length >= 10 ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Anular abono'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+    final error = await ticketVM.voidAbono(widget.ticket.id, abono.id, reasonCtrl.text.trim(), raffleId: widget.ticket.raffleId);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error)));
+      return;
+    }
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text('Abono de ${currency.format(abono.amount)} anulado.')),
+    );
   }
 
   /// Asks for the reason and voids the sale; the previous sale stays in the ticket history.
@@ -573,53 +630,73 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: () async {
-                          if (_formKey.currentState!.validate()) {
-                            final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
-                            final isChangingSeller =
-                                (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
+                        onPressed: _saving
+                            ? null
+                            : () async {
+                                if (_formKey.currentState!.validate()) {
+                                  final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
+                                  final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') &&
+                                      (newSellerId != null && newSellerId != widget.ticket.advisorId);
 
-                            if (isChangingSeller && _noteController.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  backgroundColor: Colors.red,
-                                  content: Text(
-                                      '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
-                                ),
-                              );
-                              return;
-                            }
+                                  if (isChangingSeller && _noteController.text.trim().isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        backgroundColor: Colors.red,
+                                        content: Text(
+                                            '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                            final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
-                            bool success = await ticketVM.addAbono(
-                              widget.ticket.id,
-                              {
-                                'amount': amt,
-                                'buyerName': _buyerNameController.text.trim(),
-                                'buyerPhone': _buyerPhoneController.text.trim(),
-                                if (_saleChannel != null) 'saleChannel': _saleChannel,
-                                'sellerId': newSellerId,
-                                'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
-                                'note': _noteController.text.trim().isNotEmpty
-                                    ? _noteController.text.trim()
-                                    : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
+                                  final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+                                  setState(() => _saving = true);
+                                  bool success = await ticketVM.addAbono(
+                                    widget.ticket.id,
+                                    {
+                                      'requestId': _requestId,
+                                      'amount': amt,
+                                      'buyerName': _buyerNameController.text.trim(),
+                                      'buyerPhone': _buyerPhoneController.text.trim(),
+                                      if (_saleChannel != null) 'saleChannel': _saleChannel,
+                                      'sellerId': newSellerId,
+                                      'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
+                                      'note': _noteController.text.trim().isNotEmpty
+                                          ? _noteController.text.trim()
+                                          : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
+                                    },
+                                    raffleId: widget.ticket.raffleId,
+                                  );
+                                  if (!mounted) return;
+                                  setState(() => _saving = false);
+                                  if (!success) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        backgroundColor: AppTheme.dangerRose,
+                                        content: Text(ticketVM.lastError ?? 'No se pudo guardar. Intente de nuevo.'),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  _requestId = _newRequestId();
+                                  if (success && mounted) {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(widget.ticket.balancePending == 0
+                                            ? '✓ Datos del comprador actualizados correctamente.'
+                                            : snackbarSuccessText),
+                                      ),
+                                    );
+                                  }
+                                }
                               },
-                              raffleId: widget.ticket.raffleId,
-                            );
-                            if (success && mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(widget.ticket.balancePending == 0
-                                      ? '✓ Datos del comprador actualizados correctamente.'
-                                      : snackbarSuccessText),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        icon: Icon(widget.ticket.balancePending == 0 ? Icons.save_outlined : buttonIcon),
-                        label: Text(widget.ticket.balancePending == 0 ? 'GUARDAR / ACTUALIZAR DATOS DEL COMPRADOR' : buttonLabel),
+                        icon: _saving
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : Icon(widget.ticket.balancePending == 0 ? Icons.save_outlined : buttonIcon),
+                        label: Text(_saving
+                            ? 'GUARDANDO...'
+                            : (widget.ticket.balancePending == 0 ? 'GUARDAR / ACTUALIZAR DATOS DEL COMPRADOR' : buttonLabel)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: widget.ticket.balancePending == 0 ? AppTheme.primaryBlue : buttonColor,
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -646,10 +723,33 @@ ${pending > 0 ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar 
                         leading: const Icon(Icons.receipt, color: AppTheme.primaryBlue),
                         title: Text('${currency.format(ab.amount)} - ${ab.sellerName}'),
                         subtitle: Text('${ab.note.isNotEmpty ? ab.note : "Abono"} • ${ab.date.split('T')[0]}'),
+                        trailing: authVM.isAdmin && ab.amount > 0
+                            ? IconButton(
+                                icon: const Icon(Icons.remove_circle_outline, color: AppTheme.dangerRose),
+                                tooltip: 'Anular este abono (por ejemplo, si quedó repetido)',
+                                onPressed: () => _confirmVoidAbono(ab, currency),
+                              )
+                            : null,
                       ),
                     );
                   },
                 ),
+              ],
+              if (widget.ticket.voidedAbonos.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Abonos anulados (${widget.ticket.voidedAbonos.length}):',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 4),
+                for (final v in widget.ticket.voidedAbonos)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '${currency.format(v.amount)} (${v.sellerName}, ${v.date.split('T')[0]}) — anulado por ${v.voidedBy} '
+                      'el ${_formatDateTime(v.voidedAt)}: ${v.voidReason}',
+                      style: TextStyle(
+                          fontSize: 11.5, color: Colors.grey[600], decoration: TextDecoration.lineThrough, decorationColor: Colors.grey),
+                    ),
+                  ),
               ],
               if (widget.ticket.annulments.isNotEmpty) ...[
                 const SizedBox(height: 12),

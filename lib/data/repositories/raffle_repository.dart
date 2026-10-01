@@ -82,4 +82,6 @@ class RaffleRepository {
   Future<void> deleteRaffleTemplate(String raffleId, String type) => _apiService.deleteRaffleTemplate(raffleId, type);
 
   Future<Ticket> voidTicket(String ticketId, String reason) => _apiService.voidTicket(ticketId, reason);
+
+  Future<Ticket> voidAbono(String ticketId, String abonoId, String reason) => _apiService.voidAbono(ticketId, abonoId, reason);
 }

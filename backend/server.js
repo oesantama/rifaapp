@@ -1713,18 +1713,93 @@ app.get('/api/tickets', (req, res) => {
 // POST Register Ticket Sale or Abono
 const SALE_CHANNELS = ['Facebook', 'WhatsApp', 'Familiar', 'Conocido', 'Voz a voz', 'Otro'];
 
+// Recently seen submission ids (10 minutes) so a repeated request is never applied twice
+const recentRequests = new Map();
+function isDuplicateRequest(requestId) {
+  if (typeof requestId !== 'string' || requestId.length < 8 || requestId.length > 100) return false;
+  const now = Date.now();
+  for (const [key, at] of recentRequests) if (now - at > 10 * 60 * 1000) recentRequests.delete(key);
+  if (recentRequests.has(requestId)) return true;
+  recentRequests.set(requestId, now);
+  return false;
+}
+
+/** Recomputes paid / pending / status from the (non-voided) payments. */
+function recalcTicketTotals(ticket) {
+  ticket.totalPaid = (ticket.abonos || []).reduce((sum, a) => sum + (a.amount || 0), 0);
+  ticket.balancePending = Math.max(0, (ticket.price || 0) - ticket.totalPaid);
+  if (ticket.balancePending <= 0 && ticket.totalPaid > 0) {
+    ticket.status = ticket.confirmedByAdmin ? 'CONFIRMADA' : 'PAGADA';
+  } else if (ticket.totalPaid > 0) {
+    ticket.status = 'ABONO_PARCIAL';
+  } else if (ticket.buyerName) {
+    ticket.status = 'RESERVADA';
+  }
+}
+
+// POST Void one payment (admins): it leaves the totals but stays in ticket.voidedAbonos with who/when/why.
+// Used to fix payments registered twice or by mistake.
+app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const index = (ticket.abonos || []).findIndex(a => a.id === req.params.abonoId);
+  if (index === -1) return res.status(404).json({ error: 'Abono no encontrado.' });
+
+  const reason = String((req.body || {}).reason || '').trim();
+  if (reason.length < 10) {
+    return res.status(400).json({ error: 'Escriba una observación que explique la anulación del abono (mínimo 10 caracteres).' });
+  }
+  const { role, record } = req.auth;
+  const byName = role === 'superadmin' ? (record.name || 'SuperAdministrador') : (record.adminName || 'Administrador');
+  const [abono] = ticket.abonos.splice(index, 1);
+  if (!Array.isArray(ticket.voidedAbonos)) ticket.voidedAbonos = [];
+  ticket.voidedAbonos.push({ ...abono, voidedAt: new Date().toISOString(), voidedBy: byName, voidReason: reason });
+  recalcTicketTotals(ticket);
+
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`,
+    type: 'VOID_ABONO',
+    targetId: ticket.id,
+    raffleId: ticket.raffleId,
+    numbers: ticket.numbers,
+    amount: abono.amount,
+    abonoDate: abono.date,
+    reason,
+    by: byName,
+    date: new Date().toISOString()
+  });
+  saveDB();
+  res.json(ticket);
+});
+
 app.post('/api/tickets/:id/abono', (req, res) => {
   const { id } = req.params;
-  const { amount, buyerName, buyerPhone, sellerId, sellerName, note, saleChannel } = req.body;
+  const { amount, buyerName, buyerPhone, sellerId, sellerName, note, saleChannel, requestId } = req.body;
 
   const ticket = db.tickets.find(t => t.id === id);
   if (!ticket) {
     return res.status(404).json({ error: 'Boleta no encontrada' });
   }
 
+  // Same submission received again (double tap, slow network retry): apply it only once
+  if (isDuplicateRequest(requestId)) {
+    return res.json(ticket);
+  }
+
   const abonoAmount = parseFloat(amount) || 0;
   if (isNaN(abonoAmount) || abonoAmount < 0) {
     return res.status(400).json({ error: 'Monto de abono inválido' });
+  }
+  const pendingBefore = Math.max(0, (ticket.price || 0) - (ticket.totalPaid || 0));
+  if (abonoAmount > pendingBefore) {
+    return res.status(400).json({
+      error: pendingBefore > 0
+        ? `El abono ($${abonoAmount.toLocaleString('es-CO')}) supera el saldo pendiente ($${pendingBefore.toLocaleString('es-CO')}).`
+        : 'Esta boleta ya está pagada por completo; no se puede registrar otro abono.'
+    });
   }
 
   if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();

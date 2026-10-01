@@ -78,8 +78,14 @@ class TicketViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? _lastError;
+
+  /// Reason the last save failed, as explained by the server (or a connection problem).
+  String? get lastError => _lastError;
+
   Future<bool> addAbono(String ticketId, Map<String, dynamic> body, {String? raffleId}) async {
     _isLoading = true;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -88,10 +94,22 @@ class TicketViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error al registrar abono: $e');
+      _lastError = e.toString();
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Voids one payment and reloads the raffle. Returns null on success or the error message.
+  Future<String?> voidAbono(String ticketId, String abonoId, String reason, {String? raffleId}) async {
+    try {
+      await _repository.voidAbono(ticketId, abonoId, reason);
+      await loadTickets(raffleId: raffleId);
+      return null;
+    } catch (e) {
+      return e.toString();
     }
   }
 
