@@ -2381,7 +2381,9 @@ function ensureBanks(target) {
 }
 
 function isActiveBank(name) {
-  return (db.banks || []).some(b => b.active && b.name === name);
+  if (!name) return false;
+  const clean = String(name).trim().toLowerCase();
+  return (db.banks || []).some(b => b.active && b.name.trim().toLowerCase() === clean);
 }
 
 function validateBankName(body, currentId) {
@@ -2546,8 +2548,10 @@ function normalizeTransferAccounts(list, current = []) {
       key: clean(raw.key)
     };
     if (!account.bank) return { error: 'Cada cuenta de transferencia necesita el banco.' };
-    // A bank deactivated later can stay on an account that already had it
-    if (!isActiveBank(account.bank) && !current.some(a => a.bank === account.bank)) {
+    const matchingBank = (db.banks || []).find(b => b.active && b.name.trim().toLowerCase() === account.bank.toLowerCase());
+    if (matchingBank) {
+      account.bank = matchingBank.name;
+    } else if (!current.some(a => a.bank.trim().toLowerCase() === account.bank.toLowerCase())) {
       return { error: `El banco "${account.bank}" no está en la lista de bancos activos.` };
     }
     if (!account.accountNumber && !account.key) {

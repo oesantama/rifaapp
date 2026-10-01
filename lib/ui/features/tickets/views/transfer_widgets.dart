@@ -192,7 +192,7 @@ class TransferAccountsEditor extends StatelessWidget {
 
 /// Bank picker with the active banks of the SuperAdmin's master list. A value that is no longer
 /// active (e.g. an existing account) stays selectable so it is not lost.
-class BankField extends StatelessWidget {
+class BankField extends StatefulWidget {
   final TextEditingController controller;
   final String label;
   final FormFieldValidator<String>? validator;
@@ -200,17 +200,34 @@ class BankField extends StatelessWidget {
   const BankField({super.key, required this.controller, required this.label, this.validator});
 
   @override
+  State<BankField> createState() => _BankFieldState();
+}
+
+class _BankFieldState extends State<BankField> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final vm = context.read<BankViewModel>();
+      if (vm.banks.isEmpty && !vm.isLoading) {
+        vm.load();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final vm = context.watch<BankViewModel>();
     final names = vm.activeBanks.map((b) => b.name).toList();
-    final current = controller.text.trim();
+    final current = widget.controller.text.trim();
     if (current.isNotEmpty && !names.contains(current)) names.insert(0, current);
 
     return DropdownButtonFormField<String>(
       isExpanded: true,
       value: current.isEmpty ? null : current,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: widget.label,
         prefixIcon: const Icon(Icons.account_balance_outlined),
         border: const OutlineInputBorder(),
         helperText: vm.error != null
@@ -219,8 +236,8 @@ class BankField extends StatelessWidget {
         helperMaxLines: 2,
       ),
       items: [for (final name in names) DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis))],
-      onChanged: (v) => controller.text = v ?? '',
-      validator: validator,
+      onChanged: (v) => widget.controller.text = v ?? '',
+      validator: widget.validator,
     );
   }
 }
