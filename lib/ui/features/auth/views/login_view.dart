@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/version.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -203,6 +204,8 @@ class _LoginViewState extends State<LoginView> {
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w400),
                   ),
+                  const SizedBox(height: 4),
+                  const Text('Versión $appVersion', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.white38)),
                   const SizedBox(height: 28),
 
                   // Role selector toggle

@@ -97,4 +97,6 @@ class RaffleRepository {
   Future<void> saveTerms(String template) => _apiService.saveTerms(template);
 
   Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) => _apiService.fetchVoidHistory(raffleId: raffleId);
+
+  Future<Map<String, dynamic>> fetchServerInfo() => _apiService.fetchServerInfo();
 }

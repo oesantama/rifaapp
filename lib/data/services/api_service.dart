@@ -1157,4 +1157,11 @@ class ApiService {
     if (response.statusCode == 200) return (jsonDecode(response.body) as List).map((e) => Map<String, dynamic>.from(e)).toList();
     throw ApiException.fromResponse(response);
   }
+
+  /// Version and commit the server is running (public endpoint).
+  Future<Map<String, dynamic>> fetchServerInfo() async {
+    final response = await http.get(Uri.parse('$baseUrl/health')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
 }

@@ -520,8 +520,13 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           ),
                       ],
                       onChanged: (v) => setState(() => _saleChannel = v),
-                      // Required for new sales; older sold tickets may not have it recorded
-                      validator: (v) => (widget.ticket.status == 'DISPONIBLE' && v == null) ? 'Seleccione cómo se contactó o vendió' : null,
+                      // Required for new sales (older sold tickets may not have it), but never blocks a sale
+                      // when the channel list could not be loaded
+                      validator: (v) => (widget.ticket.status == 'DISPONIBLE' &&
+                              v == null &&
+                              context.read<SaleChannelViewModel>().activeChannels.isNotEmpty)
+                          ? 'Seleccione cómo se contactó o vendió'
+                          : null,
                     ),
                     const SizedBox(height: 10),
                     if (authVM.isAsesor)

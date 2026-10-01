@@ -1,3 +1,7 @@
+import 'ui/core/utils/url_launcher_helper.dart' as web_launcher;
+import 'version.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'ui/core/theme.dart';
@@ -98,6 +102,57 @@ class MainShellScreen extends StatefulWidget {
 }
 
 class _MainShellScreenState extends State<MainShellScreen> {
+  Timer? _updateTimer;
+  bool _updateBannerShown = false;
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
+
+  /// True when [server] is a newer semantic version than [current] (e.g. 2.1.0 > 2.0.3).
+  static bool _isNewer(String server, String current) {
+    List<int> parts(String v) => v.split('.').map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0).toList();
+    final a = parts(server), b = parts(current);
+    for (int i = 0; i < 3; i++) {
+      final x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return false;
+  }
+
+  Future<void> _checkForUpdate() async {
+    if (_updateBannerShown || !mounted) return;
+    try {
+      final info = await RaffleRepository().fetchServerInfo();
+      final serverVersion = '${info['version'] ?? ''}';
+      if (!mounted || serverVersion.isEmpty || !_isNewer(serverVersion, appVersion)) return;
+      _updateBannerShown = true;
+      ScaffoldMessenger.of(context).showMaterialBanner(
+        MaterialBanner(
+          backgroundColor: const Color(0xFFFFF7ED),
+          leading: const Icon(Icons.system_update, color: AppTheme.accentAmber),
+          content: Text(
+            kIsWeb
+                ? 'Hay una nueva versión de Rifa Master (v$serverVersion). Recargue para usarla; usted tiene la v$appVersion.'
+                : 'Hay una nueva versión de Rifa Master (v$serverVersion). Instale el APK actualizado; usted tiene la v$appVersion.',
+            style: const TextStyle(color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => ScaffoldMessenger.of(context).hideCurrentMaterialBanner(),
+              child: const Text('Más tarde'),
+            ),
+            if (kIsWeb) ElevatedButton(onPressed: web_launcher.reloadPage, child: const Text('Recargar ahora')),
+          ],
+        ),
+      );
+    } catch (_) {
+      // No connection: try again on the next check
+    }
+  }
+
   int _selectedIndex = 0;
 
   bool _passwordPromptOpen = false;
@@ -117,6 +172,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionData());
+    // Detects when the server was updated while this app/browser keeps an older version open
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+    _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) => _checkForUpdate());
   }
 
   /// Loads everything the logged-in user sees, right after login or session restore.
@@ -382,6 +440,15 @@ class _MainShellScreenState extends State<MainShellScreen> {
               selectedIndex: _selectedIndex,
               onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
               labelType: NavigationRailLabelType.all,
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text('v$appVersion', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  ),
+                ),
+              ),
               destinations: authVM.isSuperAdmin
                   ? const [
                       NavigationRailDestination(

@@ -878,6 +878,11 @@ async function reloadFromFirestore() {
   db = ensureDbShape(data);
   firestoreVersion = doc.data().version || 'legacy';
   console.log(`🔄 Datos recargados desde Firestore (versión ${firestoreVersion}).`);
+  // Data written by an older server may lack what this version seeds at startup (sale channels,
+  // receipt signing secret): seed it again so sales and QR receipts keep working
+  const seededChannels = ensureSaleChannels(db);
+  const seededSecret = ensureVerificationSecret(db);
+  if (seededChannels || seededSecret) saveDB();
 }
 
 function saveDB() {
@@ -902,8 +907,22 @@ function saveDB() {
 // API Routes
 
 // Health check
+// Release version (backend/package.json) and deployed commit (Render sets RENDER_GIT_COMMIT)
+const APP_VERSION = require('./package.json').version;
+const DEPLOYED_COMMIT = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || null;
+const STARTED_AT = new Date().toISOString();
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), companiesCount: (db.companies || []).length, rafflesCount: db.raffles.length, ticketsCount: db.tickets.length });
+  res.json({
+    status: 'ok',
+    version: APP_VERSION,
+    commit: DEPLOYED_COMMIT,
+    startedAt: STARTED_AT,
+    timestamp: new Date().toISOString(),
+    companiesCount: (db.companies || []).length,
+    rafflesCount: db.raffles.length,
+    ticketsCount: db.tickets.length
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2015,6 +2034,7 @@ function validateChannelInput(body, currentId) {
 }
 
 app.get('/api/sale-channels', (req, res) => {
+  if (ensureSaleChannels(db)) saveDB();
   const all = [...(db.saleChannels || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
   // Everyone gets the active ones; the SuperAdmin also sees inactive ones to manage them
   res.json(req.auth.role === 'superadmin' ? all : all.filter(c => c.active));
