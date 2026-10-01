@@ -332,6 +332,59 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     );
   }
 
+  /// After saving: shows what was stored and asks whether to send the receipt by WhatsApp.
+  Future<bool> _askSendReceipt(Ticket saved) async {
+    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final statusColor = AppTheme.getStatusColor(saved.status);
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.check_circle, color: AppTheme.secondaryEmerald, size: 44),
+        title: Text(saved.totalPaid > 0 ? 'Pago registrado' : 'Boleta apartada'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Boleta N° ${saved.displayNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 6),
+            Text('Comprador: ${saved.buyerName.isNotEmpty ? saved.buyerName : 'Sin nombre'}'),
+            Text('Pagado: ${currency.format(saved.totalPaid)} de ${currency.format(saved.price)}'),
+            if (saved.balancePending > 0) Text('Saldo pendiente: ${currency.format(saved.balancePending)}'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: statusColor.withValues(alpha: 0.5)),
+              ),
+              child: Text(AppTheme.getStatusLabel(saved.status),
+                  style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              saved.buyerPhone.isNotEmpty
+                  ? '¿Desea enviarle el comprobante por WhatsApp al ${saved.buyerPhone}?'
+                  : 'El comprador no tiene celular registrado: WhatsApp se abrirá para elegir el contacto.',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cerrar')),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded, color: Colors.white),
+            label: const Text('Enviar comprobante por WhatsApp', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   /// True when the form has a payment or a new buyer that is not saved yet.
   bool _hasUnsavedSale(double amount) =>
       amount > 0 || (widget.ticket.status == 'DISPONIBLE' && _buyerNameController.text.trim().isNotEmpty);
@@ -1166,6 +1219,14 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                             ? null
                             : () async {
                                 if (!await saveSale() || !mounted) return;
+                                // Saved: offer the receipt right away, built from what the server stored
+                                final saved = context.read<TicketViewModel>().tickets.where((t) => t.id == widget.ticket.id).firstOrNull;
+                                if (saved != null && saved.status != 'DISPONIBLE') {
+                                  final send = await _askSendReceipt(saved);
+                                  if (!mounted) return;
+                                  if (send) _sendReceipt(saved);
+                                }
+                                if (!mounted) return;
                                 Navigator.pop(context);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
