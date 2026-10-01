@@ -17,6 +17,7 @@ import 'ui/features/admin_cash/views/admin_cash_view.dart';
 import 'ui/features/winners/views/winner_registration_view.dart';
 import 'ui/features/company/views/company_management_view.dart';
 import 'ui/features/backup/views/database_backup_view.dart';
+import 'ui/features/control/views/control_view.dart';
 import 'ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'ui/features/sale_channels/views/sale_channels_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
@@ -162,6 +163,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 const AdvisorManagementView(),
                 const AdminCashView(),
                 const WinnerRegistrationView(),
+                const ControlView(),
               ]
             : [
                 DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
@@ -425,6 +427,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                             selectedIcon: Icon(Icons.emoji_events),
                             label: Text('Ganadores'),
                           ),
+                          NavigationRailDestination(
+                            icon: Icon(Icons.fact_check_outlined),
+                            selectedIcon: Icon(Icons.fact_check),
+                            label: Text('Control'),
+                          ),
                         ]
                       : const [
                           NavigationRailDestination(
@@ -466,6 +473,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
                           BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
                           BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                          BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
                         ]
                       : const [
                           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),

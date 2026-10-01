@@ -89,4 +89,12 @@ class RaffleRepository {
   Future<List<SaleChannel>> fetchSaleChannels() => _apiService.fetchSaleChannels();
 
   Future<SaleChannel> saveSaleChannel(String? id, Map<String, dynamic> data) => _apiService.saveSaleChannel(id, data);
+
+  Future<Map<String, dynamic>> fetchTerms({String? raffleId}) => _apiService.fetchTerms(raffleId: raffleId);
+
+  Future<String?> previewTerms(String template, {String? raffleId}) => _apiService.previewTerms(template, raffleId: raffleId);
+
+  Future<void> saveTerms(String template) => _apiService.saveTerms(template);
+
+  Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) => _apiService.fetchVoidHistory(raffleId: raffleId);
 }

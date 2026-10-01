@@ -97,6 +97,19 @@ final mockClient = MockClient((req) async {
     body = [_advisor];
   } else if (path == '/winners') {
     body = [_winner];
+  } else if (path == '/audit/voids') {
+    body = [
+      {'type': 'VENTA', 'date': '2026-09-30T10:00:00Z', 'by': 'WILLIAM SANTAMARIA', 'reason': 'Venta registrada en el número equivocado por el asesor',
+        'raffleTitle': 'Gran rifa', 'numbers': ['66'], 'buyerName': 'María Fernanda Gómez', 'buyerPhone': '3114445566',
+        'advisorName': 'Carlos Andrés Mendoza Rodríguez', 'saleChannel': 'WhatsApp', 'amount': 50000},
+      {'type': 'ABONO', 'date': '2026-09-30T09:00:00Z', 'by': 'WILLIAM SANTAMARIA', 'reason': 'Abono registrado dos veces',
+        'raffleTitle': 'Gran rifa', 'numbers': ['48'], 'buyerName': 'Julio Arvey Amaya', 'buyerPhone': '3229484689',
+        'advisorName': 'edgar santamaria', 'saleChannel': '', 'amount': 50000},
+    ];
+  } else if (path == '/terms') {
+    body = {'template': '1. La rifa {rifa} es organizada por {empresa}.', 'isDefault': true, 'defaultTemplate': '',
+      'placeholders': [{'key': 'rifa', 'description': 'Nombre'}, {'key': 'empresa', 'description': 'Empresa'}, {'key': 'cifras_ganadoras', 'description': 'Cifras'}],
+      'preview': '1. La rifa Gran rifa de una pizza italiana es organizada por contruexito.', 'previewRaffle': 'Gran rifa'};
   } else if (path == '/commissions') {
     body = {'advisors': [], 'totals': {}};
   } else {

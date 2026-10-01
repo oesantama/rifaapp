@@ -234,7 +234,69 @@ function verifyRateLimited(ip) {
   return entry.count > 30;
 }
 
-function verificationPage({ ok, title, rows = [], note = '', color }) {
+// ---------------------------------------------------------------------------
+// Terms and conditions: each company's admin edits a template (company.termsTemplate);
+// {placeholders} are filled with each raffle's data. Shown on the verification page.
+// ---------------------------------------------------------------------------
+const DEFAULT_TERMS_TEMPLATE = `1. La rifa "{rifa}" es organizada por {empresa}.
+2. El sorteo principal se realiza el {fecha_sorteo} con {loteria}.
+3. Gana la boleta cuyo número coincida con {cifras_ganadoras} del resultado oficial de la lotería.
+4. Valor de cada boleta: {precio}. Total de boletas: {total_boletas} ({numeros_por_boleta} número(s) por boleta).
+5. Para participar la boleta debe estar pagada en su totalidad antes del sorteo, salvo que la organización indique otra condición.
+6. Sorteos semanales: {sorteos_semanales}.
+7. El premio se entrega al titular registrado de la boleta, presentando este comprobante y su documento de identidad. El código de verificación debe aparecer como válido en esta página.
+8. El ganador tiene 30 días calendario desde el sorteo para reclamar el premio.
+9. Las boletas anuladas, modificadas o no pagadas no participan.
+10. Al comprar la boleta, el participante acepta estos términos y condiciones.`;
+
+const TERMS_PLACEHOLDERS = [
+  ['empresa', 'Nombre de la empresa'],
+  ['rifa', 'Nombre de la rifa'],
+  ['descripcion', 'Descripción de la rifa'],
+  ['fecha_sorteo', 'Fecha del sorteo principal'],
+  ['loteria', 'Lotería con la que juega'],
+  ['cifras_ganadoras', 'Cifras que deciden el ganador (ej: las 2 últimas cifras)'],
+  ['precio', 'Valor de la boleta'],
+  ['total_boletas', 'Cantidad de boletas'],
+  ['numeros_por_boleta', 'Números (oportunidades) por boleta'],
+  ['sorteos_semanales', 'Día, lotería y abono mínimo de los sorteos semanales, o "no aplica"'],
+  ['abono_minimo', 'Abono mínimo para participar en sorteos semanales']
+];
+
+function winningRuleText(raffle) {
+  const digits = raffle.digits || 4;
+  if (digits >= 4) return raffle.allowCombined ? 'el número completo o combinado' : 'el número completo';
+  const pos = raffle.winningDigitsPosition || 'ULTIMAS';
+  const base = pos === 'MEDIO' ? `las ${digits} cifras del medio` : `las ${digits} ${pos === 'PRIMERAS' ? 'primeras' : 'últimas'} cifras`;
+  return raffle.allowCombined ? `${base} (también combinado)` : base;
+}
+
+function renderTerms(template, raffle, company) {
+  const money = v => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+  const date = raffle.mainDrawDate ? new Date(raffle.mainDrawDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: 'long', year: 'numeric' }) : 'la fecha anunciada';
+  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
+  const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
+  const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
+  const lottery = raffle.lotteryName ? `la ${raffle.lotteryName}` : 'la lotería anunciada';
+  const values = {
+    empresa: company.name || 'la organización',
+    rifa: raffle.title || '',
+    descripcion: raffle.description || '',
+    fecha_sorteo: date,
+    loteria: lottery,
+    cifras_ganadoras: winningRuleText(raffle),
+    precio: money(raffle.ticketPrice),
+    total_boletas: String(raffle.totalTickets || ''),
+    numeros_por_boleta: String(raffle.opportunitiesPerTicket || 1),
+    abono_minimo: money(minAbono),
+    sorteos_semanales: raffle.hasWeeklyDraws === false
+      ? 'no aplica para esta rifa'
+      : `cada ${raffle.weeklyDrawDay || 'semana'} con ${lottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`
+  };
+  return String(template || DEFAULT_TERMS_TEMPLATE).replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
+}
+
+function verificationPage({ ok, title, rows = [], note = '', color, terms = '' }) {
   const accent = color || (ok ? '#059669' : '#DC2626');
   const rowsHtml = rows.map(([k, v]) => `<div class="row"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -244,9 +306,10 @@ body{margin:0;font-family:Roboto,"Segoe UI",system-ui,sans-serif;background:#0F1
 .card{background:#fff;border-radius:20px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.4)}
 .head{background:${accent};color:#fff;padding:22px;text-align:center}.icon{font-size:46px;line-height:1}.head h1{margin:8px 0 0;font-size:20px}
 .body{padding:18px 20px}.row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #E2E8F0;font-size:14px}.row span{color:#64748B}.row b{text-align:right}
-.note{font-size:12px;color:#64748B;margin-top:14px;line-height:1.45}.brand{text-align:center;font-size:11px;color:#94A3B8;padding:0 0 16px;letter-spacing:1px}
+.note{font-size:12px;color:#64748B;margin-top:14px;line-height:1.45}
+.terms{margin-top:14px;border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;font-size:12.5px}.terms summary{font-weight:700;cursor:pointer}.terms div{white-space:pre-wrap;line-height:1.5;margin-top:8px;color:#334155}.brand{text-align:center;font-size:11px;color:#94A3B8;padding:0 0 16px;letter-spacing:1px}
 </style></head><body><div class="card"><div class="head"><div class="icon">${ok ? '✔' : '✖'}</div><h1>${escapeHtml(title)}</h1></div>
-<div class="body">${rowsHtml}${note ? `<div class="note">${escapeHtml(note)}</div>` : ''}</div><div class="brand">VERIFICADO POR RIFA MASTER</div></div></body></html>`;
+<div class="body">${rowsHtml}${note ? `<div class="note">${escapeHtml(note)}</div>` : ''}${terms ? `<details class="terms"><summary>Términos y condiciones</summary><div>${escapeHtml(terms)}</div></details>` : ''}</div><div class="brand">VERIFICADO POR RIFA MASTER</div></div></body></html>`;
 }
 
 app.get('/verificar/:code', (req, res) => {
@@ -286,7 +349,8 @@ app.get('/verificar/:code', (req, res) => {
       ['Juega el día', drawDate],
       ['Código', formatted]
     ],
-    note: `Consulta realizada el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}. Los datos se leen en este momento del sistema de la rifa.`
+    note: `Consulta realizada el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}. Los datos se leen en este momento del sistema de la rifa.`,
+    terms: renderTerms(company.termsTemplate, raffle, company)
   }));
 });
 
@@ -1465,6 +1529,88 @@ function canAccessRaffle(req, raffle) {
   return !raffle.companyId || raffle.companyId === companyId;
 }
 
+/** Company the request works on: the admin's own; the SuperAdmin passes ?companyId=. */
+function targetCompanyOf(req) {
+  if (req.auth.role === 'admin') return req.auth.record;
+  if (req.auth.role === 'superadmin') return (db.companies || []).find(c => c.id === req.query.companyId) || null;
+  return null;
+}
+
+app.get('/api/terms', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const raffles = (db.raffles || []).filter(r => r.companyId === company.id);
+  const raffle = raffles.find(r => r.id === req.query.raffleId) || raffles[0];
+  const template = company.termsTemplate || DEFAULT_TERMS_TEMPLATE;
+  res.json({
+    template,
+    isDefault: !company.termsTemplate,
+    defaultTemplate: DEFAULT_TERMS_TEMPLATE,
+    placeholders: TERMS_PLACEHOLDERS.map(([key, description]) => ({ key, description })),
+    preview: raffle ? renderTerms(template, raffle, company) : null,
+    previewRaffle: raffle ? raffle.title : null
+  });
+});
+
+// Renders a template with a raffle's data without saving it (live preview in the editor)
+app.post('/api/terms/preview', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const raffles = (db.raffles || []).filter(r => r.companyId === company.id);
+  const raffle = raffles.find(r => r.id === (req.body || {}).raffleId) || raffles[0];
+  if (!raffle) return res.json({ preview: null });
+  const template = String((req.body || {}).template || '').slice(0, 8000) || DEFAULT_TERMS_TEMPLATE;
+  res.json({ preview: renderTerms(template, raffle, company), previewRaffle: raffle.title });
+});
+
+app.put('/api/terms', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const template = typeof (req.body || {}).template === 'string' ? req.body.template.trim() : '';
+  if (template.length > 8000) return res.status(400).json({ error: 'El texto es demasiado largo (máximo 8.000 caracteres).' });
+  // Empty text goes back to the generic template
+  if (template) company.termsTemplate = template; else delete company.termsTemplate;
+  company.termsUpdatedAt = new Date().toISOString();
+  saveDB();
+  res.json({ message: template ? 'Términos y condiciones guardados.' : 'Se restauró la plantilla genérica.', isDefault: !template });
+});
+
+// History of voided sales and voided payments (admins: own company; SuperAdmin: all or ?companyId=)
+app.get('/api/audit/voids', adminOnly, (req, res) => {
+  const companyId = req.auth.role === 'admin' ? req.auth.record.id : req.query.companyId;
+  const raffles = (db.raffles || []).filter(r => !companyId || r.companyId === companyId);
+  const raffleById = Object.fromEntries(raffles.map(r => [r.id, r]));
+  const entries = [];
+  for (const t of db.tickets || []) {
+    const raffle = raffleById[t.raffleId];
+    if (!raffle || (req.query.raffleId && t.raffleId !== req.query.raffleId)) continue;
+    for (const a of t.annulments || []) {
+      const p = a.previous || {};
+      entries.push({
+        type: 'VENTA', date: a.date, by: a.by, reason: a.reason,
+        raffleId: raffle.id, raffleTitle: raffle.title, ticketId: t.id, numbers: t.numbers,
+        buyerName: p.buyerName || '', buyerPhone: p.buyerPhone || '', advisorName: p.advisorName || '',
+        saleChannel: p.saleChannel || '', amount: p.totalPaid || 0, previousStatus: p.status || ''
+      });
+    }
+    // Voided payments of the current sale and of sales voided later
+    const voided = [
+      ...(t.voidedAbonos || []).map(v => [v, t]),
+      ...(t.annulments || []).flatMap(a => ((a.previous || {}).voidedAbonos || []).map(v => [v, a.previous]))
+    ];
+    for (const [v, owner] of voided) {
+      entries.push({
+        type: 'ABONO', date: v.voidedAt, by: v.voidedBy, reason: v.voidReason,
+        raffleId: raffle.id, raffleTitle: raffle.title, ticketId: t.id, numbers: t.numbers,
+        buyerName: v.buyerName || owner.buyerName || '', buyerPhone: v.buyerPhone || owner.buyerPhone || '',
+        advisorName: v.sellerName || '', saleChannel: owner.saleChannel || '', amount: v.amount || 0, paymentDate: v.date
+      });
+    }
+  }
+  entries.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  res.json(entries);
+});
+
 // Raffle templates: the image is downloaded only when the poster or ticket print is opened
 app.get('/api/raffles/:id/templates/:type', async (req, res) => {
   const raffle = (db.raffles || []).find(r => r.id === req.params.id);
@@ -1954,7 +2100,15 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
   const byName = role === 'superadmin' ? (record.name || 'SuperAdministrador') : (record.adminName || 'Administrador');
   const [abono] = ticket.abonos.splice(index, 1);
   if (!Array.isArray(ticket.voidedAbonos)) ticket.voidedAbonos = [];
-  ticket.voidedAbonos.push({ ...abono, voidedAt: new Date().toISOString(), voidedBy: byName, voidReason: reason });
+  ticket.voidedAbonos.push({
+    ...abono,
+    voidedAt: new Date().toISOString(),
+    voidedBy: byName,
+    voidReason: reason,
+    // Who the ticket belonged to when the payment was voided (the ticket may be resold later)
+    buyerName: ticket.buyerName || '',
+    buyerPhone: ticket.buyerPhone || ''
+  });
   recalcTicketTotals(ticket);
 
   if (!db.auditLogs) db.auditLogs = [];
@@ -2078,7 +2232,9 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
     confirmedByAdmin: !!ticket.confirmedByAdmin,
     confirmedDate: ticket.confirmedDate || null,
     assignedDate: ticket.assignedDate || null,
-    abonos: ticket.abonos || []
+    abonos: ticket.abonos || [],
+    // Payments voided during this sale stay with it, not with a future sale of the ticket
+    voidedAbonos: ticket.voidedAbonos || []
   };
 
   if (!Array.isArray(ticket.annulments)) ticket.annulments = [];
@@ -2097,6 +2253,7 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
   ticket.confirmedDate = null;
   ticket.assignedDate = null;
   ticket.abonos = [];
+  ticket.voidedAbonos = [];
 
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({

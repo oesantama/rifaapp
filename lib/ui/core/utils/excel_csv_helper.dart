@@ -1,4 +1,5 @@
 import 'package:excel/excel.dart';
+import 'package:intl/intl.dart';
 import '../../../data/models/advisor.dart';
 import '../../../data/models/ticket.dart';
 import 'file_saver.dart';
@@ -436,6 +437,38 @@ class ExcelCsvHelper {
   }
 
   /// Exports a list of [Ticket] objects to an Excel (.xlsx) file with fallback to CSV
+  /// History of voided sales and payments (admin "Control" screen).
+  static void exportVoidHistoryToExcel(List<Map<String, dynamic>> entries) {
+    const headers = ['Fecha anulación', 'Tipo', 'Rifa', 'Número(s)', 'Comprador', 'Teléfono', 'Asesor', 'Medio', 'Valor', 'Anulado por', 'Motivo'];
+    String fmt(dynamic iso) {
+      final d = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
+      return d == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(d);
+    }
+
+    final excel = Excel.createExcel();
+    final sheetName = excel.getDefaultSheet() ?? 'Sheet1';
+    excel.rename(sheetName, 'Anulaciones');
+    final sheet = excel['Anulaciones'];
+    sheet.appendRow(headers.map((h) => TextCellValue(h)).toList());
+    for (final e in entries) {
+      sheet.appendRow([
+        TextCellValue(fmt(e['date'])),
+        TextCellValue(e['type'] == 'VENTA' ? 'Venta anulada' : 'Abono anulado'),
+        TextCellValue('${e['raffleTitle'] ?? ''}'),
+        TextCellValue(((e['numbers'] as List?) ?? []).join(' - ')),
+        TextCellValue('${e['buyerName'] ?? ''}'),
+        TextCellValue('${e['buyerPhone'] ?? ''}'),
+        TextCellValue('${e['advisorName'] ?? ''}'),
+        TextCellValue('${e['saleChannel'] ?? ''}'),
+        IntCellValue(((e['amount'] as num?) ?? 0).round()),
+        TextCellValue('${e['by'] ?? ''}'),
+        TextCellValue('${e['reason'] ?? ''}'),
+      ]);
+    }
+    final bytes = excel.save();
+    if (bytes != null) saveAndDownloadBytes('historial_anulaciones_${DateTime.now().millisecondsSinceEpoch}.xlsx', bytes);
+  }
+
   static void exportTicketsToExcel(List<Ticket> tickets, {String title = 'Reporte_Boletas'}) {
     // Ordered by the opportunity number the buyer plays; the internal ticket index is not exported.
     // Money values are whole pesos (no decimals).

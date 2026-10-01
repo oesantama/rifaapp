@@ -1123,4 +1123,38 @@ class ApiService {
     }
     throw ApiException.fromResponse(response);
   }
+
+  // Terms and conditions (per company) and history of voided sales / payments
+  Future<Map<String, dynamic>> fetchTerms({String? raffleId}) async {
+    final query = raffleId != null ? '?raffleId=$raffleId' : '';
+    final response = await authGet(Uri.parse('$baseUrl/terms$query')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<String?> previewTerms(String template, {String? raffleId}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/terms/preview'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'template': template, 'raffleId': raffleId}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return (jsonDecode(response.body) as Map)['preview'] as String?;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> saveTerms(String template) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/terms'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'template': template}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) async {
+    final query = raffleId != null ? '?raffleId=$raffleId' : '';
+    final response = await authGet(Uri.parse('$baseUrl/audit/voids$query')).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return (jsonDecode(response.body) as List).map((e) => Map<String, dynamic>.from(e)).toList();
+    throw ApiException.fromResponse(response);
+  }
 }
