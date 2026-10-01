@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
@@ -18,7 +19,11 @@ class WhatsAppHelper {
     return digitsOnly;
   }
 
-  /// Opens WhatsApp app or web with a pre-filled message
+  /// Opens WhatsApp with a pre-filled message.
+  ///
+  /// The link is opened right away, without asking first whether it can be opened:
+  /// - iPhone/iPad Safari only allows opening it during the tap itself (any wait before blocks it).
+  /// - Android 11+ answers "no" to that question unless the app declares the links it opens.
   static Future<bool> sendWhatsAppMessage({
     required String phone,
     required String message,
@@ -30,17 +35,63 @@ class WhatsAppHelper {
     final waUrl = Uri.parse('https://wa.me/$cleanPhone?text=$encodedMsg');
 
     try {
-      if (await canLaunchUrl(waUrl)) {
-        return await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-      } else {
-        // Fallback for direct deep link
-        final deepLink = Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encodedMsg');
-        if (await canLaunchUrl(deepLink)) {
-          return await launchUrl(deepLink, mode: LaunchMode.externalApplication);
-        }
-      }
+      if (await launchUrl(waUrl, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank')) return true;
+    } catch (_) {}
+    try {
+      // Direct deep link to the installed app
+      return await launchUrl(Uri.parse('whatsapp://send?phone=$cleanPhone&text=$encodedMsg'), mode: LaunchMode.externalApplication);
     } catch (_) {}
     return false;
+  }
+
+  /// Receipt / payment reminder text, including the raffle's draw date, weekly draws and description.
+  static String buildTicketReceipt({
+    required Ticket ticket,
+    Raffle? raffle,
+    required String raffleTitle,
+    required String buyerName,
+    required String buyerPhone,
+    required double totalPaid,
+    required String status,
+  }) {
+    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final pending = (ticket.price - totalPaid).clamp(0, double.infinity);
+    final isDebt = pending > 0;
+    final b = StringBuffer();
+
+    b.writeln('${isDebt ? '⚠️ *RECORDATORIO DE PAGO - DEUDA*' : '🎟️ *COMPROBANTE DE BOLETA*'} - $raffleTitle');
+    if (raffle != null && raffle.description.trim().isNotEmpty) b.writeln('📝 ${raffle.description.trim()}');
+    b.writeln('----------------------------------------');
+    b.writeln('🔢 *Número(s):* ${ticket.displayNumber}');
+    b.writeln('👤 *Comprador:* $buyerName');
+    b.writeln('📱 *Celular:* ${buyerPhone.isNotEmpty ? buyerPhone : "No registrado"}');
+    b.writeln('💰 *Valor Boleta:* ${currency.format(ticket.price)}');
+    b.writeln('✅ *Total Abonado:* ${currency.format(totalPaid)}');
+    b.writeln(isDebt ? '🔴 *SALDO PENDIENTE:* ${currency.format(pending)}' : '🎉 *PAGO COMPLETO:* ${currency.format(ticket.price)}');
+    b.writeln('📊 *Estado:* ${AppTheme.getStatusLabel(status)}');
+
+    if (raffle != null) {
+      final drawDate = DateTime.tryParse(raffle.mainDrawDate);
+      final lottery = raffle.lotteryName.trim();
+      if (drawDate != null || raffle.hasWeeklyDraws) b.writeln('----------------------------------------');
+      if (drawDate != null) {
+        b.writeln('📅 *Juega el día:* ${DateFormat('dd/MM/yyyy').format(drawDate.toLocal())}'
+            '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
+      }
+      if (raffle.hasWeeklyDraws) {
+        final minAbono =
+            raffle.weeklyMinAbonoType == 'PORCENTAJE' ? raffle.ticketPrice * raffle.weeklyMinAbonoValue / 100 : raffle.weeklyMinAbonoValue;
+        b.writeln('🗓️ *Sorteos semanales:* cada ${raffle.weeklyDrawDay}'
+            '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
+        if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');
+      }
+    }
+
+    b.writeln('----------------------------------------');
+    b.writeln(isDebt
+        ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar tu número en el próximo sorteo! 🍀'
+        : '¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀');
+    return b.toString();
   }
 
   /// Generates structured WhatsApp message for ticket receipt or payment reminder
