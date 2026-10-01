@@ -12,6 +12,7 @@ import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/date_formatter.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/features/lotteries/views/lottery_field.dart';
 import 'package:rifaapp/ui/features/tickets/views/transfer_widgets.dart';
 
 class RaffleEditDialog extends StatefulWidget {
@@ -42,6 +43,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   late bool _allowCombined;
   late String _weeklyDrawDay;
   late String _lotteryName;
+  late String _mainLotteryName;
   late String _weeklyMinAbonoType;
   late TextEditingController _weeklyMinAbonoValueController;
   late bool _isWeeklyPrizeAccumulative;
@@ -68,6 +70,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _allowCombined = widget.raffle.allowCombined;
     _weeklyDrawDay = widget.raffle.weeklyDrawDay;
     _lotteryName = widget.raffle.lotteryName;
+    _mainLotteryName = widget.raffle.mainLotteryName;
     _weeklyMinAbonoType = widget.raffle.weeklyMinAbonoType;
     _weeklyMinAbonoValueController = TextEditingController(text: widget.raffle.weeklyMinAbonoValue.toStringAsFixed(0));
     _isWeeklyPrizeAccumulative = widget.raffle.isWeeklyPrizeAccumulative;
@@ -512,6 +515,16 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 ),
                 const SizedBox(height: 12),
 
+                // Lottery of the main draw: shown in WhatsApp messages, terms and the printed ticket
+                LotteryField(
+                  value: _mainLotteryName,
+                  label: 'Lotería del sorteo principal *',
+                  helperText: _mainLotteryName.isEmpty
+                      ? 'Sin elegir: los mensajes muestran "${widget.raffle.lotteryName}". Seleccione la lotería real.'
+                      : 'Aparece en los mensajes de WhatsApp, los términos y la boleta impresa',
+                  onChanged: (v) => setState(() => _mainLotteryName = v ?? ''),
+                ),
+                const SizedBox(height: 12),
                 Flex(
                   direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
                   crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
@@ -916,10 +929,11 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       const SizedBox(width: 12, height: 12),
                       ResponsiveFlexChild(
                         expand: !isNarrowScreen(context),
-                        child: TextFormField(
-                          initialValue: _lotteryName,
-                          decoration: const InputDecoration(labelText: 'Lotería Principal', border: OutlineInputBorder()),
-                          onChanged: (v) => _lotteryName = v,
+                        child: LotteryField(
+                          value: _lotteryName,
+                          label: 'Lotería de los sorteos semanales',
+                          required: false,
+                          onChanged: (v) => setState(() => _lotteryName = v ?? ''),
                         ),
                       ),
                     ],
@@ -1104,6 +1118,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             'allowCombined': _allowCombined,
                             'weeklyDrawDay': _weeklyDrawDay,
                             'lotteryName': _lotteryName,
+                            'mainLotteryName': _mainLotteryName,
                             'weeklyMinAbonoType': _weeklyMinAbonoType,
                             'weeklyMinAbonoValue': double.tryParse(_weeklyMinAbonoValueController.text) ?? 50.0,
                             'isWeeklyPrizeAccumulative': _isWeeklyPrizeAccumulative,

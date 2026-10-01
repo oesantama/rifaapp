@@ -8,6 +8,7 @@ import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/date_formatter.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/features/lotteries/views/lottery_field.dart';
 
 class RaffleCreateDialog extends StatefulWidget {
   const RaffleCreateDialog({super.key});
@@ -25,6 +26,7 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
   final _commissionValueController = TextEditingController(text: '10');
 
   late TextEditingController _mainDrawDateController;
+  String _mainLotteryName = '';
   late TextEditingController _weeklyPrizesStartDateController;
 
   int _digits = 4;
@@ -190,6 +192,14 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                 TextFormField(
                   controller: _descriptionController,
                   decoration: const InputDecoration(labelText: 'Descripción / Asunto del Sorteo', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+                // Lottery of the main draw: shown in WhatsApp messages, terms and the printed ticket
+                LotteryField(
+                  value: _mainLotteryName,
+                  label: 'Lotería del sorteo principal *',
+                  helperText: 'Aparece en los mensajes de WhatsApp, los términos y la boleta impresa',
+                  onChanged: (v) => setState(() => _mainLotteryName = v ?? ''),
                 ),
                 const SizedBox(height: 12),
 
@@ -715,6 +725,9 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
                             'mainDrawDate': DateFormatterColombia.toIsoString(_mainDrawDateController.text),
+                            'mainLotteryName': _mainLotteryName,
+                            // Weekly draws start with the same lottery; it can be changed when editing the raffle
+                            'lotteryName': _mainLotteryName,
                             'weeklyPrizesStartDate': DateFormatterColombia.toIsoString(_weeklyPrizesStartDateController.text),
                             'digits': _digits,
                             'totalTickets': int.parse(_totalTicketsController.text),

@@ -75,7 +75,8 @@ class WhatsAppHelper {
 
     if (raffle != null) {
       final drawDate = DateTime.tryParse(raffle.mainDrawDate);
-      final lottery = raffle.lotteryName.trim();
+      final lottery = raffle.mainLottery; // main draw
+      final weeklyLottery = raffle.lotteryName.trim().isNotEmpty ? raffle.lotteryName.trim() : lottery;
       if (drawDate != null || raffle.hasWeeklyDraws) b.writeln('----------------------------------------');
       if (drawDate != null) {
         b.writeln('📅 *Juega el día:* ${DateFormat('dd/MM/yyyy').format(drawDate.toLocal())}'
@@ -86,7 +87,7 @@ class WhatsAppHelper {
         final minAbono =
             raffle.weeklyMinAbonoType == 'PORCENTAJE' ? raffle.ticketPrice * raffle.weeklyMinAbonoValue / 100 : raffle.weeklyMinAbonoValue;
         b.writeln('🗓️ *Sorteos semanales:* cada ${raffle.weeklyDrawDay}'
-            '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
+            '${weeklyLottery.isNotEmpty ? ' con la $weeklyLottery' : ''}');
         if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');
       }
       if (raffle.transferAccounts.isNotEmpty) {

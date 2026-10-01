@@ -75,7 +75,8 @@ class Raffle {
   /// "Combinado": the same digits in any order also win.
   final bool allowCombined;
   final String weeklyDrawDay;
-  final String lotteryName;
+  final String lotteryName; // lottery of the weekly draws
+  final String mainLotteryName; // lottery of the main draw
   final String weeklyMinAbonoType; // PORCENTAJE or VALOR_FIJO
   final double weeklyMinAbonoValue; // e.g. 50 (%) or 50000 ($)
   final bool isWeeklyPrizeAccumulative; // Whether weekly prize accumulates if no qualifying winner
@@ -86,6 +87,9 @@ class Raffle {
   final List<String> assignedAdvisorIds;
   final String companyId;
   final Map<String, dynamic>? templateConfig;
+
+  /// Lottery of the main draw; older raffles only had the weekly one.
+  String get mainLottery => mainLotteryName.trim().isNotEmpty ? mainLotteryName.trim() : lotteryName.trim();
 
   /// Accounts where buyers pay by bank transfer.
   final List<TransferAccount> transferAccounts;
@@ -118,6 +122,7 @@ class Raffle {
     this.allowCombined = false,
     this.weeklyDrawDay = 'Viernes',
     this.lotteryName = 'Lotería de Medellín',
+    this.mainLotteryName = '',
     this.weeklyMinAbonoType = 'PORCENTAJE',
     this.weeklyMinAbonoValue = 50.0,
     this.isWeeklyPrizeAccumulative = true,
@@ -161,6 +166,7 @@ class Raffle {
       allowCombined: json['allowCombined'] == true,
       weeklyDrawDay: json['weeklyDrawDay'] ?? 'Viernes',
       lotteryName: json['lotteryName'] ?? 'Lotería de Medellín',
+      mainLotteryName: json['mainLotteryName'] ?? '',
       weeklyMinAbonoType: json['weeklyMinAbonoType'] ?? 'PORCENTAJE',
       weeklyMinAbonoValue: (json['weeklyMinAbonoValue'] as num?)?.toDouble() ?? 50.0,
       isWeeklyPrizeAccumulative: json['isWeeklyPrizeAccumulative'] ?? true,
@@ -201,6 +207,7 @@ class Raffle {
         'allowCombined': allowCombined,
         'weeklyDrawDay': weeklyDrawDay,
         'lotteryName': lotteryName,
+        'mainLotteryName': mainLotteryName,
         'weeklyMinAbonoType': weeklyMinAbonoType,
         'weeklyMinAbonoValue': weeklyMinAbonoValue,
         'isWeeklyPrizeAccumulative': isWeeklyPrizeAccumulative,

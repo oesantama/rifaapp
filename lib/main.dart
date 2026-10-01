@@ -26,6 +26,8 @@ import 'ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'ui/features/sale_channels/views/sale_channels_view.dart';
 import 'ui/features/banks/view_models/bank_view_model.dart';
 import 'ui/features/banks/views/banks_view.dart';
+import 'ui/features/lotteries/view_models/lottery_view_model.dart';
+import 'ui/features/lotteries/views/lotteries_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
@@ -60,6 +62,7 @@ class _RifaAppState extends State<RifaApp> {
         ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => SaleChannelViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => BankViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => LotteryViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -199,6 +202,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     winnerVM.reset();
     final saleChannelVM = Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
     final bankVM = Provider.of<BankViewModel>(context, listen: false)..reset();
+    final lotteryVM = Provider.of<LotteryViewModel>(context, listen: false)..reset();
 
     // Advisors and winners do not depend on the selected raffle: load them in parallel
     final independent = Future.wait([
@@ -206,6 +210,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
       winnerVM.loadWinners(),
       saleChannelVM.load(),
       bankVM.load(),
+      lotteryVM.load(),
       authVM.refreshActiveAdvisor(), // numbers assigned since the session was saved
     ]);
     await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
@@ -228,6 +233,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const DatabaseBackupView(),
             const SaleChannelsView(),
             const BanksView(),
+            const LotteriesView(),
           ]
         : authVM.isAdmin
             ? [
@@ -498,6 +504,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.account_balance),
                         label: Text('Bancos'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.confirmation_number_outlined),
+                        selectedIcon: Icon(Icons.confirmation_number),
+                        label: Text('Loterías'),
+                      ),
                     ]
                   : authVM.isAdmin
                       ? const [
@@ -565,6 +576,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       BottomNavigationBarItem(icon: Icon(Icons.backup), label: 'Backup BD'),
                       BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Medios'),
                       BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Bancos'),
+                      BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'Loterías'),
                     ]
                   : authVM.isAdmin
                       ? const [

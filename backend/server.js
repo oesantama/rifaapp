@@ -265,7 +265,8 @@ const TERMS_PLACEHOLDERS = [
   ['rifa', 'Nombre de la rifa'],
   ['descripcion', 'Descripción de la rifa'],
   ['fecha_sorteo', 'Fecha del sorteo principal'],
-  ['loteria', 'Lotería con la que juega'],
+  ['loteria', 'Lotería del sorteo principal'],
+  ['loteria_semanal', 'Lotería de los sorteos semanales'],
   ['cifras_ganadoras', 'Cifras que deciden el ganador (ej: las 2 últimas cifras)'],
   ['precio', 'Valor de la boleta'],
   ['total_boletas', 'Cantidad de boletas'],
@@ -273,6 +274,17 @@ const TERMS_PLACEHOLDERS = [
   ['sorteos_semanales', 'Día, lotería y abono mínimo de los sorteos semanales, o "no aplica"'],
   ['abono_minimo', 'Abono mínimo para participar en sorteos semanales']
 ];
+
+/** Lottery of the main draw (older raffles only had the weekly one, lotteryName). */
+function mainLotteryOf(raffle) {
+  return String(raffle.mainLotteryName || raffle.lotteryName || '').trim();
+}
+
+/** "la Lotería de Boyacá"; names that are not "Lotería ..." are used as they are. */
+function lotteryPhrase(name) {
+  if (!name) return 'la lotería anunciada';
+  return /^loter[ií]a/i.test(name) ? `la ${name}` : name;
+}
 
 function winningRuleText(raffle) {
   const digits = raffle.digits || 4;
@@ -311,13 +323,15 @@ function renderTerms(template, raffle, company) {
   const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
   const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
   const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
-  const lottery = raffle.lotteryName ? `la ${raffle.lotteryName}` : 'la lotería anunciada';
+  const lottery = lotteryPhrase(mainLotteryOf(raffle));
+  const weeklyLottery = lotteryPhrase(String(raffle.lotteryName || '').trim() || mainLotteryOf(raffle));
   const values = {
     empresa: company.name || 'la organización',
     rifa: raffle.title || '',
     descripcion: raffle.description || '',
     fecha_sorteo: date,
     loteria: lottery,
+    loteria_semanal: weeklyLottery,
     cifras_ganadoras: winningRuleText(raffle),
     precio: money(raffle.ticketPrice),
     total_boletas: String(raffle.totalTickets || ''),
@@ -325,7 +339,7 @@ function renderTerms(template, raffle, company) {
     abono_minimo: money(minAbono),
     sorteos_semanales: raffle.hasWeeklyDraws === false
       ? 'no aplica para esta rifa'
-      : `cada ${raffle.weeklyDrawDay || 'semana'} con ${lottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`
+      : `cada ${raffle.weeklyDrawDay || 'semana'} con ${weeklyLottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`
   };
   return String(template || DEFAULT_TERMS_TEMPLATE).replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
 }
@@ -381,6 +395,7 @@ app.get('/verificar/:code', (req, res) => {
       ['Abonado', money(ticket.totalPaid)],
       ['Saldo pendiente', money(ticket.balancePending)],
       ['Juega el día', drawDate],
+      ['Lotería', mainLotteryOf(raffle) || '—'],
       ['Código', formatted]
     ],
     note: `Consulta realizada el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}. Los datos se leen en este momento del sistema de la rifa.`,
@@ -914,6 +929,7 @@ async function loadDB() {
   const templatesMoved = await extractEmbeddedTemplates(db);
   const channelsSeeded = ensureSaleChannels(db);
   const banksSeeded = ensureBanks(db);
+  const lotteriesSeeded = ensureLotteries(db);
   const verificationSeeded = ensureVerificationSecret(db);
   const credentialsChanged = migrateCredentials();
   if (credentialsChanged) {
@@ -925,6 +941,7 @@ async function loadDB() {
     templatesMoved ||
     channelsSeeded ||
     banksSeeded ||
+    lotteriesSeeded ||
     verificationSeeded ||
     credentialsChanged ||
     (security.hasMasterKey() && !loadedEncrypted) ||
@@ -957,8 +974,9 @@ async function reloadFromFirestore() {
   // receipt signing secret): seed it again so sales and QR receipts keep working
   const seededChannels = ensureSaleChannels(db);
   const seededBanks = ensureBanks(db);
+  const seededLotteries = ensureLotteries(db);
   const seededSecret = ensureVerificationSecret(db);
-  if (seededChannels || seededBanks || seededSecret) saveDB();
+  if (seededChannels || seededBanks || seededLotteries || seededSecret) saveDB();
 }
 
 function saveDB() {
@@ -1570,6 +1588,8 @@ app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
     ensureSaleChannels(restored);
     if (!Array.isArray(restored.banks) || !restored.banks.length) restored.banks = db.banks;
     ensureBanks(restored);
+    if (!Array.isArray(restored.lotteries) || !restored.lotteries.length) restored.lotteries = db.lotteries;
+    ensureLotteries(restored);
     // Keep the current signing secret so receipts printed before the restore still verify
     restored.settings = { ...(restored.settings || {}), verificationSecret: (db.settings || {}).verificationSecret || (restored.settings || {}).verificationSecret };
     ensureVerificationSecret(restored);
@@ -1790,6 +1810,18 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   if (!raffle) {
     return res.status(404).json({ error: 'Sorteo no encontrado' });
   }
+  let mainLotteryName = null;
+  if (req.body.mainLotteryName !== undefined) {
+    const checked = checkRaffleLottery(req.body.mainLotteryName, raffle.mainLotteryName, 'lotería del sorteo principal');
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    mainLotteryName = checked.name;
+  }
+  let weeklyLotteryName = null;
+  if (req.body.lotteryName !== undefined && String(req.body.lotteryName).trim() !== '') {
+    const checked = checkRaffleLottery(req.body.lotteryName, raffle.lotteryName, 'lotería de los sorteos semanales');
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    weeklyLotteryName = checked.name;
+  }
   let transferAccounts = null;
   if (req.body.transferAccounts !== undefined) {
     const checked = normalizeTransferAccounts(req.body.transferAccounts, raffle.transferAccounts || []);
@@ -1833,7 +1865,8 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   // Weekly draw settings (previously ignored, so they reverted after every reload)
   if (req.body.hasWeeklyDraws !== undefined) raffle.hasWeeklyDraws = req.body.hasWeeklyDraws === true || req.body.hasWeeklyDraws === 'true';
   if (req.body.weeklyDrawDay !== undefined) raffle.weeklyDrawDay = String(req.body.weeklyDrawDay);
-  if (req.body.lotteryName !== undefined) raffle.lotteryName = String(req.body.lotteryName);
+  if (mainLotteryName) raffle.mainLotteryName = mainLotteryName;
+  if (weeklyLotteryName) raffle.lotteryName = weeklyLotteryName;
   if (['PORCENTAJE', 'VALOR_FIJO'].includes(req.body.weeklyMinAbonoType)) raffle.weeklyMinAbonoType = req.body.weeklyMinAbonoType;
   if (req.body.weeklyMinAbonoValue !== undefined) raffle.weeklyMinAbonoValue = parseFloat(req.body.weeklyMinAbonoValue) || 0;
   if (req.body.isWeeklyPrizeAccumulative !== undefined) raffle.isWeeklyPrizeAccumulative = req.body.isWeeklyPrizeAccumulative === true || req.body.isWeeklyPrizeAccumulative === 'true';
@@ -2090,6 +2123,12 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     const checked = normalizeTransferAccounts(req.body.transferAccounts);
     if (checked.error) return res.status(400).json({ error: checked.error });
     newRaffle.transferAccounts = checked.accounts;
+  }
+  for (const [field, label] of [['mainLotteryName', 'lotería del sorteo principal'], ['lotteryName', 'lotería de los sorteos semanales']]) {
+    if (req.body[field] === undefined || String(req.body[field]).trim() === '') continue;
+    const checked = checkRaffleLottery(req.body[field], null, label);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    newRaffle[field] = checked.name;
   }
 
   db.raffles.unshift(newRaffle);
@@ -2453,6 +2492,90 @@ app.put('/api/banks/:id', superAdminOnly, (req, res) => {
   bank.updatedAt = new Date().toISOString();
   saveDB();
   res.json(bank);
+});
+
+// Lotteries are master data managed by the SuperAdmin (db.lotteries); raffles pick the lottery of
+// their main draw and of their weekly draws from the active ones.
+const DEFAULT_LOTTERIES = [
+  'Lotería de Bogotá', 'Lotería de Boyacá', 'Lotería del Cauca', 'Lotería de Cundinamarca', 'Lotería de la Cruz Roja',
+  'Lotería del Huila', 'Lotería de Manizales', 'Lotería de Medellín', 'Lotería del Meta', 'Lotería del Quindío',
+  'Lotería de Risaralda', 'Lotería de Santander', 'Lotería del Tolima', 'Lotería del Valle', 'Extra de Colombia'
+];
+
+function ensureLotteries(target) {
+  if (Array.isArray(target.lotteries) && target.lotteries.length) return false;
+  const now = new Date().toISOString();
+  target.lotteries = DEFAULT_LOTTERIES.map((name, i) => ({ id: `lot-${i + 1}`, name, active: true, order: i, createdAt: now }));
+  return true;
+}
+
+function isActiveLottery(name) {
+  const clean = String(name || '').trim().toLowerCase();
+  return !!clean && (db.lotteries || []).some(l => l.active && l.name.trim().toLowerCase() === clean);
+}
+
+/** A raffle's lottery must be an active one, unless it keeps the value it already had. */
+function checkRaffleLottery(value, current, label) {
+  const name = String(value || '').trim();
+  if (!name) return { error: `Seleccione la ${label}.` };
+  if (name !== String(current || '').trim() && !isActiveLottery(name)) {
+    return { error: `La lotería "${name}" no está en la lista de loterías activas.` };
+  }
+  return { name };
+}
+
+function validateLotteryName(body, currentId) {
+  if (body.name === undefined) return null;
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (name.length < 3 || name.length > 50) return 'El nombre debe tener entre 3 y 50 caracteres.';
+  const taken = (db.lotteries || []).some(l => l.id !== currentId && l.name.toLowerCase() === name.toLowerCase());
+  return taken ? 'Ya existe una lotería con ese nombre.' : null;
+}
+
+app.get('/api/lotteries', (req, res) => {
+  if (ensureLotteries(db)) saveDB();
+  const all = [...(db.lotteries || [])].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  // Everyone gets the active ones; the SuperAdmin also sees inactive ones to manage them
+  res.json(req.auth.role === 'superadmin' ? all : all.filter(l => l.active));
+});
+
+app.post('/api/lotteries', superAdminOnly, (req, res) => {
+  const body = req.body || {};
+  if (typeof body.name !== 'string') return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  const error = validateLotteryName(body, null);
+  if (error) return res.status(400).json({ error });
+  ensureLotteries(db);
+  const lottery = {
+    id: `lot-${Date.now()}`,
+    name: body.name.trim(),
+    active: body.active !== false,
+    order: db.lotteries.length,
+    createdAt: new Date().toISOString()
+  };
+  db.lotteries.push(lottery);
+  saveDB();
+  res.status(201).json(lottery);
+});
+
+app.put('/api/lotteries/:id', superAdminOnly, (req, res) => {
+  const lottery = (db.lotteries || []).find(l => l.id === req.params.id);
+  if (!lottery) return res.status(404).json({ error: 'Lotería no encontrada.' });
+  const body = req.body || {};
+  const error = validateLotteryName(body, lottery.id);
+  if (error) return res.status(400).json({ error });
+  if (typeof body.name === 'string' && body.name.trim() !== lottery.name) {
+    const oldName = lottery.name;
+    lottery.name = body.name.trim();
+    // Raffles follow the new name (messages, terms and printed tickets show it)
+    (db.raffles || []).forEach(r => {
+      if (r.mainLotteryName === oldName) r.mainLotteryName = lottery.name;
+      if (r.lotteryName === oldName) r.lotteryName = lottery.name;
+    });
+  }
+  if (typeof body.active === 'boolean') lottery.active = body.active;
+  lottery.updatedAt = new Date().toISOString();
+  saveDB();
+  res.json(lottery);
 });
 
 // Recently seen submission ids (10 minutes) so a repeated request is never applied twice

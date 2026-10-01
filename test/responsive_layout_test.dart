@@ -107,6 +107,12 @@ final mockClient = MockClient((req) async {
         'raffleTitle': 'Gran rifa', 'numbers': ['48'], 'buyerName': 'Julio Arvey Amaya', 'buyerPhone': '3229484689',
         'advisorName': 'edgar santamaria', 'saleChannel': '', 'amount': 50000},
     ];
+  } else if (path == '/lotteries') {
+    body = [
+      {'id': 'lot-1', 'name': 'Lotería de Boyacá', 'active': true},
+      {'id': 'lot-2', 'name': 'Lotería de Medellín', 'active': true},
+      {'id': 'lot-3', 'name': 'Lotería del Meta', 'active': false},
+    ];
   } else if (path == '/banks') {
     body = [
       {'id': 'bank-1', 'name': 'Nequi', 'active': true},

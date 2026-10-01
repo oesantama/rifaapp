@@ -273,6 +273,20 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
     }
   }
 
+  /// "JUEGA EL 03/10/2026 CON LA LOTERÍA DE BOYACÁ" from the raffle settings.
+  String? _drawLine(BuildContext context) {
+    final raffle = context.watch<RaffleViewModel>().raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull;
+    if (raffle == null) return null;
+    final date = DateTime.tryParse(raffle.mainDrawDate);
+    final lottery = raffle.mainLottery;
+    if (date == null && lottery.isEmpty) return null;
+    final parts = [
+      if (date != null) 'JUEGA EL ${DateFormat('dd/MM/yyyy').format(date.toLocal())}',
+      if (lottery.isNotEmpty) '${date != null ? 'CON LA' : 'JUEGA CON LA'} ${lottery.toUpperCase()}',
+    ];
+    return parts.join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
@@ -530,6 +544,13 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                                                     'COMPROBANTE OFICIAL DE BOLETA',
                                                     style: TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w600),
                                                   ),
+                                                  if (_drawLine(context) case final line?) ...[
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      line,
+                                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _themeColor),
+                                                    ),
+                                                  ],
                                                 ],
                                               ),
                                             ),

@@ -9,6 +9,7 @@ import '../models/winner.dart';
 import '../models/company.dart';
 import '../models/sale_channel.dart';
 import '../models/bank.dart';
+import '../models/lottery.dart';
 
 class ApiService {
   final String baseUrl;
@@ -1121,6 +1122,26 @@ class ApiService {
         .timeout(const Duration(seconds: 20));
     if (response.statusCode == 200 || response.statusCode == 201) {
       return SaleChannel.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  // Lotteries master (managed by the SuperAdmin)
+  Future<List<Lottery>> fetchLotteries() async {
+    final response = await authGet(Uri.parse('$baseUrl/lotteries')).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return (jsonDecode(response.body) as List).map((l) => Lottery.fromJson(Map<String, dynamic>.from(l))).toList();
+  }
+
+  Future<Lottery> saveLottery(String? id, Map<String, dynamic> data) async {
+    final uri = Uri.parse(id == null ? '$baseUrl/lotteries' : '$baseUrl/lotteries/$id');
+    final headers = {'Content-Type': 'application/json'};
+    final response = await (id == null
+            ? authPost(uri, headers: headers, body: jsonEncode(data))
+            : authPut(uri, headers: headers, body: jsonEncode(data)))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return Lottery.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
     }
     throw ApiException.fromResponse(response);
   }
