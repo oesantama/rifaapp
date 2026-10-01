@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
@@ -101,6 +103,154 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
         );
       }
     }
+  }
+
+  String get _companyName {
+    final name = Provider.of<AuthViewModel>(context, listen: false).companyName;
+    return name.startsWith('🏢') ? 'RIFA MASTER' : name.toUpperCase();
+  }
+
+  /// Faint diagonal text repeated over the whole receipt (company name + ORIGINAL).
+  Widget _buildWatermark() {
+    final text = '$_companyName • ORIGINAL • ';
+    return ClipRect(
+      child: Center(
+        child: Transform.rotate(
+          angle: -0.32,
+          child: OverflowBox(
+            maxWidth: double.infinity,
+            maxHeight: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < 9; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      List.filled(6, text).join(),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                        color: _themeColor.withValues(alpha: 0.05),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Tiny repeated text line: printed it looks like a solid line, a photocopy blurs it.
+  Widget _buildMicroText() {
+    final code = widget.ticket.verificationCode ?? 'SIN-VENDER';
+    return Text(
+      List.filled(12, 'RIFA MASTER · DOCUMENTO VERIFICABLE · $code · ').join(),
+      maxLines: 1,
+      overflow: TextOverflow.clip,
+      softWrap: false,
+      style: TextStyle(fontSize: 4.5, letterSpacing: 0.4, color: _themeColor.withValues(alpha: 0.55)),
+    );
+  }
+
+  /// Seal + verification code + QR that opens the public verification page.
+  Widget _buildSecurityStrip() {
+    final code = widget.ticket.verificationCode;
+    if (code == null) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8)),
+        child: const Text('Boleta sin vender: este documento NO es válido como comprobante.',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87)),
+      );
+    }
+    final url = ApiService.verificationUrl(code);
+    final issued = DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.now());
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _themeColor.withValues(alpha: 0.35), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          _buildSeal(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('VERIFIQUE LA AUTENTICIDAD',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.8, color: Colors.black87)),
+                const SizedBox(height: 2),
+                const Text('Escanee el código QR con la cámara del celular.', style: TextStyle(fontSize: 9.5, color: Colors.black54)),
+                const SizedBox(height: 6),
+                Text('Código: $code',
+                    style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1.5, color: _themeColor, fontFamily: 'monospace')),
+                Text('Emitido: $issued', style: const TextStyle(fontSize: 9, color: Colors.black54)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(4),
+            color: Colors.white,
+            // Painted directly (QrImageView uses a LayoutBuilder, which breaks the receipt's IntrinsicHeight)
+            child: CustomPaint(
+              size: const Size.square(86),
+              painter: QrPainter(
+                data: url,
+                version: QrVersions.auto,
+                errorCorrectionLevel: QrErrorCorrectLevel.M,
+                eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: _themeColor),
+                dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Color(0xFF0F172A)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Circular security seal with the company name.
+  Widget _buildSeal() {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _themeColor, width: 2),
+        gradient: RadialGradient(colors: [_themeColor.withValues(alpha: 0.12), _themeColor.withValues(alpha: 0.02)]),
+      ),
+      child: Container(
+        margin: const EdgeInsets.all(3),
+        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _themeColor.withValues(alpha: 0.6), width: 0.8)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.verified, size: 18, color: _themeColor),
+            Text('ORIGINAL', style: TextStyle(fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.6, color: _themeColor)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                _companyName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 5.5, fontWeight: FontWeight.bold, color: _themeColor),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _triggerPrint() {
@@ -246,236 +396,247 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                               )
                             : null,
                       ),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // TALONARIO / STUB DE CONTROL (IZQUIERDA)
-                            if (_showTalonario)
-                              Container(
-                                width: 230,
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: bgDecorationImage != null ? Colors.white.withOpacity(0.7) : Colors.grey.shade50,
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(14),
-                                    bottomLeft: Radius.circular(14),
-                                  ),
-                                  border: Border(
-                                    right: BorderSide(color: Colors.grey.shade400, width: 2, style: BorderStyle.solid),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Column(
+                      child: Stack(
+                        children: [
+                          IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // TALONARIO / STUB DE CONTROL (IZQUIERDA)
+                                if (_showTalonario)
+                                  Container(
+                                    width: 230,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: bgDecorationImage != null ? Colors.white.withOpacity(0.7) : Colors.grey.shade50,
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(14),
+                                        bottomLeft: Radius.circular(14),
+                                      ),
+                                      border: Border(
+                                        right: BorderSide(color: Colors.grey.shade400, width: 2, style: BorderStyle.solid),
+                                      ),
+                                    ),
+                                    child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: _themeColor.withOpacity(0.15),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            'TALONARIO DE CONTROL',
-                                            style:
-                                                TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _themeColor, letterSpacing: 0.8),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'BOLETA N° ${widget.ticket.displayNumber}',
-                                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _themeColor),
-                                        ),
-                                        const Divider(height: 14),
-                                        const Text('Comprador:', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                                        Text(
-                                          widget.ticket.buyerName.isNotEmpty ? widget.ticket.buyerName : 'Pendiente',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        const Text('Teléfono:', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                                        Text(
-                                          widget.ticket.buyerPhone.isNotEmpty ? widget.ticket.buyerPhone : 'N/A',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        const Text('Vendedor / Asesor:', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                                        Text(
-                                          widget.ticket.advisorName.isNotEmpty ? widget.ticket.advisorName : 'Admin',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        const Text('Monto Abonado:', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                                        Text(
-                                          currency.format(widget.ticket.totalPaid),
-                                          style:
-                                              const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
-                                        ),
-                                      ],
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        const SizedBox(height: 12),
-                                        Container(
-                                          height: 35,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Text(
-                                            'Firma / Sello Recibido',
-                                            style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  ],
-                                ),
-                              ),
-
-                            // BOLETA PRINCIPAL PARA EL COMPRADOR (DERECHA)
-                            Expanded(
-                              child: Container(
-                                padding: const EdgeInsets.all(20),
-                                color: bgDecorationImage != null ? Colors.white.withOpacity(0.65) : Colors.transparent,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                widget.raffleTitle.toUpperCase(),
-                                                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _themeColor),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              const Text(
-                                                'COMPROBANTE OFICIAL DE BOLETA',
-                                                style: TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w600),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: _themeColor,
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          constraints: const BoxConstraints(maxWidth: 260),
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Text(
-                                              'N° ${widget.ticket.displayNumber}',
-                                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                                            ),
-                                          ),
-                                        )
-                                      ],
-                                    ),
-                                    const Divider(height: 20),
-
-                                    // NÚMEROS DE OPORTUNIDAD
-                                    Text(
-                                      'NÚMEROS DE OPORTUNIDAD (${widget.ticket.numbers.length} NÚMEROS):',
-                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: widget.ticket.numbers.map((numStr) {
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                          decoration: BoxDecoration(
-                                            color: _themeColor.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(10),
-                                            border: Border.all(color: _themeColor.withOpacity(0.5), width: 1.5),
-                                          ),
-                                          child: Text(
-                                            numStr,
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              letterSpacing: 2,
-                                              color: _themeColor,
-                                            ),
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-
-                                    const SizedBox(height: 16),
-
-                                    Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Text('Valor Boleta:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: _themeColor.withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'TALONARIO DE CONTROL',
+                                                style: TextStyle(
+                                                    fontSize: 9, fontWeight: FontWeight.bold, color: _themeColor, letterSpacing: 0.8),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
                                             Text(
-                                              currency.format(widget.ticket.price),
-                                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                              'BOLETA N° ${widget.ticket.displayNumber}',
+                                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _themeColor),
                                             ),
-                                          ],
-                                        ),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text('Total Abonado:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                            const Divider(height: 14),
+                                            const Text('Comprador:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                            Text(
+                                              widget.ticket.buyerName.isNotEmpty ? widget.ticket.buyerName : 'Pendiente',
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            const Text('Teléfono:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                            Text(
+                                              widget.ticket.buyerPhone.isNotEmpty ? widget.ticket.buyerPhone : 'N/A',
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            const Text('Vendedor / Asesor:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                            Text(
+                                              widget.ticket.advisorName.isNotEmpty ? widget.ticket.advisorName : 'Admin',
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            const Text('Monto Abonado:', style: TextStyle(fontSize: 10, color: Colors.black54)),
                                             Text(
                                               currency.format(widget.ticket.totalPaid),
                                               style: const TextStyle(
-                                                  fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
+                                                  fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
                                             ),
                                           ],
                                         ),
                                         Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
                                           children: [
-                                            const Text('Saldo Pendiente:', style: TextStyle(fontSize: 10, color: Colors.black54)),
-                                            Text(
-                                              currency.format(widget.ticket.balancePending),
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.bold,
-                                                color: widget.ticket.balancePending > 0 ? AppTheme.dangerRose : AppTheme.secondaryEmerald,
+                                            const SizedBox(height: 12),
+                                            Container(
+                                              height: 35,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: Text(
+                                                'Firma / Sello Recibido',
+                                                style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
                                               ),
                                             ),
                                           ],
-                                        ),
-                                      ],
-                                    ),
-
-                                    const SizedBox(height: 12),
-                                    const Divider(),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        const Text('¡Gracias por tu compra y buena suerte! 🍀',
-                                            style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
-                                        Text(
-                                          'Estado: ${AppTheme.getStatusLabel(widget.ticket.status)}',
-                                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _themeColor),
                                         )
                                       ],
-                                    )
-                                  ],
-                                ),
-                              ),
-                            )
-                          ],
-                        ),
+                                    ),
+                                  ),
+
+                                // BOLETA PRINCIPAL PARA EL COMPRADOR (DERECHA)
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(20),
+                                    color: bgDecorationImage != null ? Colors.white.withOpacity(0.65) : Colors.transparent,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    widget.raffleTitle.toUpperCase(),
+                                                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _themeColor),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  const Text(
+                                                    'COMPROBANTE OFICIAL DE BOLETA',
+                                                    style: TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w600),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: _themeColor,
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                              constraints: const BoxConstraints(maxWidth: 260),
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  'N° ${widget.ticket.displayNumber}',
+                                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            )
+                                          ],
+                                        ),
+                                        const Divider(height: 20),
+
+                                        // NÚMEROS DE OPORTUNIDAD
+                                        Text(
+                                          'NÚMEROS DE OPORTUNIDAD (${widget.ticket.numbers.length} NÚMEROS):',
+                                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: widget.ticket.numbers.map((numStr) {
+                                            return Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                              decoration: BoxDecoration(
+                                                color: _themeColor.withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(10),
+                                                border: Border.all(color: _themeColor.withOpacity(0.5), width: 1.5),
+                                              ),
+                                              child: Text(
+                                                numStr,
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  letterSpacing: 2,
+                                                  color: _themeColor,
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Valor Boleta:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                                Text(
+                                                  currency.format(widget.ticket.price),
+                                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Total Abonado:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                                Text(
+                                                  currency.format(widget.ticket.totalPaid),
+                                                  style: const TextStyle(
+                                                      fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.secondaryEmerald),
+                                                ),
+                                              ],
+                                            ),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Saldo Pendiente:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                                Text(
+                                                  currency.format(widget.ticket.balancePending),
+                                                  style: TextStyle(
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.bold,
+                                                    color:
+                                                        widget.ticket.balancePending > 0 ? AppTheme.dangerRose : AppTheme.secondaryEmerald,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 12),
+                                        const Divider(),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text('¡Gracias por tu compra y buena suerte! 🍀',
+                                                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+                                            Text(
+                                              'Estado: ${AppTheme.getStatusLabel(widget.ticket.status)}',
+                                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _themeColor),
+                                            )
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        _buildSecurityStrip(),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              ],
+                            ),
+                          ),
+                          // Security layers: diagonal watermark and micro-text border (hard to reproduce cleanly)
+                          Positioned.fill(child: IgnorePointer(child: _buildWatermark())),
+                          Positioned(left: 8, right: 8, top: 2, child: IgnorePointer(child: _buildMicroText())),
+                          Positioned(left: 8, right: 8, bottom: 2, child: IgnorePointer(child: _buildMicroText())),
+                        ],
                       ),
                     ),
                   ),

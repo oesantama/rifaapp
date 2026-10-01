@@ -214,7 +214,7 @@ function clearFailures(ip, username) {
 // ---------------------------------------------------------------------------
 // Removes credential fields from anything sent to clients
 // ---------------------------------------------------------------------------
-const SECRET_KEYS = new Set(['password', 'adminPassword', 'passwordHash', 'adminPasswordHash']);
+const SECRET_KEYS = new Set(['password', 'adminPassword', 'passwordHash', 'adminPasswordHash', 'verificationSecret']);
 
 function stripSecrets(value) {
   if (Array.isArray(value)) return value.map(stripSecrets);

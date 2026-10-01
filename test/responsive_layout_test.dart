@@ -49,6 +49,7 @@ List<Map<String, dynamic>> _tickets() => List.generate(25, (i) {
         'status': status, 'buyerName': status == 'DISPONIBLE' ? '' : 'María Fernanda Gómez', 'buyerPhone': status == 'DISPONIBLE' ? '' : '3114445566',
         'advisorId': status == 'DISPONIBLE' ? '' : 'adv-1', 'advisorName': status == 'DISPONIBLE' ? '' : 'Carlos Andrés Mendoza Rodríguez',
         'totalPaid': n == 1 ? 5000 : (n == 2 ? 2000 : 0), 'price': 5000, 'confirmedByAdmin': n == 1,
+        'verificationCode': n <= 3 ? 'M22L8-EAQ${n}B' : null,
         'saleChannel': n == 1 ? 'WhatsApp' : (n == 2 ? 'Voz a voz' : (n == 3 ? 'Facebook' : '')),
         'abonos': n <= 2 ? [{'id': 'ab-$n', 'amount': n == 1 ? 5000 : 2000, 'date': '2026-09-28T10:00:00.000', 'sellerId': 'adv-1', 'sellerName': 'Carlos'}] : [],
         'auditLogs': [],

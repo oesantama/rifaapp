@@ -185,6 +185,111 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// ---------------------------------------------------------------------------
+// Ticket authenticity: every sold ticket gets a verification code signed with a secret
+// kept in the database (db.settings.verificationSecret). The receipt's QR opens
+// /verificar/<code>, a public page that confirms the ticket against the live data.
+// The code changes when a sale is voided/resold, so old printed receipts stop validating.
+// ---------------------------------------------------------------------------
+function ensureVerificationSecret(target) {
+  if (!target.settings || typeof target.settings !== 'object') target.settings = {};
+  if (target.settings.verificationSecret) return false;
+  target.settings.verificationSecret = require('crypto').randomBytes(32).toString('base64');
+  return true;
+}
+
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid reading mistakes
+function ticketVerificationCode(ticket) {
+  if (!ticket || ticket.status === 'DISPONIBLE' || !db.settings || !db.settings.verificationSecret) return null;
+  const mac = require('crypto')
+    .createHmac('sha256', db.settings.verificationSecret)
+    .update(`${ticket.id}|${ticket.raffleId}|${ticket.assignedDate || ''}|${(ticket.annulments || []).length}`)
+    .digest();
+  let code = '';
+  for (let i = 0; i < 10; i++) code += CODE_ALPHABET[mac[i] % CODE_ALPHABET.length];
+  return `${code.slice(0, 5)}-${code.slice(5)}`;
+}
+
+function withVerification(ticket) {
+  const code = ticketVerificationCode(ticket);
+  return code ? { ...ticket, verificationCode: code } : ticket;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/** "Jhon Pancho Pérez" -> "Jh** Pa**** Pé***" (enough to recognize it, without exposing it). */
+function maskName(name) {
+  return String(name || '').trim().split(/\s+/).filter(Boolean).map(w => w.slice(0, 2) + '*'.repeat(Math.max(1, w.length - 2))).join(' ');
+}
+
+const verifyHits = new Map();
+function verifyRateLimited(ip) {
+  const now = Date.now();
+  const entry = verifyHits.get(ip) || { count: 0, since: now };
+  if (now - entry.since > 60000) { entry.count = 0; entry.since = now; }
+  entry.count++;
+  verifyHits.set(ip, entry);
+  return entry.count > 30;
+}
+
+function verificationPage({ ok, title, rows = [], note = '', color }) {
+  const accent = color || (ok ? '#059669' : '#DC2626');
+  const rowsHtml = rows.map(([k, v]) => `<div class="row"><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verificación de boleta - Rifa Master</title><meta name="robots" content="noindex">
+<style>
+body{margin:0;font-family:Roboto,"Segoe UI",system-ui,sans-serif;background:#0F172A;color:#0F172A;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}
+.card{background:#fff;border-radius:20px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.head{background:${accent};color:#fff;padding:22px;text-align:center}.icon{font-size:46px;line-height:1}.head h1{margin:8px 0 0;font-size:20px}
+.body{padding:18px 20px}.row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #E2E8F0;font-size:14px}.row span{color:#64748B}.row b{text-align:right}
+.note{font-size:12px;color:#64748B;margin-top:14px;line-height:1.45}.brand{text-align:center;font-size:11px;color:#94A3B8;padding:0 0 16px;letter-spacing:1px}
+</style></head><body><div class="card"><div class="head"><div class="icon">${ok ? '✔' : '✖'}</div><h1>${escapeHtml(title)}</h1></div>
+<div class="body">${rowsHtml}${note ? `<div class="note">${escapeHtml(note)}</div>` : ''}</div><div class="brand">VERIFICADO POR RIFA MASTER</div></div></body></html>`;
+}
+
+app.get('/verificar/:code', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  if (verifyRateLimited(req.ip || '')) {
+    return res.status(429).send(verificationPage({ ok: false, title: 'Demasiadas consultas', note: 'Intente de nuevo en un minuto.' }));
+  }
+  const code = String(req.params.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const formatted = code.length === 10 ? `${code.slice(0, 5)}-${code.slice(5)}` : null;
+  const ticket = formatted ? (db.tickets || []).find(t => t.status !== 'DISPONIBLE' && ticketVerificationCode(t) === formatted) : null;
+  if (!ticket) {
+    return res.status(404).send(verificationPage({
+      ok: false,
+      title: 'Comprobante no válido',
+      rows: [['Código consultado', formatted || req.params.code]],
+      note: 'Este código no corresponde a ninguna boleta vigente. Puede ser falso, o la venta fue anulada o modificada. Comuníquese con el vendedor o la organización de la rifa.'
+    }));
+  }
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId) || {};
+  const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
+  const statusLabel = { RESERVADA: 'Apartada / Fiada', ABONO_PARCIAL: 'Abono parcial', PAGADA: 'Pagada', CONFIRMADA: 'Pagada y confirmada' }[ticket.status] || ticket.status;
+  const money = v => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
+  const drawDate = raffle.mainDrawDate ? new Date(raffle.mainDrawDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }) : '—';
+  const fullyPaid = (ticket.balancePending || 0) <= 0 && (ticket.totalPaid || 0) > 0;
+  res.send(verificationPage({
+    ok: true,
+    color: fullyPaid ? '#059669' : '#D97706',
+    title: fullyPaid ? 'Boleta auténtica y pagada' : 'Boleta auténtica — con saldo pendiente',
+    rows: [
+      ['Rifa', raffle.title || '—'],
+      ['Organiza', company.name || '—'],
+      ['Número(s)', (ticket.numbers || []).join(' - ')],
+      ['Comprador', maskName(ticket.buyerName) || '—'],
+      ['Estado', statusLabel],
+      ['Abonado', money(ticket.totalPaid)],
+      ['Saldo pendiente', money(ticket.balancePending)],
+      ['Juega el día', drawDate],
+      ['Código', formatted]
+    ],
+    note: `Consulta realizada el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}. Los datos se leen en este momento del sistema de la rifa.`
+  }));
+});
+
 // Serve static Flutter Web SPA if present
 const publicDir = path.join(__dirname, 'public');
 const webDir = path.join(__dirname, '../build/web');
@@ -679,6 +784,7 @@ async function loadDB() {
 
   const templatesMoved = await extractEmbeddedTemplates(db);
   const channelsSeeded = ensureSaleChannels(db);
+  const verificationSeeded = ensureVerificationSecret(db);
   const credentialsChanged = migrateCredentials();
   if (credentialsChanged) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
@@ -688,6 +794,7 @@ async function loadDB() {
   const needsRewrite =
     templatesMoved ||
     channelsSeeded ||
+    verificationSeeded ||
     credentialsChanged ||
     (security.hasMasterKey() && !loadedEncrypted) ||
     (firestore && (!loadedFromFirestore || firestoreVersion === 'legacy'));
@@ -1275,6 +1382,9 @@ app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
     // Older backups have no channel list: keep the current one
     if (!Array.isArray(restored.saleChannels) || !restored.saleChannels.length) restored.saleChannels = db.saleChannels;
     ensureSaleChannels(restored);
+    // Keep the current signing secret so receipts printed before the restore still verify
+    restored.settings = { ...(restored.settings || {}), verificationSecret: (db.settings || {}).verificationSecret || (restored.settings || {}).verificationSecret };
+    ensureVerificationSecret(restored);
     db = restored;
 
     migrateCredentials();
@@ -1717,7 +1827,7 @@ app.get('/api/tickets', (req, res) => {
     );
   }
 
-  res.json(result);
+  res.json(result.map(withVerification));
 });
 
 // POST Register Ticket Sale or Abono
@@ -1936,7 +2046,7 @@ app.post('/api/tickets/:id/abono', (req, res) => {
   }
 
   saveDB();
-  res.json(ticket);
+  res.json(withVerification(ticket));
 });
 
 // POST Void a sale (admins only): the ticket becomes available again and the whole previous

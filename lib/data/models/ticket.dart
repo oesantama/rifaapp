@@ -178,6 +178,9 @@ class Ticket {
 
   /// Payments voided by an admin (e.g. registered twice); kept for traceability.
   final List<VoidedAbono> voidedAbonos;
+
+  /// Signed code that proves the receipt is authentic (null for available tickets).
+  final String? verificationCode;
   final double totalPaid;
   final double balancePending;
   final bool confirmedByAdmin;
@@ -199,6 +202,7 @@ class Ticket {
     this.saleChannel = '',
     this.annulments = const [],
     this.voidedAbonos = const [],
+    this.verificationCode,
     required this.totalPaid,
     required this.balancePending,
     required this.confirmedByAdmin,
@@ -229,6 +233,7 @@ class Ticket {
       buyerPhone: json['buyerPhone'] ?? '',
       saleChannel: json['saleChannel'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
+      verificationCode: json['verificationCode'],
       voidedAbonos: (json['voidedAbonos'] as List? ?? []).map((a) => VoidedAbono.fromJson(Map<String, dynamic>.from(a))).toList(),
       totalPaid: (json['totalPaid'] as num?)?.toDouble() ?? 0.0,
       balancePending: (json['balancePending'] as num?)?.toDouble() ?? 0.0,

@@ -22,6 +22,16 @@ class ApiService {
     return 'https://rifaapp-backend.onrender.com/api';
   }
 
+  /// Public site address (where /verificar/<code> lives) for links and QR codes.
+  static String get publicBaseUrl {
+    const envUrl = String.fromEnvironment('API_URL');
+    if (envUrl.isNotEmpty) return envUrl.replaceFirst(RegExp(r'/api/?$'), '');
+    if (kIsWeb) return Uri.base.origin;
+    return 'http://localhost:8080';
+  }
+
+  static String verificationUrl(String code) => '$publicBaseUrl/verificar/$code';
+
   bool _useLocalFallback = false;
 
   final List<Raffle> _localRaffles = [];

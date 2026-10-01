@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 class WhatsAppHelper {
@@ -69,6 +70,9 @@ class WhatsAppHelper {
     b.writeln('✅ *Total Abonado:* ${currency.format(totalPaid)}');
     b.writeln(isDebt ? '🔴 *SALDO PENDIENTE:* ${currency.format(pending)}' : '🎉 *PAGO COMPLETO:* ${currency.format(ticket.price)}');
     b.writeln('📊 *Estado:* ${AppTheme.getStatusLabel(status)}');
+    if (ticket.verificationCode != null) {
+      b.writeln('🔐 *Verifica tu boleta:* ${ApiService.verificationUrl(ticket.verificationCode!)}');
+    }
 
     if (raffle != null) {
       final drawDate = DateTime.tryParse(raffle.mainDrawDate);
