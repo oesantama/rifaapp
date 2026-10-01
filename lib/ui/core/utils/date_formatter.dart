@@ -6,7 +6,12 @@ class DateFormatterColombia {
   static String formatShort(String? dateStr) {
     if (dateStr == null || dateStr.trim().isEmpty) return '';
     try {
-      DateTime dt = DateTime.parse(dateStr.trim()).toLocal();
+      final str = dateStr.trim();
+      final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(str);
+      if (m != null) {
+        return '${m.group(3)}/${m.group(2)}/${m.group(1)}';
+      }
+      DateTime dt = DateTime.parse(str).toLocal();
       return DateFormat('dd/MM/yyyy').format(dt);
     } catch (_) {
       if (dateStr.contains('/')) return dateStr.trim();
@@ -38,10 +43,11 @@ class DateFormatterColombia {
           int day = int.parse(parts[0]);
           int month = int.parse(parts[1]);
           int year = int.parse(parts[2]);
-          return DateTime(year, month, day).toIso8601String();
+          return DateTime(year, month, day, 12, 0, 0).toIso8601String();
         }
       }
-      return DateTime.parse(str).toIso8601String();
+      final dt = DateTime.parse(str);
+      return DateTime(dt.year, dt.month, dt.day, 12, 0, 0).toIso8601String();
     } catch (_) {
       return DateTime.now().toIso8601String();
     }

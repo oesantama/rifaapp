@@ -272,9 +272,32 @@ function winningRuleText(raffle) {
   return raffle.allowCombined ? `${base} (también combinado)` : base;
 }
 
+function formatRaffleDate(dateStr, longFormat = true) {
+  if (!dateStr) return 'la fecha anunciada';
+  const str = String(dateStr).trim();
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    const year = m[1];
+    const monthNum = parseInt(m[2], 10);
+    const dayNum = parseInt(m[3], 10);
+    const day = String(dayNum).padStart(2, '0');
+    if (!longFormat) return `${day}/${String(monthNum).padStart(2, '0')}/${year}`;
+    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const month = months[monthNum - 1] || '';
+    return `${day} de ${month} de ${year}`;
+  }
+  try {
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return 'la fecha anunciada';
+    return d.toLocaleDateString('es-CO', longFormat ? { day: '2-digit', month: 'long', year: 'numeric' } : {});
+  } catch (_) {
+    return 'la fecha anunciada';
+  }
+}
+
 function renderTerms(template, raffle, company) {
   const money = v => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
-  const date = raffle.mainDrawDate ? new Date(raffle.mainDrawDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: 'long', year: 'numeric' }) : 'la fecha anunciada';
+  const date = formatRaffleDate(raffle.mainDrawDate, true);
   const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
   const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
   const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
@@ -333,7 +356,7 @@ app.get('/verificar/:code', (req, res) => {
   const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
   const statusLabel = { RESERVADA: 'Apartada / Fiada', ABONO_PARCIAL: 'Abono parcial', PAGADA: 'Pagada', CONFIRMADA: 'Pagada y confirmada' }[ticket.status] || ticket.status;
   const money = v => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
-  const drawDate = raffle.mainDrawDate ? new Date(raffle.mainDrawDate).toLocaleDateString('es-CO', { timeZone: 'America/Bogota' }) : '—';
+  const drawDate = formatRaffleDate(raffle.mainDrawDate, false);
   const fullyPaid = (ticket.balancePending || 0) <= 0 && (ticket.totalPaid || 0) > 0;
   res.send(verificationPage({
     ok: true,

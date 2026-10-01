@@ -90,11 +90,18 @@ class WhatsAppHelper {
             '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
         if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');
       }
+      if (isDebt && raffle.transferAccounts.isNotEmpty) {
+        b.writeln('----------------------------------------');
+        b.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
+        for (final acc in raffle.transferAccounts) {
+          b.writeln('• ${acc.label}');
+        }
+      }
     }
 
     b.writeln('----------------------------------------');
     b.writeln(isDebt
-        ? '¡Agradecemos realizar tu abono o pago pendiente para asegurar tu número en el próximo sorteo! 🍀'
+        ? '¡Agradecemos realizar tu abono o pago pendiente a cualquiera de las cuentas indicadas para asegurar tu número en el próximo sorteo! 🍀'
         : '¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀');
     return b.toString();
   }
@@ -103,6 +110,7 @@ class WhatsAppHelper {
   static String generateTicketMessage({
     required Ticket ticket,
     required String raffleTitle,
+    Raffle? raffle,
   }) {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final pending = ticket.balancePending;
@@ -129,10 +137,17 @@ class WhatsAppHelper {
     }
 
     buffer.writeln('📊 *Estado:* $statusLabel');
+    if (isDebt && raffle != null && raffle.transferAccounts.isNotEmpty) {
+      buffer.writeln('----------------------------------------');
+      buffer.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
+      for (final acc in raffle.transferAccounts) {
+        buffer.writeln('• ${acc.label}');
+      }
+    }
     buffer.writeln('----------------------------------------');
 
     if (pending > 0) {
-      buffer.writeln('¡Agradecemos realizar tu abono o pago pendiente para asegurar tu número en el próximo sorteo! 🍀');
+      buffer.writeln('¡Agradecemos realizar tu abono o pago pendiente a cualquiera de las cuentas indicadas para asegurar tu número en el próximo sorteo! 🍀');
     } else {
       buffer.writeln('¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀');
     }

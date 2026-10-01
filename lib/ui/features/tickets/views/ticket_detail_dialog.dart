@@ -193,20 +193,51 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     final selected =
         accounts.any((a) => a.id == _transferAccountId) ? _transferAccountId : (accounts.length == 1 ? accounts.first.id : null);
     _transferAccountId = selected;
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      value: selected,
-      decoration: const InputDecoration(
-        labelText: 'Cuenta destino *',
-        helperText: 'Cuenta de la rifa a la que llegó el dinero',
-        prefixIcon: Icon(Icons.account_balance_wallet_outlined),
-        border: OutlineInputBorder(),
-      ),
-      items: [
-        for (final a in accounts) DropdownMenuItem(value: a.id, child: Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+
+    void copyAccountsText() {
+      final buffer = StringBuffer();
+      buffer.writeln('🏦 *CUENTAS PARA TRANSFERENCIA - ${widget.raffleTitle ?? "RIFA"}*');
+      buffer.writeln('----------------------------------------');
+      for (final a in accounts) {
+        buffer.writeln('• ${a.label}');
+      }
+      Clipboard.setData(ClipboardData(text: buffer.toString()));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Cuentas de transferencia copiadas al portapapeles.'),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          isExpanded: true,
+          value: selected,
+          decoration: const InputDecoration(
+            labelText: 'Cuenta destino *',
+            helperText: 'Cuenta de la rifa a la que llegó el dinero',
+            prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final a in accounts) DropdownMenuItem(value: a.id, child: Text(a.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) => setState(() => _transferAccountId = v),
+          validator: (v) => v == null ? 'Seleccione la cuenta' : null,
+        ),
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: copyAccountsText,
+            icon: const Icon(Icons.copy_rounded, size: 14),
+            label: const Text('Copiar cuentas para enviar por chat', style: TextStyle(fontSize: 12)),
+          ),
+        ),
       ],
-      onChanged: (v) => setState(() => _transferAccountId = v),
-      validator: (v) => v == null ? 'Seleccione la cuenta' : null,
     );
   }
 
