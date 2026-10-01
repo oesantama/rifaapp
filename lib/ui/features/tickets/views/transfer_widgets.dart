@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/features/banks/view_models/bank_view_model.dart';
 
 /// Colombia has no daylight saving time: always UTC-5. Wall-clock times are handled as
 /// DateTime values whose fields are the Colombian date and time.
@@ -24,18 +26,15 @@ class ColombiaTime {
   /// Oldest day a transfer may have (00:00 of the day 15 days ago).
   static DateTime oldestTransferDay() => today().subtract(const Duration(days: maxTransferAgeDays));
 
-  /// Colombian wall-clock time -> ISO instant (UTC) for the server.
-  static String toIsoUtc(DateTime colombia) => DateTime.utc(
-        colombia.year,
-        colombia.month,
-        colombia.day,
-        colombia.hour,
-        colombia.minute,
-      ).add(offset).toIso8601String();
+  /// Transfer day for the server: "YYYY-MM-DD".
+  static String toDay(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
 
-  /// ISO instant from the server -> "30/09/2026 02:35 PM" in Colombian time.
+  /// Date from the server -> "30/09/2026" for a day ("YYYY-MM-DD") or
+  /// "30/09/2026 02:35 PM" (Colombian time) for an instant.
   static String format(String? iso) {
-    final parsed = DateTime.tryParse(iso ?? '');
+    final text = iso ?? '';
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) return DateFormat('dd/MM/yyyy').format(DateTime.parse(text));
+    final parsed = DateTime.tryParse(text);
     if (parsed == null) return '';
     final col = parsed.toUtc().subtract(offset);
     return DateFormat('dd/MM/yyyy hh:mm a').format(DateTime(col.year, col.month, col.day, col.hour, col.minute));
@@ -44,38 +43,6 @@ class ColombiaTime {
 
 /// Approval numbers are compared without spaces, dashes or case (same rule as the server).
 String approvalKey(String value) => value.toUpperCase().replaceAll(RegExp(r'[^0-9A-Z]'), '');
-
-/// Common Colombian banks and wallets; any other name can also be typed.
-const colombianBanks = [
-  'Nequi',
-  'Daviplata',
-  'Bancolombia',
-  'Davivienda',
-  'Banco de Bogotá',
-  'BBVA',
-  'Banco de Occidente',
-  'Banco Popular',
-  'Banco AV Villas',
-  'Scotiabank Colpatria',
-  'Banco Caja Social',
-  'Banco Agrario',
-  'Itaú',
-  'Banco Falabella',
-  'Banco Pichincha',
-  'Banco GNB Sudameris',
-  'Bancoomeva',
-  'Banco W',
-  'Banco Mundo Mujer',
-  'Banco Finandina',
-  'Banco Serfinanza',
-  'Lulo Bank',
-  'Nu Colombia',
-  'RappiPay',
-  'Movii',
-  'Dale!',
-  'Ualá',
-  'Confiar',
-];
 
 /// Raffle settings: accounts where buyers pay by bank transfer.
 class TransferAccountsEditor extends StatelessWidget {
@@ -223,8 +190,9 @@ class TransferAccountsEditor extends StatelessWidget {
   }
 }
 
-/// Text field with suggestions of Colombian banks (any other name can be typed).
-class BankField extends StatefulWidget {
+/// Bank picker with the active banks of the SuperAdmin's master list. A value that is no longer
+/// active (e.g. an existing account) stays selectable so it is not lost.
+class BankField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final FormFieldValidator<String>? validator;
@@ -232,59 +200,27 @@ class BankField extends StatefulWidget {
   const BankField({super.key, required this.controller, required this.label, this.validator});
 
   @override
-  State<BankField> createState() => _BankFieldState();
-}
-
-class _BankFieldState extends State<BankField> {
-  final _focusNode = FocusNode();
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) => RawAutocomplete<String>(
-        textEditingController: widget.controller,
-        focusNode: _focusNode,
-        optionsBuilder: (value) {
-          final text = value.text.trim().toLowerCase();
-          if (text.isEmpty) return colombianBanks;
-          return colombianBanks.where((b) => b.toLowerCase().contains(text));
-        },
-        fieldViewBuilder: (context, textController, focusNode, onSubmitted) => TextFormField(
-          controller: textController,
-          focusNode: focusNode,
-          textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(
-            labelText: widget.label,
-            prefixIcon: const Icon(Icons.account_balance_outlined),
-            border: const OutlineInputBorder(),
-          ),
-          validator: widget.validator,
-          onFieldSubmitted: (_) => onSubmitted(),
-        ),
-        optionsViewBuilder: (context, onSelected, options) => Align(
-          alignment: Alignment.topLeft,
-          child: Material(
-            elevation: 4,
-            borderRadius: BorderRadius.circular(8),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: 240, maxWidth: constraints.maxWidth),
-              child: ListView(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                children: [
-                  for (final option in options) ListTile(dense: true, title: Text(option), onTap: () => onSelected(option)),
-                ],
-              ),
-            ),
-          ),
-        ),
+    final vm = context.watch<BankViewModel>();
+    final names = vm.activeBanks.map((b) => b.name).toList();
+    final current = controller.text.trim();
+    if (current.isNotEmpty && !names.contains(current)) names.insert(0, current);
+
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: current.isEmpty ? null : current,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.account_balance_outlined),
+        border: const OutlineInputBorder(),
+        helperText: vm.error != null
+            ? 'No se pudo cargar la lista de bancos'
+            : (names.isEmpty && !vm.isLoading ? 'No hay bancos activos: el SuperAdmin debe agregarlos' : null),
+        helperMaxLines: 2,
       ),
+      items: [for (final name in names) DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis))],
+      onChanged: (v) => controller.text = v ?? '',
+      validator: validator,
     );
   }
 }

@@ -24,9 +24,12 @@ import 'ui/features/backup/views/database_backup_view.dart';
 import 'ui/features/control/views/control_view.dart';
 import 'ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'ui/features/sale_channels/views/sale_channels_view.dart';
+import 'ui/features/banks/view_models/bank_view_model.dart';
+import 'ui/features/banks/views/banks_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
+import 'ui/core/utils/cache_helper.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +59,7 @@ class _RifaAppState extends State<RifaApp> {
         ChangeNotifierProvider(create: (_) => AdvisorViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => SaleChannelViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => BankViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -194,12 +198,14 @@ class _MainShellScreenState extends State<MainShellScreen> {
     advisorVM.reset();
     winnerVM.reset();
     final saleChannelVM = Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
+    final bankVM = Provider.of<BankViewModel>(context, listen: false)..reset();
 
     // Advisors and winners do not depend on the selected raffle: load them in parallel
     final independent = Future.wait([
       advisorVM.loadAdvisors(),
       winnerVM.loadWinners(),
       saleChannelVM.load(),
+      bankVM.load(),
       authVM.refreshActiveAdvisor(), // numbers assigned since the session was saved
     ]);
     await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
@@ -221,6 +227,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const CompanyManagementView(),
             const DatabaseBackupView(),
             const SaleChannelsView(),
+            const BanksView(),
           ]
         : authVM.isAdmin
             ? [
@@ -394,6 +401,18 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   ),
                   const SizedBox(width: 2),
                   IconButton(
+                    icon: const Icon(Icons.cleaning_services_rounded, size: 20, color: Colors.amber),
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('🧹 Limpiando caché y recargando aplicación...')),
+                      );
+                      Future.delayed(const Duration(milliseconds: 300), () {
+                        clearAppCacheAndReload();
+                      });
+                    },
+                    tooltip: 'Limpiar caché de la aplicación y recargar',
+                  ),
+                  IconButton(
                     icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode, size: 20),
                     onPressed: widget.onToggleDarkMode,
                     tooltip: 'Modo Oscuro/Claro',
@@ -474,6 +493,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.campaign),
                         label: Text('Medios'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.account_balance_outlined),
+                        selectedIcon: Icon(Icons.account_balance),
+                        label: Text('Bancos'),
+                      ),
                     ]
                   : authVM.isAdmin
                       ? const [
@@ -540,6 +564,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),
                       BottomNavigationBarItem(icon: Icon(Icons.backup), label: 'Backup BD'),
                       BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Medios'),
+                      BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Bancos'),
                     ]
                   : authVM.isAdmin
                       ? const [

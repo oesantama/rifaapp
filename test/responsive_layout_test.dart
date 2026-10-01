@@ -107,6 +107,12 @@ final mockClient = MockClient((req) async {
         'raffleTitle': 'Gran rifa', 'numbers': ['48'], 'buyerName': 'Julio Arvey Amaya', 'buyerPhone': '3229484689',
         'advisorName': 'edgar santamaria', 'saleChannel': '', 'amount': 50000},
     ];
+  } else if (path == '/banks') {
+    body = [
+      {'id': 'bank-1', 'name': 'Nequi', 'active': true},
+      {'id': 'bank-2', 'name': 'Bancolombia', 'active': true},
+      {'id': 'bank-3', 'name': 'Banco Mundo Mujer', 'active': false},
+    ];
   } else if (path == '/terms') {
     body = {'template': '1. La rifa {rifa} es organizada por {empresa}.', 'isDefault': true, 'defaultTemplate': '',
       'placeholders': [{'key': 'rifa', 'description': 'Nombre'}, {'key': 'empresa', 'description': 'Empresa'}, {'key': 'cifras_ganadoras', 'description': 'Cifras'}],

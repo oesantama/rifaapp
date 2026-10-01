@@ -361,9 +361,18 @@ const webDir = path.join(__dirname, '../build/web');
 const staticDir = fs.existsSync(publicDir) ? publicDir : (fs.existsSync(webDir) ? webDir : null);
 
 if (staticDir) {
-  app.use(express.static(staticDir));
+  app.use(express.static(staticDir, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html') || filePath.endsWith('main.dart.js') || filePath.endsWith('flutter_bootstrap.js')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(path.join(staticDir, 'index.html'));
   });
 }
@@ -871,6 +880,7 @@ async function loadDB() {
 
   const templatesMoved = await extractEmbeddedTemplates(db);
   const channelsSeeded = ensureSaleChannels(db);
+  const banksSeeded = ensureBanks(db);
   const verificationSeeded = ensureVerificationSecret(db);
   const credentialsChanged = migrateCredentials();
   if (credentialsChanged) {
@@ -881,6 +891,7 @@ async function loadDB() {
   const needsRewrite =
     templatesMoved ||
     channelsSeeded ||
+    banksSeeded ||
     verificationSeeded ||
     credentialsChanged ||
     (security.hasMasterKey() && !loadedEncrypted) ||
@@ -904,8 +915,9 @@ async function reloadFromFirestore() {
   // Data written by an older server may lack what this version seeds at startup (sale channels,
   // receipt signing secret): seed it again so sales and QR receipts keep working
   const seededChannels = ensureSaleChannels(db);
+  const seededBanks = ensureBanks(db);
   const seededSecret = ensureVerificationSecret(db);
-  if (seededChannels || seededSecret) saveDB();
+  if (seededChannels || seededBanks || seededSecret) saveDB();
 }
 
 function saveDB() {
@@ -1515,6 +1527,8 @@ app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
     // Older backups have no channel list: keep the current one
     if (!Array.isArray(restored.saleChannels) || !restored.saleChannels.length) restored.saleChannels = db.saleChannels;
     ensureSaleChannels(restored);
+    if (!Array.isArray(restored.banks) || !restored.banks.length) restored.banks = db.banks;
+    ensureBanks(restored);
     // Keep the current signing secret so receipts printed before the restore still verify
     restored.settings = { ...(restored.settings || {}), verificationSecret: (db.settings || {}).verificationSecret || (restored.settings || {}).verificationSecret };
     ensureVerificationSecret(restored);
@@ -1737,7 +1751,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   }
   let transferAccounts = null;
   if (req.body.transferAccounts !== undefined) {
-    const checked = normalizeTransferAccounts(req.body.transferAccounts);
+    const checked = normalizeTransferAccounts(req.body.transferAccounts, raffle.transferAccounts || []);
     if (checked.error) return res.status(400).json({ error: checked.error });
     transferAccounts = checked.accounts;
   }
@@ -2327,6 +2341,77 @@ app.put('/api/sale-channels/:id', superAdminOnly, (req, res) => {
   res.json(channel);
 });
 
+// Banks and wallets are master data managed by the SuperAdmin (db.banks). Like channels, they are
+// deactivated instead of deleted, because payments and raffle accounts keep their names.
+const DEFAULT_BANKS = [
+  'Nequi', 'Daviplata', 'Bancolombia', 'Davivienda', 'Banco de Bogotá', 'BBVA', 'Banco de Occidente', 'Banco Popular',
+  'Banco AV Villas', 'Scotiabank Colpatria', 'Banco Caja Social', 'Banco Agrario', 'Itaú', 'Banco Falabella',
+  'Banco Pichincha', 'Banco GNB Sudameris', 'Bancoomeva', 'Banco W', 'Banco Mundo Mujer', 'Banco Finandina',
+  'Banco Serfinanza', 'Lulo Bank', 'Nu Colombia', 'RappiPay', 'Movii', 'Dale!', 'Ualá', 'Confiar'
+];
+
+function ensureBanks(target) {
+  if (Array.isArray(target.banks) && target.banks.length) return false;
+  const now = new Date().toISOString();
+  target.banks = DEFAULT_BANKS.map((name, i) => ({ id: `bank-${i + 1}`, name, active: true, order: i, createdAt: now }));
+  return true;
+}
+
+function isActiveBank(name) {
+  return (db.banks || []).some(b => b.active && b.name === name);
+}
+
+function validateBankName(body, currentId) {
+  if (body.name === undefined) return null;
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  if (name.length < 2 || name.length > 40) return 'El nombre debe tener entre 2 y 40 caracteres.';
+  const taken = (db.banks || []).some(b => b.id !== currentId && b.name.toLowerCase() === name.toLowerCase());
+  return taken ? 'Ya existe un banco con ese nombre.' : null;
+}
+
+app.get('/api/banks', (req, res) => {
+  if (ensureBanks(db)) saveDB();
+  const all = [...(db.banks || [])].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  // Everyone gets the active ones; the SuperAdmin also sees inactive ones to manage them
+  res.json(req.auth.role === 'superadmin' ? all : all.filter(b => b.active));
+});
+
+app.post('/api/banks', superAdminOnly, (req, res) => {
+  const body = req.body || {};
+  if (typeof body.name !== 'string') return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  const error = validateBankName(body, null);
+  if (error) return res.status(400).json({ error });
+  ensureBanks(db);
+  const bank = {
+    id: `bank-${Date.now()}`,
+    name: body.name.trim(),
+    active: body.active !== false,
+    order: db.banks.length,
+    createdAt: new Date().toISOString()
+  };
+  db.banks.push(bank);
+  saveDB();
+  res.status(201).json(bank);
+});
+
+app.put('/api/banks/:id', superAdminOnly, (req, res) => {
+  const bank = (db.banks || []).find(b => b.id === req.params.id);
+  if (!bank) return res.status(404).json({ error: 'Banco no encontrado.' });
+  const body = req.body || {};
+  const error = validateBankName(body, bank.id);
+  if (error) return res.status(400).json({ error });
+  if (typeof body.name === 'string' && body.name.trim() !== bank.name) {
+    const oldName = bank.name;
+    bank.name = body.name.trim();
+    // Raffle accounts follow the new name; registered payments keep the name they were made with
+    (db.raffles || []).forEach(r => (r.transferAccounts || []).forEach(a => { if (a.bank === oldName) a.bank = bank.name; }));
+  }
+  if (typeof body.active === 'boolean') bank.active = body.active;
+  bank.updatedAt = new Date().toISOString();
+  saveDB();
+  res.json(bank);
+});
+
 // Recently seen submission ids (10 minutes) so a repeated request is never applied twice
 const recentRequests = new Map();
 /** Whether this submission was already applied (does not record it). */
@@ -2407,11 +2492,9 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
 const COLOMBIA_OFFSET_MS = 5 * 60 * 60 * 1000;
 const TRANSFER_MAX_AGE_DAYS = 15;
 
-/** Earliest accepted transfer time: 00:00 (Colombia) of the day 15 days ago. */
-function oldestTransferAllowed(now = Date.now()) {
-  const col = new Date(now - COLOMBIA_OFFSET_MS);
-  const startOfTodayCol = Date.UTC(col.getUTCFullYear(), col.getUTCMonth(), col.getUTCDate()) + COLOMBIA_OFFSET_MS;
-  return startOfTodayCol - TRANSFER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+/** Calendar day in Colombia ("YYYY-MM-DD") of an instant. */
+function colombiaDay(ms) {
+  return new Date(ms - COLOMBIA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /** Approval numbers are compared without spaces, dashes or case. */
@@ -2425,7 +2508,7 @@ function transferAccountLabel(account) {
 }
 
 /** Accounts where a raffle receives transfers (configured in the raffle settings). */
-function normalizeTransferAccounts(list) {
+function normalizeTransferAccounts(list, current = []) {
   if (!Array.isArray(list)) return { error: 'Las cuentas de transferencia deben ser una lista.' };
   const clean = s => String(s || '').trim().slice(0, 80);
   const accounts = [];
@@ -2440,6 +2523,10 @@ function normalizeTransferAccounts(list) {
       key: clean(raw.key)
     };
     if (!account.bank) return { error: 'Cada cuenta de transferencia necesita el banco.' };
+    // A bank deactivated later can stay on an account that already had it
+    if (!isActiveBank(account.bank) && !current.some(a => a.bank === account.bank)) {
+      return { error: `El banco "${account.bank}" no está en la lista de bancos activos.` };
+    }
     if (!account.accountNumber && !account.key) {
       return { error: `La cuenta de ${account.bank} necesita el número de cuenta o la llave.` };
     }
@@ -2450,18 +2537,23 @@ function normalizeTransferAccounts(list) {
 
 /** Checks the transfer data sent with a payment; returns { error } or { transfer }. */
 function validateTransfer(body, raffle) {
-  const transferAt = Date.parse(body.transferDate || '');
-  if (isNaN(transferAt)) return { error: 'Indique la fecha y hora de la transferencia.' };
-  if (transferAt > Date.now() + 2 * 60 * 1000) {
-    return { error: 'La fecha de la transferencia no puede ser posterior a la fecha y hora actual (hora de Colombia).' };
+  // Only the date matters ("YYYY-MM-DD", Colombian calendar); a full timestamp is also accepted
+  const raw = String(body.transferDate || '').trim();
+  let transferDay = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  if (!transferDay && !isNaN(Date.parse(raw))) transferDay = colombiaDay(Date.parse(raw));
+  if (!transferDay) return { error: 'Indique la fecha de la transferencia.' };
+  const now = Date.now();
+  if (transferDay > colombiaDay(now)) {
+    return { error: 'La fecha de la transferencia no puede ser posterior a hoy (hora de Colombia).' };
   }
-  if (transferAt < oldestTransferAllowed()) {
+  if (transferDay < colombiaDay(now - TRANSFER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000)) {
     return { error: `La transferencia no puede tener más de ${TRANSFER_MAX_AGE_DAYS} días de antigüedad.` };
   }
   const approvalNumber = String(body.approvalNumber || '').trim().slice(0, 40);
   if (approvalKey(approvalNumber).length < 3) return { error: 'Ingrese el número de aprobación de la transferencia.' };
   const originBank = String(body.originBank || '').trim().slice(0, 60);
   if (!originBank) return { error: 'Indique el banco desde el que se hizo la transferencia.' };
+  if (!isActiveBank(originBank)) return { error: `El banco "${originBank}" no está en la lista de bancos activos.` };
 
   const accounts = (raffle && raffle.transferAccounts) || [];
   let cuentaDestino = String(body.cuentaDestino || '').trim().slice(0, 200);
@@ -2474,7 +2566,7 @@ function validateTransfer(body, raffle) {
   }
   return {
     transfer: {
-      transferDate: new Date(transferAt).toISOString(),
+      transferDate: transferDay,
       approvalNumber,
       originBank,
       cuentaDestino,

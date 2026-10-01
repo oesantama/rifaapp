@@ -50,7 +50,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   bool _uploadingSoporte = false;
   // Bank transfer details
   String? _transferAccountId;
-  DateTime? _transferDate; // Colombian wall-clock time
+  DateTime? _transferDate; // day of the transfer (Colombian calendar)
   final _transferDateController = TextEditingController();
   final _originBankController = TextEditingController();
   final _approvalController = TextEditingController();
@@ -107,23 +107,16 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       helpText: 'Fecha de la transferencia',
     );
     if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_transferDate ?? ColombiaTime.now()),
-      helpText: 'Hora de la transferencia (hora de Colombia)',
-    );
-    if (time == null || !mounted) return;
-    final picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     setState(() {
-      _transferDate = picked;
-      _transferDateController.text = DateFormat('dd/MM/yyyy hh:mm a').format(picked);
+      _transferDate = date;
+      _transferDateController.text = DateFormat('dd/MM/yyyy').format(date);
     });
   }
 
   String? _validateTransferDate(String? _) {
     final date = _transferDate;
-    if (date == null) return 'Indique la fecha y hora de la transferencia';
-    if (date.isAfter(ColombiaTime.now())) return 'No puede ser posterior a la hora actual (Colombia)';
+    if (date == null) return 'Indique la fecha de la transferencia';
+    if (date.isAfter(ColombiaTime.today())) return 'No puede ser posterior a hoy';
     if (date.isBefore(ColombiaTime.oldestTransferDay())) {
       return 'No puede tener más de ${ColombiaTime.maxTransferAgeDays} días de antigüedad';
     }
@@ -945,8 +938,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           readOnly: true,
                           onTap: _pickTransferDate,
                           decoration: const InputDecoration(
-                            labelText: 'Fecha y hora *',
-                            helperText: 'De la transferencia, hora de Colombia (máximo 15 días atrás)',
+                            labelText: 'Fecha de la transferencia *',
+                            helperText: 'Máximo 15 días atrás',
                             helperMaxLines: 2,
                             prefixIcon: Icon(Icons.event),
                             suffixIcon: Icon(Icons.edit_calendar_outlined),
@@ -1112,7 +1105,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                           : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
                                       'metodoPago': isTransfer ? 'transferencia' : 'efectivo',
                                       if (isTransfer) ...{
-                                        'transferDate': ColombiaTime.toIsoUtc(_transferDate!),
+                                        'transferDate': ColombiaTime.toDay(_transferDate!),
                                         'approvalNumber': _approvalController.text.trim(),
                                         'originBank': _originBankController.text.trim(),
                                         if (_transferAccountId != null) 'transferAccountId': _transferAccountId,

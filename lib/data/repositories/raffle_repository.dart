@@ -1,4 +1,5 @@
 import '../models/sale_channel.dart';
+import '../models/bank.dart';
 import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
@@ -96,6 +97,10 @@ class RaffleRepository {
   Future<List<SaleChannel>> fetchSaleChannels() => _apiService.fetchSaleChannels();
 
   Future<SaleChannel> saveSaleChannel(String? id, Map<String, dynamic> data) => _apiService.saveSaleChannel(id, data);
+
+  Future<List<Bank>> fetchBanks() => _apiService.fetchBanks();
+
+  Future<Bank> saveBank(String? id, Map<String, dynamic> data) => _apiService.saveBank(id, data);
 
   Future<Map<String, dynamic>> fetchTerms({String? raffleId}) => _apiService.fetchTerms(raffleId: raffleId);
 
