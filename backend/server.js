@@ -84,6 +84,15 @@ async function readFirestoreDb(doc, name = FIRESTORE_MANIFEST) {
 let firestoreVersion = null;
 class FirestoreConflictError extends Error {}
 
+// Versions written by this server. A request may read the manifest right after this server switched
+// it but before firestoreVersion is updated: that version is ours, not another server's, and must
+// not trigger a reload (a reload would drop changes still waiting to be written).
+const ownFirestoreVersions = new Set();
+function rememberOwnVersion(version) {
+  ownFirestoreVersions.add(version);
+  if (ownFirestoreVersions.size > 50) ownFirestoreVersions.delete(ownFirestoreVersions.values().next().value);
+}
+
 async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
   const col = firestore.collection(FIRESTORE_COLLECTION);
   const json = JSON.stringify(stored);
@@ -106,6 +115,7 @@ async function writeFirestoreDb(stored, name = FIRESTORE_MANIFEST) {
   for (let i = 0; i < chunks.length; i++) {
     await col.doc(`${name}_${version}_${i}`).set({ data: chunks[i] });
   }
+  if (name === FIRESTORE_MANIFEST) rememberOwnVersion(version);
   await col.doc(name).set({
     format: FIRESTORE_CHUNKED_FORMAT,
     version,
@@ -152,7 +162,7 @@ function queueFirestoreSave(stored) {
           storageStatus.lastErrorAt = new Date().toISOString();
           storageStatus.retrying = false;
           firestorePending = null;
-          await reloadFromFirestore().catch(e => console.error('Error recargando desde Firestore:', e.message));
+          await reloadFromFirestoreOnce().catch(e => console.error('Error recargando desde Firestore:', e.message));
           continue;
         }
         storageStatus.lastError = err.message;
@@ -928,6 +938,14 @@ async function loadDB() {
 }
 
 /** Replaces the in-memory data with the newest copy in Firestore (after a write conflict). */
+// Requests arriving together share one reload: a second reload finishing later would replace the
+// data again and drop a change applied in between.
+let reloadInFlight = null;
+function reloadFromFirestoreOnce() {
+  if (!reloadInFlight) reloadInFlight = reloadFromFirestore().finally(() => { reloadInFlight = null; });
+  return reloadInFlight;
+}
+
 async function reloadFromFirestore() {
   const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_MANIFEST).get();
   if (!doc.exists) return;
@@ -1153,9 +1171,9 @@ app.use('/api', async (req, res, next) => {
   try {
     const doc = await firestore.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_MANIFEST).get();
     const current = doc.exists ? (doc.data().version || 'legacy') : 'none';
-    if (current !== firestoreVersion) {
+    if (current !== firestoreVersion && !ownFirestoreVersions.has(current)) {
       console.log(`🔄 Datos más recientes en Firestore (${current}); se cargan antes de aplicar el cambio.`);
-      await reloadFromFirestore();
+      await reloadFromFirestoreOnce();
     }
     next();
   } catch (err) {

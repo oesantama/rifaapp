@@ -332,48 +332,50 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     );
   }
 
-  void _copyReceiptToClipboard(BuildContext context) async {
-    String name = _buyerNameController.text.trim().isNotEmpty
-        ? _buyerNameController.text.trim()
-        : (widget.ticket.buyerName.isNotEmpty ? widget.ticket.buyerName : "Pendiente");
+  /// True when the form has a payment or a new buyer that is not saved yet.
+  bool _hasUnsavedSale(double amount) =>
+      amount > 0 || (widget.ticket.status == 'DISPONIBLE' && _buyerNameController.text.trim().isNotEmpty);
 
-    String phone = _buyerPhoneController.text.trim().isNotEmpty ? _buyerPhoneController.text.trim() : widget.ticket.buyerPhone;
+  Future<bool> _confirmSaveBeforeReceipt(double amount) async {
+    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.save_outlined, color: AppTheme.primaryBlue, size: 36),
+        title: const Text('Este pago no está guardado'),
+        content: Text(
+          amount > 0
+              ? 'Hay un pago de ${currency.format(amount)} escrito pero sin registrar. El comprobante solo se envía con lo que '
+                  'está guardado; si no, el cliente recibiría un comprobante de una venta que no existe.'
+              : 'Los datos del comprador están escritos pero sin guardar. El comprobante solo se envía con lo que está guardado.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded),
+            label: const Text('Guardar y enviar'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
 
-    double addAmt = double.tryParse(_amountController.text) ?? 0;
-    double currentPaid = widget.ticket.totalPaid + addAmt;
-    double pending = (widget.ticket.price - currentPaid).clamp(0, double.infinity);
-
-    String calculatedStatus = widget.ticket.status;
-    if (widget.ticket.status == 'DISPONIBLE') {
-      if (pending <= 0 && currentPaid > 0) {
-        calculatedStatus = 'PAGADA';
-      } else if (currentPaid > 0) {
-        calculatedStatus = 'ABONO_PARCIAL';
-      } else if (name != 'Pendiente') {
-        calculatedStatus = 'RESERVADA';
-      } else {
-        calculatedStatus = 'DISPONIBLE';
-      }
-    } else {
-      if (addAmt > 0) {
-        if (pending <= 0) {
-          calculatedStatus = widget.ticket.confirmedByAdmin ? 'CONFIRMADA' : 'PAGADA';
-        } else {
-          calculatedStatus = 'ABONO_PARCIAL';
-        }
-      }
-    }
-
+  /// Sends the receipt of [ticket] as saved on the server (status, payments and verification code).
+  Future<void> _sendReceipt(Ticket ticket) async {
+    final name = ticket.buyerName.isNotEmpty ? ticket.buyerName : 'Pendiente';
+    final phone = ticket.buyerPhone;
     final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
     final raffleMatches = raffleVM.raffles.where((r) => r.id == widget.ticket.raffleId);
     final text = WhatsAppHelper.buildTicketReceipt(
-      ticket: widget.ticket,
+      ticket: ticket,
       raffle: raffleMatches.isNotEmpty ? raffleMatches.first : null,
       raffleTitle: widget.raffleTitle ?? 'RIFA',
       buyerName: name,
       buyerPhone: phone,
-      totalPaid: currentPaid,
-      status: calculatedStatus,
+      totalPaid: ticket.totalPaid,
+      status: ticket.status,
     );
 
     Clipboard.setData(ClipboardData(text: text));
@@ -656,6 +658,71 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       }
     }
 
+    /// Validates and registers the sale / payment. Returns true when it was saved.
+    Future<bool> saveSale() async {
+      if (!_formKey.currentState!.validate()) return false;
+      final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
+      final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
+
+      if (isChangingSeller && _noteController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
+          ),
+        );
+        return false;
+      }
+
+      // Transfers: the approval number must be checked (or confirmed as repeated) first
+      final isTransfer = _metodoPago == 'transferencia' && amt > 0;
+      if (isTransfer && !await _checkApproval()) return false;
+      if (!context.mounted) return false;
+
+      final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+      setState(() => _saving = true);
+      bool success = await ticketVM.addAbono(
+        widget.ticket.id,
+        {
+          'requestId': _requestId,
+          'amount': amt,
+          'buyerName': _buyerNameController.text.trim(),
+          'buyerPhone': _buyerPhoneController.text.trim(),
+          'buyerDocument': _buyerDocumentController.text.trim(),
+          if (_saleChannel != null) 'saleChannel': _saleChannel,
+          'sellerId': newSellerId,
+          'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
+          'note': _noteController.text.trim().isNotEmpty
+              ? _noteController.text.trim()
+              : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
+          'metodoPago': isTransfer ? 'transferencia' : 'efectivo',
+          if (isTransfer) ...{
+            'transferDate': ColombiaTime.toDay(_transferDate!),
+            'approvalNumber': _approvalController.text.trim(),
+            'originBank': _originBankController.text.trim(),
+            if (_transferAccountId != null) 'transferAccountId': _transferAccountId,
+            'cuentaDestino': _cuentaDestinoController.text.trim(),
+            'allowDuplicateApproval': _approvalDuplicateConfirmed,
+            if (_soporteBase64 != null) 'soporteImageBase64': _soporteBase64,
+          },
+        },
+        raffleId: widget.ticket.raffleId,
+      );
+      if (!mounted) return false;
+      setState(() => _saving = false);
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.dangerRose,
+            content: Text(ticketVM.lastError ?? 'No se pudo guardar. Intente de nuevo.'),
+          ),
+        );
+        return false;
+      }
+      _requestId = _newRequestId();
+      return true;
+    }
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
@@ -936,16 +1003,17 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       const SizedBox(height: 6),
                       SegmentedButton<String>(
                         showSelectedIcon: false, // keeps "Transferencia" on one line on phones
-                        segments: const [
+                        segments: [
                           ButtonSegment<String>(
                             value: 'efectivo',
-                            label: Text('Efectivo'),
-                            icon: Icon(Icons.payments_outlined),
+                            label: const Text('Efectivo'),
+                            icon: isNarrowScreen(context) ? null : const Icon(Icons.payments_outlined),
                           ),
                           ButtonSegment<String>(
                             value: 'transferencia',
-                            label: Text('Transferencia'),
-                            icon: Icon(Icons.account_balance_outlined),
+                            label: const Text('Transferencia'),
+                            // Phones: text only, so "Transferencia" fits on one line
+                            icon: isNarrowScreen(context) ? null : const Icon(Icons.account_balance_outlined),
                           ),
                         ],
                         selected: {_metodoPago},
@@ -1097,79 +1165,15 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         onPressed: _saving
                             ? null
                             : () async {
-                                if (_formKey.currentState!.validate()) {
-                                  final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
-                                  final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') &&
-                                      (newSellerId != null && newSellerId != widget.ticket.advisorId);
-
-                                  if (isChangingSeller && _noteController.text.trim().isEmpty) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        backgroundColor: Colors.red,
-                                        content: Text(
-                                            '⚠️ Debe ingresar una Nota/Observación obligatoria explicando por qué cambia el asesor de esta boleta.'),
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  // Transfers: the approval number must be checked (or confirmed as repeated) first
-                                  final isTransfer = _metodoPago == 'transferencia' && amt > 0;
-                                  if (isTransfer && !await _checkApproval()) return;
-                                  if (!context.mounted) return;
-
-                                  final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
-                                  setState(() => _saving = true);
-                                  bool success = await ticketVM.addAbono(
-                                    widget.ticket.id,
-                                    {
-                                      'requestId': _requestId,
-                                      'amount': amt,
-                                      'buyerName': _buyerNameController.text.trim(),
-                                      'buyerPhone': _buyerPhoneController.text.trim(),
-                                      'buyerDocument': _buyerDocumentController.text.trim(),
-                                      if (_saleChannel != null) 'saleChannel': _saleChannel,
-                                      'sellerId': newSellerId,
-                                      'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
-                                      'note': _noteController.text.trim().isNotEmpty
-                                          ? _noteController.text.trim()
-                                          : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
-                                      'metodoPago': isTransfer ? 'transferencia' : 'efectivo',
-                                      if (isTransfer) ...{
-                                        'transferDate': ColombiaTime.toDay(_transferDate!),
-                                        'approvalNumber': _approvalController.text.trim(),
-                                        'originBank': _originBankController.text.trim(),
-                                        if (_transferAccountId != null) 'transferAccountId': _transferAccountId,
-                                        'cuentaDestino': _cuentaDestinoController.text.trim(),
-                                        'allowDuplicateApproval': _approvalDuplicateConfirmed,
-                                        if (_soporteBase64 != null) 'soporteImageBase64': _soporteBase64,
-                                      },
-                                    },
-                                    raffleId: widget.ticket.raffleId,
-                                  );
-                                  if (!mounted) return;
-                                  setState(() => _saving = false);
-                                  if (!success) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        backgroundColor: AppTheme.dangerRose,
-                                        content: Text(ticketVM.lastError ?? 'No se pudo guardar. Intente de nuevo.'),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  _requestId = _newRequestId();
-                                  if (success && mounted) {
-                                    Navigator.pop(context);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(widget.ticket.balancePending == 0
-                                            ? '✓ Datos del comprador actualizados correctamente.'
-                                            : snackbarSuccessText),
-                                      ),
-                                    );
-                                  }
-                                }
+                                if (!await saveSale() || !mounted) return;
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(widget.ticket.balancePending == 0
+                                        ? '✓ Datos del comprador actualizados correctamente.'
+                                        : snackbarSuccessText),
+                                  ),
+                                );
                               },
                         icon: _saving
                             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
@@ -1332,7 +1336,21 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   ResponsiveFlexChild(
                     expand: !isNarrowScreen(context),
                     child: ElevatedButton.icon(
-                      onPressed: () => _copyReceiptToClipboard(context),
+                      onPressed: _saving
+                          ? null
+                          : () async {
+                              // A receipt is only sent for what is saved: a payment typed but not saved
+                              // would reach the buyer as paid while the sale does not exist
+                              if (!_hasUnsavedSale(amt)) {
+                                _sendReceipt(widget.ticket);
+                                return;
+                              }
+                              if (!await _confirmSaveBeforeReceipt(amt) || !await saveSale() || !mounted) return;
+                              final saved = context.read<TicketViewModel>().tickets.where((t) => t.id == widget.ticket.id).firstOrNull;
+                              // Opening WhatsApp may take a while: the saved sale closes the form right away
+                              _sendReceipt(saved ?? widget.ticket);
+                              if (mounted) Navigator.pop(context);
+                            },
                       icon: const Icon(Icons.send_rounded, color: Colors.white),
                       label: Text(
                         widget.ticket.balancePending > 0 ? 'Cobro por WhatsApp' : 'Enviar por WhatsApp',
