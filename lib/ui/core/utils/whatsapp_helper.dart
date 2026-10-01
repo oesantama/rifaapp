@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
 class WhatsAppHelper {
   /// Formats and sanitizes phone numbers for WhatsApp API compatibility.
@@ -28,17 +30,25 @@ class WhatsAppHelper {
   }) async {
     final cleanPhone = cleanPhoneNumber(phone);
     final encodedMsg = Uri.encodeComponent(message);
-    final waUrl = Uri.parse(cleanPhone.isNotEmpty
-        ? 'https://wa.me/$cleanPhone?text=$encodedMsg'
-        : 'https://wa.me/?text=$encodedMsg');
+    final waUrl = Uri.parse(cleanPhone.isNotEmpty ? 'https://wa.me/$cleanPhone?text=$encodedMsg' : 'https://wa.me/?text=$encodedMsg');
 
+    if (kIsWeb) {
+      // Web: open the app directly; a wa.me tab would stay blank after handing over to the app
+      final appUrl = cleanPhone.isNotEmpty ? 'whatsapp://send?phone=$cleanPhone&text=$encodedMsg' : 'whatsapp://send?text=$encodedMsg';
+      final isPhone = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+      final fallback = isPhone
+          ? waUrl.toString()
+          : (cleanPhone.isNotEmpty
+              ? 'https://web.whatsapp.com/send?phone=$cleanPhone&text=$encodedMsg'
+              : 'https://web.whatsapp.com/send?text=$encodedMsg');
+      web_launcher.openWhatsAppApp(appUrl, fallback);
+      return true;
+    }
     try {
       if (await launchUrl(waUrl, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank')) return true;
     } catch (_) {}
     try {
-      final deepLink = cleanPhone.isNotEmpty
-          ? 'whatsapp://send?phone=$cleanPhone&text=$encodedMsg'
-          : 'whatsapp://send?text=$encodedMsg';
+      final deepLink = cleanPhone.isNotEmpty ? 'whatsapp://send?phone=$cleanPhone&text=$encodedMsg' : 'whatsapp://send?text=$encodedMsg';
       return await launchUrl(Uri.parse(deepLink), mode: LaunchMode.externalApplication);
     } catch (_) {}
     return false;
@@ -147,7 +157,8 @@ class WhatsAppHelper {
     buffer.writeln('----------------------------------------');
 
     if (pending > 0) {
-      buffer.writeln('¡Agradecemos realizar tu abono o pago pendiente a cualquiera de las cuentas indicadas para asegurar tu número en el próximo sorteo! 🍀');
+      buffer.writeln(
+          '¡Agradecemos realizar tu abono o pago pendiente a cualquiera de las cuentas indicadas para asegurar tu número en el próximo sorteo! 🍀');
     } else {
       buffer.writeln('¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀');
     }
