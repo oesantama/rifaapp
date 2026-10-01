@@ -45,6 +45,10 @@ class RaffleRepository {
 
   Future<Advisor> updateAdvisor(String id, Map<String, dynamic> data) => _apiService.updateAdvisor(id, data);
 
+  Future<void> requestMoreTickets(int quantity, String note) => _apiService.requestMoreTickets(quantity, note);
+
+  Future<void> dismissRangeRequest(String advisorId) => _apiService.dismissRangeRequest(advisorId);
+
   Future<List<WinnerRecord>> fetchWinners() => _apiService.getWinners();
 
   Future<WinnerRecord> registerWinner(Map<String, dynamic> data) => _apiService.registerWinner(data);

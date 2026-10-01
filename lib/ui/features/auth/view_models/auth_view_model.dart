@@ -239,6 +239,34 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  /// Reloads the signed-in advisor's profile, so numbers assigned by the admin show up
+  /// without signing out.
+  Future<void> refreshActiveAdvisor() async {
+    final current = _activeAdvisor;
+    if (!isAsesor || current == null) return;
+    try {
+      final advisors = await _repository.fetchAdvisors();
+      final fresh = advisors.where((a) => a.id == current.id).firstOrNull;
+      if (fresh != null && _isLoggedIn) {
+        _activeAdvisor = fresh;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('No se pudo actualizar el perfil del asesor: $e');
+    }
+  }
+
+  /// The advisor asks the admin for more numbers; returns an error message or null.
+  Future<String?> requestMoreTickets(int quantity, String note) async {
+    try {
+      await _repository.requestMoreTickets(quantity, note);
+      await refreshActiveAdvisor();
+      return null;
+    } catch (e) {
+      return e is ApiException ? e.message : e.toString();
+    }
+  }
+
   Future<void> logout({bool notify = true}) async {
     _isLoggedIn = false;
     _activeAdvisor = null;

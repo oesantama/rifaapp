@@ -174,7 +174,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionData());
     // Detects when the server was updated while this app/browser keeps an older version open
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
-    _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) => _checkForUpdate());
+    _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _checkForUpdate();
+      if (mounted) Provider.of<AuthViewModel>(context, listen: false).refreshActiveAdvisor();
+    });
   }
 
   /// Loads everything the logged-in user sees, right after login or session restore.
@@ -193,7 +196,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final saleChannelVM = Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
 
     // Advisors and winners do not depend on the selected raffle: load them in parallel
-    final independent = Future.wait([advisorVM.loadAdvisors(), winnerVM.loadWinners(), saleChannelVM.load()]);
+    final independent = Future.wait([
+      advisorVM.loadAdvisors(),
+      winnerVM.loadWinners(),
+      saleChannelVM.load(),
+      authVM.refreshActiveAdvisor(), // numbers assigned since the session was saved
+    ]);
     await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
     await Future.wait([
       ticketVM.loadTickets(raffleId: raffleVM.selectedRaffle?.id),

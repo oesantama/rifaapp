@@ -36,20 +36,7 @@ class DashboardScreen extends StatelessWidget {
                   t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
                   (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
             }
-            if (adv.mode == 'ASSIGNED' && adv.assignedTicketRanges.isNotEmpty) {
-              for (var range in adv.assignedTicketRanges) {
-                var parts = range.split('-');
-                if (parts.length == 2) {
-                  int start = int.tryParse(parts[0].trim()) ?? 0;
-                  int end = int.tryParse(parts[1].trim()) ?? 99999;
-                  if (t.ticketNumber >= start && t.ticketNumber <= end) {
-                    return true;
-                  }
-                }
-              }
-              return false;
-            }
-            return true;
+            return adv.coversTicket(t);
           }).toList();
         }
 

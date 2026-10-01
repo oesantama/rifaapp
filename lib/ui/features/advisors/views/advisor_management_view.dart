@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/advisor_sales_breakdown.dart';
+import 'package:rifaapp/ui/features/advisors/views/assigned_numbers_widgets.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -196,6 +197,8 @@ class AdvisorManagementView extends StatelessWidget {
                         controller: rangeCtrl,
                         decoration: const InputDecoration(
                           labelText: 'Rangos Asignados (Ej: 1-100, 201-300)',
+                          helperText: 'Números impresos en las boletas. Para agregar más luego use "Asignar números".',
+                          helperMaxLines: 2,
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -236,6 +239,11 @@ class AdvisorManagementView extends StatelessWidget {
                         ok = await advVM.createAdvisor(data);
                       }
 
+                      if (!ok && ctx.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(backgroundColor: Colors.red, content: Text(advVM.lastError ?? 'No se pudo guardar el asesor')),
+                        );
+                      }
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -504,6 +512,7 @@ class AdvisorManagementView extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      const RangeRequestsBanner(),
 
                       // LEADERBOARD / RANKING CARD
                       Card(
@@ -687,6 +696,7 @@ class AdvisorManagementView extends StatelessWidget {
                                               'Usuario: ${adv.username.isNotEmpty ? adv.username : adv.code} • Correo: ${adv.email.isNotEmpty ? adv.email : "N/A"} • Tel: ${adv.phone}',
                                               style: const TextStyle(fontSize: 12, color: Colors.grey),
                                             ),
+                                            AdvisorNumbersSummary(advisor: adv),
                                           ],
                                         ),
                                       ),
@@ -697,6 +707,8 @@ class AdvisorManagementView extends StatelessWidget {
                                         onSelected: (val) async {
                                           if (val == 'edit') {
                                             _showAdvisorDialog(context, advisor: adv);
+                                          } else if (val == 'numbers') {
+                                            AssignNumbersDialog.show(context, adv);
                                           } else if (val == 'toggle_status') {
                                             await advVM.toggleAdvisorStatus(adv);
                                             ScaffoldMessenger.of(context).showSnackBar(
@@ -713,6 +725,12 @@ class AdvisorManagementView extends StatelessWidget {
                                             value: 'edit',
                                             child: Row(
                                               children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Editar Datos & Clave')],
+                                            ),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'numbers',
+                                            child: Row(
+                                              children: [Icon(Icons.pin_outlined, size: 18), SizedBox(width: 8), Text('Asignar números')],
                                             ),
                                           ),
                                           PopupMenuItem(

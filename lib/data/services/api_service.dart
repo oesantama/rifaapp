@@ -1164,4 +1164,20 @@ class ApiService {
     if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
     throw ApiException.fromResponse(response);
   }
+
+  /// The signed-in advisor asks the admin for more numbers.
+  Future<void> requestMoreTickets(int quantity, String note) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/advisors/me/range-request'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'quantity': quantity, 'note': note}),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  /// The admin discards an advisor's request for more numbers.
+  Future<void> dismissRangeRequest(String advisorId) async {
+    final response = await authDelete(Uri.parse('$baseUrl/advisors/$advisorId/range-request')).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
 }

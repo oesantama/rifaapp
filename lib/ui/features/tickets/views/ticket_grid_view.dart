@@ -11,6 +11,7 @@ import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/features/advisors/views/assigned_numbers_widgets.dart';
 
 import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
@@ -35,7 +36,8 @@ class _TicketGridViewState extends State<TicketGridView> {
   /// Reloads the raffle's tickets from the server so sold / available reflect other users' sales.
   Future<void> _refreshTickets(TicketViewModel ticketVM, String? raffleId, {bool showSummary = true}) async {
     setState(() => _isRefreshing = true);
-    await ticketVM.loadTickets(raffleId: raffleId);
+    // Also reloads the advisor's numbers, in case the admin assigned more
+    await Future.wait([ticketVM.loadTickets(raffleId: raffleId), context.read<AuthViewModel>().refreshActiveAdvisor()]);
     if (!mounted) return;
     setState(() => _isRefreshing = false);
     if (!showSummary) return;
@@ -71,20 +73,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                   t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
                   (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
             }
-            if (adv.mode == 'ASSIGNED' && adv.assignedTicketRanges.isNotEmpty) {
-              for (var range in adv.assignedTicketRanges) {
-                var parts = range.split('-');
-                if (parts.length == 2) {
-                  int start = int.tryParse(parts[0].trim()) ?? 0;
-                  int end = int.tryParse(parts[1].trim()) ?? 99999;
-                  if (t.ticketNumber >= start && t.ticketNumber <= end) {
-                    return true;
-                  }
-                }
-              }
-              return false;
-            }
-            return true;
+            return adv.coversTicket(t);
           }).toList();
         }
 
@@ -96,6 +85,7 @@ class _TicketGridViewState extends State<TicketGridView> {
         return Column(
           children: [
             const CurrentRaffleBanner(),
+            const AdvisorNumbersBar(),
             Container(
               padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 16),
               color: Theme.of(context).cardColor,

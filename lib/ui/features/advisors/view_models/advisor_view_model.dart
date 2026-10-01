@@ -13,6 +13,10 @@ class AdvisorViewModel extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  /// Server message of the last failed save (e.g. overlapping ranges), shown to the user.
+  String? _lastError;
+  String? get lastError => _lastError;
+
   Map<String, dynamic>? _commissionsData;
   Map<String, dynamic>? get commissionsData => _commissionsData;
 
@@ -32,6 +36,7 @@ class AdvisorViewModel extends ChangeNotifier {
 
   Future<bool> createAdvisor(Map<String, dynamic> data) async {
     _isLoading = true;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -40,6 +45,7 @@ class AdvisorViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error al crear asesor: $e');
+      _lastError = e.toString().replaceFirst(RegExp(r'^(Exception|ApiException[^:]*): ?'), '');
       return false;
     } finally {
       _isLoading = false;
@@ -49,6 +55,7 @@ class AdvisorViewModel extends ChangeNotifier {
 
   Future<bool> updateAdvisor(String id, Map<String, dynamic> data) async {
     _isLoading = true;
+    _lastError = null;
     notifyListeners();
 
     try {
@@ -60,10 +67,26 @@ class AdvisorViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error al actualizar asesor: $e');
+      _lastError = e.toString().replaceFirst(RegExp(r'^(Exception|ApiException[^:]*): ?'), '');
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Advisors with a pending request for more numbers.
+  List<Advisor> get pendingRangeRequests => _advisors.where((a) => a.rangeRequest != null).toList();
+
+  Future<bool> dismissRangeRequest(String advisorId) async {
+    try {
+      await _repository.dismissRangeRequest(advisorId);
+      await loadAdvisors();
+      return true;
+    } catch (e) {
+      _lastError = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 

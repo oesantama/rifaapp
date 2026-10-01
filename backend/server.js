@@ -2159,6 +2159,10 @@ app.post('/api/tickets/:id/abono', (req, res) => {
   if (!ticket) {
     return res.status(404).json({ error: 'Boleta no encontrada' });
   }
+  // An advisor working with assigned numbers can only sell inside them
+  if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record)) {
+    return res.status(403).json({ error: 'Esta boleta no está en sus números asignados. Solicite más boletas al administrador.' });
+  }
 
   // Same submission received again (double tap, slow network retry): apply it only once
   if (isDuplicateRequest(requestId)) {
@@ -2318,6 +2322,85 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   res.json(ticket);
 });
 
+// ── Assigned number ranges ──
+// Ranges refer to the numbers printed on the tickets (opportunities), e.g. "10-20" or "35".
+// A ticket belongs to an advisor's ranges when any of its numbers falls inside one of them.
+function parseRange(text) {
+  const match = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(String(text || ''));
+  if (!match) return null;
+  const start = parseInt(match[1], 10);
+  const end = match[2] !== undefined ? parseInt(match[2], 10) : start;
+  return start <= end ? { start, end } : null;
+}
+
+function rangeLabel({ start, end }) {
+  return start === end ? String(start) : `${start}-${end}`;
+}
+
+function ticketNumbersOf(ticket) {
+  const nums = (ticket.numbers || []).map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+  return nums.length ? nums : [ticket.ticketNumber];
+}
+
+function ticketInAdvisorRanges(ticket, advisor) {
+  if (!advisor || advisor.mode !== 'ASSIGNED') return true;
+  const ranges = (advisor.assignedTicketRanges || []).map(parseRange).filter(Boolean);
+  if (!ranges.length) return true;
+  return ticketNumbersOf(ticket).some(n => ranges.some(r => n >= r.start && n <= r.end));
+}
+
+// Validates and normalizes a list of ranges; numbers may not be assigned to two advisors of the same company
+function normalizeAdvisorRanges(list, advisor) {
+  if (!Array.isArray(list)) return { error: 'Los rangos deben ser una lista.' };
+  const ranges = [];
+  for (const raw of list) {
+    if (String(raw || '').trim() === '') continue;
+    const range = parseRange(raw);
+    if (!range) return { error: `Rango inválido: "${raw}". Use el formato 10-20 o un número solo.` };
+    ranges.push(range);
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].start <= ranges[i - 1].end) {
+      return { error: `Los rangos ${rangeLabel(ranges[i - 1])} y ${rangeLabel(ranges[i])} se cruzan.` };
+    }
+  }
+  const others = (db.advisors || []).filter(a => a.id !== advisor.id && a.companyId === advisor.companyId && a.mode === 'ASSIGNED');
+  for (const other of others) {
+    for (const theirs of (other.assignedTicketRanges || []).map(parseRange).filter(Boolean)) {
+      const clash = ranges.find(r => r.start <= theirs.end && theirs.start <= r.end);
+      if (clash) {
+        return { error: `Los números ${rangeLabel(clash)} se cruzan con ${rangeLabel(theirs)}, asignado a ${other.name}.` };
+      }
+    }
+  }
+  return { ranges: ranges.map(rangeLabel) };
+}
+
+// The advisor asks the admin for more numbers; the admin answers by assigning more or discarding it
+app.post('/api/advisors/me/range-request', requireRole('asesor'), (req, res) => {
+  const advisor = req.auth.record;
+  const quantity = parseInt(req.body.quantity, 10);
+  if (!quantity || quantity < 1 || quantity > 10000) {
+    return res.status(400).json({ error: 'Indique cuántas boletas necesita.' });
+  }
+  advisor.rangeRequest = {
+    quantity,
+    note: String(req.body.note || '').trim().slice(0, 300),
+    requestedAt: new Date().toISOString()
+  };
+  saveDB();
+  res.json({ success: true, rangeRequest: advisor.rangeRequest });
+});
+
+app.delete('/api/advisors/:id/range-request', adminOnly, (req, res) => {
+  const advisor = (db.advisors || []).find(a => a.id === req.params.id);
+  if (!advisor) return res.status(404).json({ error: 'Asesor no encontrado' });
+  advisor.rangeRequest = null;
+  saveDB();
+  res.json({ success: true });
+});
+
 // GET Advisors (Multi-tenant isolated)
 app.get('/api/advisors', (req, res) => {
   const { companyId } = req.query;
@@ -2377,9 +2460,12 @@ app.post('/api/advisors', adminOnly, (req, res) => {
     phone: phone || '',
     code: code || `ADV${Math.floor(10 + Math.random()*90)}`,
     mode: mode || 'POOL_GENERAL',
-    assignedTicketRanges: assignedTicketRanges || [],
+    assignedTicketRanges: [],
     createdAt: new Date().toISOString()
   };
+  const checked = normalizeAdvisorRanges(assignedTicketRanges || [], newAdvisor);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  newAdvisor.assignedTicketRanges = checked.ranges;
 
   db.advisors.push(newAdvisor);
   saveDB();
@@ -2392,6 +2478,14 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
   const advisor = db.advisors.find(a => a.id === id);
   if (!advisor) {
     return res.status(404).json({ error: 'Asesor no encontrado' });
+  }
+
+  let newRanges = null;
+  if (req.body.assignedTicketRanges !== undefined) {
+    const companyId = req.body.companyId !== undefined ? req.body.companyId : advisor.companyId;
+    const checked = normalizeAdvisorRanges(req.body.assignedTicketRanges, { ...advisor, companyId });
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    newRanges = checked.ranges;
   }
 
   if (req.body.companyId !== undefined) advisor.companyId = req.body.companyId;
@@ -2410,7 +2504,12 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
   if (req.body.phone !== undefined) advisor.phone = req.body.phone;
   if (req.body.code !== undefined) advisor.code = req.body.code;
   if (req.body.mode !== undefined) advisor.mode = req.body.mode;
-  if (req.body.assignedTicketRanges !== undefined) advisor.assignedTicketRanges = req.body.assignedTicketRanges;
+  if (newRanges) {
+    const size = list => list.map(parseRange).filter(Boolean).reduce((sum, r) => sum + r.end - r.start + 1, 0);
+    // Assigning more numbers answers the advisor's pending request
+    if (advisor.rangeRequest && size(newRanges) > size(advisor.assignedTicketRanges || [])) advisor.rangeRequest = null;
+    advisor.assignedTicketRanges = newRanges;
+  }
 
   saveDB();
   res.json(advisor);

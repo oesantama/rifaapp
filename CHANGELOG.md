@@ -8,6 +8,20 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [2.1.0] - 2026-09-30
+
+### Nuevo
+- Asignar más números a un asesor sin reescribir sus rangos: botón "Asignar más" en su tarjeta y opción "Asignar números" en el menú. Permite agregar los siguientes números libres o un rango específico, y quitar rangos.
+- El asesor puede "Solicitar más" boletas desde Boletas (cantidad y mensaje). El administrador ve las solicitudes arriba en Asesores y al asignar queda atendida; también puede descartarla.
+- El asesor ve sus números asignados y cuántos le quedan disponibles.
+
+### Corregido
+- Los rangos asignados ahora usan los números impresos en las boletas (antes usaban el número interno y no coincidían).
+- Un número no puede quedar asignado a dos asesores; los rangos se validan en el servidor.
+- El asesor solo puede vender boletas dentro de sus números (validado en el servidor).
+- Los números asignados por el administrador le aparecen al asesor sin cerrar sesión (al actualizar o cada 10 minutos).
+- Si guardar un asesor falla, se muestra el motivo.
+
 ## [2.0.0] - 2026-09-30
 
 ### Nuevo
