@@ -48,6 +48,28 @@ class TicketViewModel extends ChangeNotifier {
         t.numbers.any((n) => n.contains(q));
   }
 
+  /// Sales of each advisor in the loaded raffle, by status (key: advisorId).
+  Map<String, AdvisorSales> salesByAdvisor() {
+    final result = <String, AdvisorSales>{};
+    for (final t in _tickets) {
+      if (t.status == 'DISPONIBLE' || t.advisorId.isEmpty) continue;
+      final s = result.putIfAbsent(t.advisorId, () => AdvisorSales());
+      switch (t.status) {
+        case 'RESERVADA':
+          s.reservadas++;
+          break;
+        case 'ABONO_PARCIAL':
+          s.abonadas++;
+          break;
+        default: // PAGADA, CONFIRMADA
+          s.pagadas++;
+      }
+      s.collected += t.totalPaid;
+      if (t.confirmedByAdmin) s.confirmed += t.totalPaid;
+    }
+    return result;
+  }
+
   /// Tickets matching the search and advisor filter, before the status filter.
   List<Ticket> get searchedTickets =>
       _tickets.where((t) => (_selectedAdvisorFilter == null || t.advisorId == _selectedAdvisorFilter) && _matchesSearch(t)).toList();
@@ -177,4 +199,17 @@ class TicketViewModel extends ChangeNotifier {
     _selectedAdvisorFilter = null;
     notifyListeners();
   }
+}
+
+/// One advisor's sales in a raffle: reserved (fiadas), with partial payments, fully paid.
+class AdvisorSales {
+  int reservadas = 0;
+  int abonadas = 0;
+  int pagadas = 0;
+  double collected = 0;
+  double confirmed = 0;
+
+  /// Total sold = reserved + partially paid + paid.
+  int get total => reservadas + abonadas + pagadas;
+  double get pendingTurnIn => collected - confirmed;
 }

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
+import 'package:rifaapp/ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
@@ -62,7 +63,6 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   }
 
   void _copyReceiptToClipboard(BuildContext context) async {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
 
     String name = _buyerNameController.text.trim().isNotEmpty
         ? _buyerNameController.text.trim()
@@ -493,14 +493,16 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         border: const OutlineInputBorder(),
                       ),
                       items: [
-                        for (final channel in SaleChannels.all)
+                        // Active channels from the SuperAdmin's master list (plus this ticket's current one)
+                        for (final channel
+                            in context.watch<SaleChannelViewModel>().channels.where((c) => c.active || c.name == _saleChannel))
                           DropdownMenuItem(
-                            value: channel,
+                            value: channel.name,
                             child: Row(
                               children: [
-                                Icon(SaleChannels.icon(channel), size: 18, color: SaleChannels.color(channel)),
+                                Icon(SaleChannels.iconFor(channel.icon), size: 18, color: SaleChannels.colorFrom(channel.color)),
                                 const SizedBox(width: 8),
-                                Text(channel),
+                                Text(channel.name),
                               ],
                             ),
                           ),

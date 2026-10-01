@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/features/advisors/views/advisor_sales_breakdown.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -354,7 +356,6 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                   double earned = (adv['commissionEarned'] as num?)?.toDouble() ?? 0.0;
                   double paid = (adv['commissionPaid'] as num?)?.toDouble() ?? 0.0;
                   double pending = (adv['pendingCommission'] as num?)?.toDouble() ?? 0.0;
-                  int sold = adv['totalTicketsSold'] ?? 0;
                   double collected = (adv['totalCollected'] as num?)?.toDouble() ?? 0.0;
 
                   final avatar = CircleAvatar(
@@ -382,7 +383,12 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                   final sales = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('$sold boletas vendidas', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      // Breakdown by status in the current raffle (reserved / partial / paid = sold)
+                      AdvisorSalesBreakdown(
+                        sales: context.watch<TicketViewModel>().salesByAdvisor()[adv['advisorId']] ?? AdvisorSales(),
+                        compact: true,
+                      ),
+                      const SizedBox(height: 2),
                       Text('Recaudado: ${currency.format(collected)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   );

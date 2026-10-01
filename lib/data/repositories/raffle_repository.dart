@@ -1,3 +1,4 @@
+import '../models/sale_channel.dart';
 import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
@@ -84,4 +85,8 @@ class RaffleRepository {
   Future<Ticket> voidTicket(String ticketId, String reason) => _apiService.voidTicket(ticketId, reason);
 
   Future<Ticket> voidAbono(String ticketId, String abonoId, String reason) => _apiService.voidAbono(ticketId, abonoId, reason);
+
+  Future<List<SaleChannel>> fetchSaleChannels() => _apiService.fetchSaleChannels();
+
+  Future<SaleChannel> saveSaleChannel(String? id, Map<String, dynamic> data) => _apiService.saveSaleChannel(id, data);
 }

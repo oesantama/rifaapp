@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/features/advisors/views/advisor_sales_breakdown.dart';
+import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -410,8 +413,11 @@ class AdvisorManagementView extends StatelessWidget {
         }
 
         // Sort advisors by sales count descending for ranking
+        // Sales of the current raffle by status (same raffle as the header and the commissions tab)
+        final sales = context.watch<TicketViewModel>().salesByAdvisor();
+        AdvisorSales salesOf(String advisorId) => sales[advisorId] ?? AdvisorSales();
         final rankedAdvisors = List.from(advVM.advisors);
-        rankedAdvisors.sort((a, b) => b.totalSold.compareTo(a.totalSold));
+        rankedAdvisors.sort((a, b) => salesOf(b.id).total.compareTo(salesOf(a.id).total));
 
         return DefaultTabController(
           length: 2,
@@ -475,6 +481,8 @@ class AdvisorManagementView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const CurrentRaffleBanner(),
+                      const SizedBox(height: 12),
                       const Row(
                         children: [
                           Expanded(
@@ -563,7 +571,7 @@ class AdvisorManagementView extends StatelessWidget {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${adv.totalSold} boletas',
+                                            '${salesOf(adv.id).total} vendidas',
                                             style: const TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.bold,
@@ -733,11 +741,15 @@ class AdvisorManagementView extends StatelessWidget {
                                     ],
                                   ),
                                   const Divider(height: 24),
+                                  Text('Ventas en la rifa actual',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[600])),
+                                  const SizedBox(height: 6),
+                                  AdvisorSalesBreakdown(sales: salesOf(adv.id)),
+                                  const SizedBox(height: 12),
                                   _metricsRow([
-                                    _metricCol('Boletas Vendidas', '${adv.totalSold}', Colors.blueGrey),
-                                    _metricCol('Recaudado Asesor', currency.format(adv.totalCollected), AppTheme.secondaryEmerald),
-                                    _metricCol('Confirmado Admin', currency.format(adv.totalConfirmed), AppTheme.primaryBlue),
-                                    _metricCol('Pendiente Turn-in', currency.format(adv.pendingTurnIn), AppTheme.dangerRose),
+                                    _metricCol('Recaudado Asesor', currency.format(salesOf(adv.id).collected), AppTheme.secondaryEmerald),
+                                    _metricCol('Confirmado Admin', currency.format(salesOf(adv.id).confirmed), AppTheme.primaryBlue),
+                                    _metricCol('Pendiente Turn-in', currency.format(salesOf(adv.id).pendingTurnIn), AppTheme.dangerRose),
                                   ])
                                 ],
                               ),

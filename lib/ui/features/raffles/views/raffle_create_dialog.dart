@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/raffles/views/winning_rule_fields.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
   late TextEditingController _weeklyPrizesStartDateController;
 
   int _digits = 4;
+  String _winningPosition = 'ULTIMAS';
+  bool _allowCombined = false;
   String _generationMode = 'SECUENCIAL'; // SECUENCIAL, ALEATORIO, EXCEL
   String _commissionType = 'PORCENTAJE'; // PORCENTAJE or VALOR_FIJO
 
@@ -253,7 +256,13 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                           DropdownMenuItem(value: 5, child: Text('5 Dígitos (100.000 números)')),
                         ],
                         onChanged: (val) {
-                          if (val != null) setState(() => _digits = val);
+                          if (val != null) {
+                            setState(() {
+                              _digits = val;
+                              // Keep the rule valid for the new number of digits
+                              if (!WinningRuleFields.positionsFor(val).contains(_winningPosition)) _winningPosition = 'ULTIMAS';
+                            });
+                          }
                         },
                       ),
                     ),
@@ -270,6 +279,15 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                       ),
                     ),
                   ],
+                ),
+
+                const SizedBox(height: 12),
+                WinningRuleFields(
+                  digits: _digits,
+                  position: _winningPosition,
+                  allowCombined: _allowCombined,
+                  onPositionChanged: (v) => setState(() => _winningPosition = v),
+                  onCombinedChanged: (v) => setState(() => _allowCombined = v),
                 ),
 
                 const SizedBox(height: 14),
@@ -703,6 +721,8 @@ class _RaffleCreateDialogState extends State<RaffleCreateDialog> {
                             'ticketPrice': double.parse(_priceController.text),
                             'commissionType': _commissionType,
                             'commissionValue': double.parse(_commissionValueController.text),
+                            'winningDigitsPosition': _winningPosition,
+                            'allowCombined': _allowCombined,
                             'generationMode': _generationMode,
                             'customNumbersMap': _customNumbersMap,
                             'preSoldTickets': _preSoldTicketsList,

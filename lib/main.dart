@@ -17,6 +17,8 @@ import 'ui/features/admin_cash/views/admin_cash_view.dart';
 import 'ui/features/winners/views/winner_registration_view.dart';
 import 'ui/features/company/views/company_management_view.dart';
 import 'ui/features/backup/views/database_backup_view.dart';
+import 'ui/features/sale_channels/view_models/sale_channel_view_model.dart';
+import 'ui/features/sale_channels/views/sale_channels_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
@@ -48,6 +50,7 @@ class _RifaAppState extends State<RifaApp> {
         ChangeNotifierProvider(create: (_) => TicketViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => AdvisorViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => SaleChannelViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -128,9 +131,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
     ticketVM.reset();
     advisorVM.reset();
     winnerVM.reset();
+    final saleChannelVM = Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
 
     // Advisors and winners do not depend on the selected raffle: load them in parallel
-    final independent = Future.wait([advisorVM.loadAdvisors(), winnerVM.loadWinners()]);
+    final independent = Future.wait([advisorVM.loadAdvisors(), winnerVM.loadWinners(), saleChannelVM.load()]);
     await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
     await Future.wait([
       ticketVM.loadTickets(raffleId: raffleVM.selectedRaffle?.id),
@@ -149,6 +153,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         ? [
             const CompanyManagementView(),
             const DatabaseBackupView(),
+            const SaleChannelsView(),
           ]
         : authVM.isAdmin
             ? [
@@ -387,6 +392,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.backup),
                         label: Text('Backup BD'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.campaign_outlined),
+                        selectedIcon: Icon(Icons.campaign),
+                        label: Text('Medios'),
+                      ),
                     ]
                   : authVM.isAdmin
                       ? const [
@@ -447,6 +457,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                   ? const [
                       BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),
                       BottomNavigationBarItem(icon: Icon(Icons.backup), label: 'Backup BD'),
+                      BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Medios'),
                     ]
                   : authVM.isAdmin
                       ? const [

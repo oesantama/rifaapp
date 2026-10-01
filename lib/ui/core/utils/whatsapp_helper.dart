@@ -77,6 +77,7 @@ class WhatsAppHelper {
       if (drawDate != null) {
         b.writeln('📅 *Juega el día:* ${DateFormat('dd/MM/yyyy').format(drawDate.toLocal())}'
             '${lottery.isNotEmpty ? ' con la $lottery' : ''}');
+        b.writeln('🏆 *Gana con:* ${raffle.winningRuleText}');
       }
       if (raffle.hasWeeklyDraws) {
         final minAbono =

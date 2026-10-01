@@ -678,6 +678,7 @@ async function loadDB() {
   // would inject fake sales into a real raffle that has no tickets yet.
 
   const templatesMoved = await extractEmbeddedTemplates(db);
+  const channelsSeeded = ensureSaleChannels(db);
   const credentialsChanged = migrateCredentials();
   if (credentialsChanged) {
     console.log('🔐 Contraseñas protegidas con hash (scrypt) y cuenta SuperAdmin verificada.');
@@ -686,6 +687,7 @@ async function loadDB() {
   // startup would overwrite changes made on the previous server during a deploy.
   const needsRewrite =
     templatesMoved ||
+    channelsSeeded ||
     credentialsChanged ||
     (security.hasMasterKey() && !loadedEncrypted) ||
     (firestore && (!loadedFromFirestore || firestoreVersion === 'legacy'));
@@ -1270,6 +1272,9 @@ app.post('/api/backup/restore', superAdminOnly, async (req, res) => {
       }
     }
     await extractEmbeddedTemplates(restored);
+    // Older backups have no channel list: keep the current one
+    if (!Array.isArray(restored.saleChannels) || !restored.saleChannels.length) restored.saleChannels = db.saleChannels;
+    ensureSaleChannels(restored);
     db = restored;
 
     migrateCredentials();
@@ -1425,6 +1430,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
     }
     raffle.templateConfig = settings;
   }
+  Object.assign(raffle, normalizeWinningConfig(req.body, raffle.digits));
   // Weekly draw settings (previously ignored, so they reverted after every reload)
   if (req.body.hasWeeklyDraws !== undefined) raffle.hasWeeklyDraws = req.body.hasWeeklyDraws === true || req.body.hasWeeklyDraws === 'true';
   if (req.body.weeklyDrawDay !== undefined) raffle.weeklyDrawDay = String(req.body.weeklyDrawDay);
@@ -1500,6 +1506,10 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     weeklyPrizes: weeklyPrizes || [],
     commissionType: commissionType || 'PORCENTAJE',
     commissionValue: parseFloat(commissionValue) || 10,
+    // Which lottery digits decide the winner, and whether "combinado" (any order) also wins
+    winningDigitsPosition: 'ULTIMAS',
+    allowCombined: false,
+    ...normalizeWinningConfig(req.body, numDigits),
     status: 'ACTIVA',
     createdAt: new Date().toISOString()
   };
@@ -1711,7 +1721,86 @@ app.get('/api/tickets', (req, res) => {
 });
 
 // POST Register Ticket Sale or Abono
-const SALE_CHANNELS = ['Facebook', 'WhatsApp', 'Familiar', 'Conocido', 'Voz a voz', 'Otro'];
+// Sale / contact channels are master data managed by the SuperAdmin (db.saleChannels).
+// Channels are never deleted (sold tickets keep referencing them); they are deactivated instead.
+const DEFAULT_SALE_CHANNELS = [
+  { name: 'Facebook', color: '#1877F2', icon: 'facebook' },
+  { name: 'WhatsApp', color: '#25D366', icon: 'chat' },
+  { name: 'Familiar', color: '#EC4899', icon: 'family' },
+  { name: 'Conocido', color: '#8B5CF6', icon: 'handshake' },
+  { name: 'Voz a voz', color: '#F59E0B', icon: 'voice' },
+  { name: 'Otro', color: '#64748B', icon: 'more' }
+];
+const CHANNEL_ICONS = ['facebook', 'chat', 'family', 'handshake', 'voice', 'instagram', 'tiktok', 'phone', 'store', 'email', 'web', 'more'];
+
+function ensureSaleChannels(target) {
+  if (Array.isArray(target.saleChannels) && target.saleChannels.length) return false;
+  const now = new Date().toISOString();
+  target.saleChannels = DEFAULT_SALE_CHANNELS.map((c, i) => ({ id: `ch-${i + 1}`, ...c, active: true, order: i, createdAt: now }));
+  return true;
+}
+
+function isActiveSaleChannel(name) {
+  return (db.saleChannels || []).some(c => c.active && c.name === name);
+}
+
+function validateChannelInput(body, currentId) {
+  const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+  if (name !== undefined) {
+    if (name.length < 2 || name.length > 30) return 'El nombre debe tener entre 2 y 30 caracteres.';
+    const taken = (db.saleChannels || []).some(c => c.id !== currentId && c.name.toLowerCase() === name.toLowerCase());
+    if (taken) return 'Ya existe un medio de venta con ese nombre.';
+  }
+  if (body.color !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(String(body.color))) return 'Color no válido (use #RRGGBB).';
+  if (body.icon !== undefined && !CHANNEL_ICONS.includes(body.icon)) return 'Ícono no válido.';
+  return null;
+}
+
+app.get('/api/sale-channels', (req, res) => {
+  const all = [...(db.saleChannels || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  // Everyone gets the active ones; the SuperAdmin also sees inactive ones to manage them
+  res.json(req.auth.role === 'superadmin' ? all : all.filter(c => c.active));
+});
+
+app.post('/api/sale-channels', superAdminOnly, (req, res) => {
+  const body = req.body || {};
+  if (typeof body.name !== 'string') return res.status(400).json({ error: 'El nombre es obligatorio.' });
+  const error = validateChannelInput(body, null);
+  if (error) return res.status(400).json({ error });
+  const channel = {
+    id: `ch-${Date.now()}`,
+    name: body.name.trim(),
+    color: body.color || '#64748B',
+    icon: body.icon || 'more',
+    active: body.active !== false,
+    order: (db.saleChannels || []).length,
+    createdAt: new Date().toISOString()
+  };
+  db.saleChannels.push(channel);
+  saveDB();
+  res.status(201).json(channel);
+});
+
+app.put('/api/sale-channels/:id', superAdminOnly, (req, res) => {
+  const channel = (db.saleChannels || []).find(c => c.id === req.params.id);
+  if (!channel) return res.status(404).json({ error: 'Medio de venta no encontrado.' });
+  const body = req.body || {};
+  const error = validateChannelInput(body, channel.id);
+  if (error) return res.status(400).json({ error });
+  if (typeof body.name === 'string' && body.name.trim() !== channel.name) {
+    const oldName = channel.name;
+    channel.name = body.name.trim();
+    // Renaming keeps the history consistent: sold tickets point to the new name
+    (db.tickets || []).forEach(t => { if (t.saleChannel === oldName) t.saleChannel = channel.name; });
+  }
+  if (body.color !== undefined) channel.color = body.color;
+  if (body.icon !== undefined) channel.icon = body.icon;
+  if (typeof body.active === 'boolean') channel.active = body.active;
+  if (Number.isInteger(body.order)) channel.order = body.order;
+  channel.updatedAt = new Date().toISOString();
+  saveDB();
+  res.json(channel);
+});
 
 // Recently seen submission ids (10 minutes) so a repeated request is never applied twice
 const recentRequests = new Map();
@@ -1804,8 +1893,11 @@ app.post('/api/tickets/:id/abono', (req, res) => {
 
   if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();
   if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
-  // How the buyer was reached (Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro)
-  if (SALE_CHANNELS.includes(saleChannel)) ticket.saleChannel = saleChannel;
+  // How the buyer was reached: an active channel from the SuperAdmin's master list
+  // (a ticket may keep a channel that was deactivated after it was sold)
+  if (typeof saleChannel === 'string' && (isActiveSaleChannel(saleChannel) || saleChannel === ticket.saleChannel)) {
+    ticket.saleChannel = saleChannel;
+  }
   if (sellerId) ticket.advisorId = sellerId;
   if (sellerName) ticket.advisorName = sellerName;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();
@@ -2088,6 +2180,38 @@ app.delete('/api/winners/:id', adminOnly, (req, res) => {
 });
 
 // POST Register Winner / Draw Number
+const WINNING_POSITIONS = ['ULTIMAS', 'PRIMERAS', 'MEDIO'];
+
+/** Raffle number taken from the lottery result according to the raffle's rule. */
+function deriveWinningNumber(raffle, input) {
+  const digits = raffle.digits || 4;
+  const clean = String(input || '').replace(/\D/g, '');
+  // The admin may type the raffle number directly or the full lottery result
+  if (clean.length <= digits) return clean.padStart(digits, '0');
+  const position = raffle.winningDigitsPosition || 'ULTIMAS';
+  if (position === 'PRIMERAS') return clean.slice(0, digits);
+  if (position === 'MEDIO') {
+    const start = Math.floor((clean.length - digits) / 2);
+    return clean.slice(start, start + digits);
+  }
+  return clean.slice(-digits);
+}
+
+function sortedDigits(value) {
+  return String(value).split('').sort().join('');
+}
+
+function normalizeWinningConfig(body, digits) {
+  const out = {};
+  if (body.winningDigitsPosition !== undefined) {
+    let position = WINNING_POSITIONS.includes(body.winningDigitsPosition) ? body.winningDigitsPosition : 'ULTIMAS';
+    if (position === 'MEDIO' && digits !== 2) position = 'ULTIMAS'; // "middle" only applies to 2 digits
+    out.winningDigitsPosition = position;
+  }
+  if (body.allowCombined !== undefined) out.allowCombined = body.allowCombined === true || body.allowCombined === 'true';
+  return out;
+}
+
 app.post('/api/winners', adminOnly, (req, res) => {
   const { raffleId, winningNumber, drawName, drawDate, prizeAmount, photoUrl } = req.body;
 
@@ -2098,25 +2222,34 @@ app.post('/api/winners', adminOnly, (req, res) => {
   if (raffle.hasWeeklyDraws === false) {
     return res.status(400).json({ error: 'Este sorteo tiene deshabilitados los sorteos semanales. Habilítelos en "Gestionar Sorteo" para registrar ganadores semanales.' });
   }
-  const rawNumStr = (winningNumber || '').toString().trim();
-  const numStr = rawNumStr.padStart(raffle ? raffle.digits : 4, '0');
+  const lotteryResult = (winningNumber || '').toString().trim();
+  if (!/\d/.test(lotteryResult)) return res.status(400).json({ error: 'Ingrese el número o resultado de la lotería.' });
+  // Raffle number according to the rule (last / first / middle digits of the lottery result)
+  const numStr = deriveWinningNumber(raffle, lotteryResult);
+  const rawNumStr = numStr;
 
-  // Search if any ticket has this winning number
-  const matchingTicket = db.tickets.find(t => 
-    t.raffleId === (raffleId || (db.raffles[0] ? db.raffles[0].id : 'raf-1')) && 
-    (t.numbers.includes(numStr) || t.numbers.includes(rawNumStr))
-  );
+  // Minimum paid to participate; same defaults as the app (50% of the price) when not configured
+  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
+  const minValue = Number.isFinite(Number(raffle.weeklyMinAbonoValue)) && raffle.weeklyMinAbonoValue !== null && raffle.weeklyMinAbonoValue !== undefined
+    ? Number(raffle.weeklyMinAbonoValue)
+    : 50;
+  const reqAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * (minValue / 100) : minValue;
+  const raffleTickets = db.tickets.filter(t => t.raffleId === raffle.id);
+  const qualifies = t => t.status !== 'DISPONIBLE' && (t.totalPaid || 0) >= reqAbono;
 
-  const reqAbono = raffle ? (
-    raffle.weeklyMinAbonoType === 'PORCENTAJE'
-      ? (raffle.ticketPrice * (raffle.weeklyMinAbonoValue / 100))
-      : raffle.weeklyMinAbonoValue
-  ) : 0;
-
-  let isWinner = false;
-  if (matchingTicket && matchingTicket.status !== 'DISPONIBLE' && (matchingTicket.totalPaid || 0) >= reqAbono) {
-    isWinner = true;
+  // Exact match first; if it does not win and the raffle allows "combinado", the same digits
+  // in any order also win (e.g. 21 for 12)
+  let matchType = 'EXACTO';
+  let matchingTicket = raffleTickets.find(t => t.numbers.includes(numStr));
+  if ((!matchingTicket || !qualifies(matchingTicket)) && raffle.allowCombined) {
+    const combined = raffleTickets.find(t => qualifies(t) && t.numbers.some(n => n !== numStr && sortedDigits(n) === sortedDigits(numStr)));
+    if (combined) {
+      matchingTicket = combined;
+      matchType = 'COMBINADO';
+    }
   }
+
+  const isWinner = !!matchingTicket && qualifies(matchingTicket);
 
   let winnerDetails = null;
   if (matchingTicket) {
@@ -2151,8 +2284,8 @@ app.post('/api/winners', adminOnly, (req, res) => {
     };
   }
 
-  // Calculate previous accumulated pot from active accumulated draws
-  const activeAccumulatedPrizes = db.winners.filter(w => w.accumulated);
+  // Previous accumulated pot: only this raffle's draws (another raffle/company's pot never mixes in)
+  const activeAccumulatedPrizes = db.winners.filter(w => w.accumulated && w.raffleId === raffle.id);
   const prevAccumulatedPot = activeAccumulatedPrizes.reduce((sum, w) => sum + (parseFloat(w.basePrizeAmount || w.prizeAmount) || 0), 0);
 
   const basePrizeAmount = prizeAmount ? parseFloat(prizeAmount) : 1000000;
@@ -2164,6 +2297,8 @@ app.post('/api/winners', adminOnly, (req, res) => {
     drawName: drawName || 'Sorteo Semanal',
     drawDate: drawDate || new Date().toISOString(),
     winningNumber: rawNumStr,
+    lotteryResult,
+    matchType: isWinner ? matchType : null,
     basePrizeAmount: basePrizeAmount,
     previousAccumulatedAmount: isWinner ? prevAccumulatedPot : 0,
     totalPrizePaid: totalPrizePaid,
@@ -2178,7 +2313,7 @@ app.post('/api/winners', adminOnly, (req, res) => {
   // If won, mark previous accumulated draws as consumed so they don't get re-accumulated
   if (isWinner) {
     db.winners.forEach(w => {
-      if (w.accumulated) {
+      if (w.accumulated && w.raffleId === raffle.id) {
         w.accumulated = false;
         w.accumulationReason = `Acumulado entregado en sorteo #${rawNumStr}`;
       }

@@ -7,6 +7,7 @@ import '../models/ticket.dart';
 import '../models/advisor.dart';
 import '../models/winner.dart';
 import '../models/company.dart';
+import '../models/sale_channel.dart';
 
 class ApiService {
   final String baseUrl;
@@ -1090,6 +1091,26 @@ class ApiService {
       body: jsonEncode({'reason': reason}),
     ).timeout(const Duration(seconds: 30));
     if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  // Sale channels master (managed by the SuperAdmin)
+  Future<List<SaleChannel>> fetchSaleChannels() async {
+    final response = await authGet(Uri.parse('$baseUrl/sale-channels')).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return (jsonDecode(response.body) as List).map((c) => SaleChannel.fromJson(Map<String, dynamic>.from(c))).toList();
+  }
+
+  Future<SaleChannel> saveSaleChannel(String? id, Map<String, dynamic> data) async {
+    final uri = Uri.parse(id == null ? '$baseUrl/sale-channels' : '$baseUrl/sale-channels/$id');
+    final headers = {'Content-Type': 'application/json'};
+    final response = await (id == null
+            ? authPost(uri, headers: headers, body: jsonEncode(data))
+            : authPut(uri, headers: headers, body: jsonEncode(data)))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return SaleChannel.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
+    }
     throw ApiException.fromResponse(response);
   }
 }

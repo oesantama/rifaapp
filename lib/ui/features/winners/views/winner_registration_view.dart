@@ -182,33 +182,51 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
       return;
     }
 
-    if (winningNum.length != requiredDigits) {
+    // Accepts the raffle number itself or the full lottery result (e.g. 4 digits for a 2-digit raffle)
+    final maxDigits = requiredDigits < 4 ? 4 : requiredDigits;
+    if (winningNum.length != requiredDigits && winningNum.length != maxDigits) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.orange.shade800,
-          content: Text('⚠️ El número ganador debe tener exactamente $requiredDigits dígitos (ingresó ${winningNum.length} dígitos).'),
+          content: Text(requiredDigits < 4
+              ? '⚠️ Ingrese el número ganador ($requiredDigits cifras) o el resultado completo de la lotería (4 cifras).'
+              : '⚠️ El número ganador debe tener exactamente $requiredDigits dígitos (ingresó ${winningNum.length} dígitos).'),
         ),
       );
       return;
     }
+    final lotteryResult = winningNum;
+    final raffleNumber = currentRaffle != null ? currentRaffle.winningNumberFrom(lotteryResult) : lotteryResult;
 
     double basePrizeAmount = double.tryParse(_prizeAmountController.text) ?? 1000000.0;
-    double prevAccumulatedPot = winnerVM.totalAccumulatedAmount;
+    // Only this raffle's accumulated draws count for its pot
+    double prevAccumulatedPot =
+        winnerVM.winners.where((w) => w.accumulated && w.raffleId == currentRaffle?.id).fold(0.0, (sum, w) => sum + w.basePrizeAmount);
     String drawName = _drawNameController.text.trim();
 
-    // Find ticket with winning number
+    // Same rule as the server: exact number first; if it does not win and the raffle allows
+    // "combinado", the same digits in another order also win
+    String sortedDigits(String v) => (v.split('')..sort()).join();
     Ticket? matchedTicket;
-    try {
-      matchedTicket = ticketVM.tickets.firstWhere((t) => t.numbers.contains(winningNum));
-    } catch (_) {
-      matchedTicket = null;
-    }
+    String matchType = 'EXACTO';
+    final exact = ticketVM.tickets.where((t) => t.numbers.contains(raffleNumber));
+    matchedTicket = exact.isNotEmpty ? exact.first : null;
 
     double reqAbono = 0.0;
     if (currentRaffle != null) {
       reqAbono = currentRaffle.weeklyMinAbonoType == 'PORCENTAJE'
           ? (currentRaffle.ticketPrice * (currentRaffle.weeklyMinAbonoValue / 100))
           : currentRaffle.weeklyMinAbonoValue;
+    }
+
+    bool qualifies(Ticket t) => t.status != 'DISPONIBLE' && t.totalPaid >= reqAbono;
+    if ((matchedTicket == null || !qualifies(matchedTicket)) && (currentRaffle?.allowCombined ?? false)) {
+      final combined = ticketVM.tickets
+          .where((t) => qualifies(t) && t.numbers.any((n) => n != raffleNumber && sortedDigits(n) == sortedDigits(raffleNumber)));
+      if (combined.isNotEmpty) {
+        matchedTicket = combined.first;
+        matchType = 'COMBINADO';
+      }
     }
 
     final tkt = matchedTicket;
@@ -267,7 +285,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(color: AppTheme.primaryBlue, borderRadius: BorderRadius.circular(8)),
                         child: Text(
-                          '#$winningNum',
+                          '#$raffleNumber${matchType == 'COMBINADO' && meetsAbonoCondition ? ' (combinado: ${tkt!.displayNumber})' : ''}',
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -429,7 +447,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                           ],
                         ),
                         const SizedBox(height: 6),
-                        Text('El número $winningNum no pertenece a ninguna boleta reservada o pagada.'),
+                        Text('El número $raffleNumber no pertenece a ninguna boleta reservada o pagada.'),
                         const SizedBox(height: 6),
                         Text(
                           'El premio de ${currency.format(basePrizeAmount)} COP SE ACUMULA para el siguiente sorteo semanal.',
@@ -457,7 +475,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
 
                 WinnerRecord? rec = await winnerVM.registerWinner({
                   'raffleId': currentRaffle?.id,
-                  'winningNumber': winningNum,
+                  'winningNumber': lotteryResult, // the server applies the raffle's rule
                   'drawName': drawName,
                   'prizeAmount': basePrizeAmount,
                   'photoUrl': _photoUrlController.text.trim(),
@@ -645,10 +663,14 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                               flex: 2,
                               child: TextField(
                                 controller: _numberController,
-                                maxLength: currentRaffle?.digits ?? 4,
+                                maxLength: (currentRaffle?.digits ?? 4) < 4 ? 4 : (currentRaffle?.digits ?? 4),
                                 decoration: InputDecoration(
-                                  labelText: 'Número Ganador (${currentRaffle?.digits ?? 4} dígitos) *',
-                                  hintText: 'Ej: 2501',
+                                  labelText: (currentRaffle?.digits ?? 4) < 4
+                                      ? 'Resultado lotería (4 cifras) o número (${currentRaffle?.digits} cifras) *'
+                                      : 'Número Ganador (${currentRaffle?.digits ?? 4} dígitos) *',
+                                  hintText: 'Ej: 4567',
+                                  helperText: currentRaffle != null ? 'Gana con ${currentRaffle.winningRuleText}' : null,
+                                  helperMaxLines: 2,
                                   border: const OutlineInputBorder(),
                                   prefixIcon: const Icon(Icons.numbers),
                                   counterText: '',
@@ -656,7 +678,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 keyboardType: TextInputType.number,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(currentRaffle?.digits ?? 4),
+                                  LengthLimitingTextInputFormatter((currentRaffle?.digits ?? 4) < 4 ? 4 : (currentRaffle?.digits ?? 4)),
                                 ],
                                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2),
                               ),
@@ -866,7 +888,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                             crossAxisAlignment: WrapCrossAlignment.center,
                                             children: [
                                               Text(
-                                                '${w.drawName} • Número Ganador: ${w.winningNumber}',
+                                                '${w.drawName} • Número Ganador: ${w.winningNumber}'
+                                                '${w.lotteryResult.isNotEmpty && w.lotteryResult != w.winningNumber ? ' (lotería ${w.lotteryResult})' : ''}'
+                                                '${w.matchType == 'COMBINADO' ? ' • COMBINADO' : ''}',
                                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                               ),
                                               Container(

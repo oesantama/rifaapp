@@ -68,6 +68,12 @@ class Raffle {
   final double ticketPrice;
   final List<WeeklyPrize> weeklyPrizes;
   final bool hasWeeklyDraws;
+
+  /// Which lottery digits decide the winner: ULTIMAS, PRIMERAS or MEDIO (2 digits only).
+  final String winningDigitsPosition;
+
+  /// "Combinado": the same digits in any order also win.
+  final bool allowCombined;
   final String weeklyDrawDay;
   final String lotteryName;
   final String weeklyMinAbonoType; // PORCENTAJE or VALOR_FIJO
@@ -98,6 +104,8 @@ class Raffle {
     required this.ticketPrice,
     required this.weeklyPrizes,
     this.hasWeeklyDraws = true,
+    this.winningDigitsPosition = 'ULTIMAS',
+    this.allowCombined = false,
     this.weeklyDrawDay = 'Viernes',
     this.lotteryName = 'Lotería de Medellín',
     this.weeklyMinAbonoType = 'PORCENTAJE',
@@ -133,6 +141,8 @@ class Raffle {
       ticketPrice: (json['ticketPrice'] as num?)?.toDouble() ?? 50000.0,
       weeklyPrizes: prizes,
       hasWeeklyDraws: json['hasWeeklyDraws'] ?? true,
+      winningDigitsPosition: json['winningDigitsPosition'] ?? 'ULTIMAS',
+      allowCombined: json['allowCombined'] == true,
       weeklyDrawDay: json['weeklyDrawDay'] ?? 'Viernes',
       lotteryName: json['lotteryName'] ?? 'Lotería de Medellín',
       weeklyMinAbonoType: json['weeklyMinAbonoType'] ?? 'PORCENTAJE',
@@ -162,6 +172,8 @@ class Raffle {
         'ticketPrice': ticketPrice,
         'weeklyPrizes': weeklyPrizes.map((p) => p.toJson()).toList(),
         'hasWeeklyDraws': hasWeeklyDraws,
+        'winningDigitsPosition': winningDigitsPosition,
+        'allowCombined': allowCombined,
         'weeklyDrawDay': weeklyDrawDay,
         'lotteryName': lotteryName,
         'weeklyMinAbonoType': weeklyMinAbonoType,
@@ -176,4 +188,32 @@ class Raffle {
         'templates': templates,
         'createdAt': createdAt,
       };
+
+  /// e.g. "las 2 últimas cifras" / "las 3 primeras cifras" (+ " o combinado").
+  String get winningRuleText {
+    if (digits >= 4) return allowCombined ? 'el número completo o combinado' : 'el número completo';
+    final where = switch (winningDigitsPosition) {
+      'PRIMERAS' => 'primeras',
+      'MEDIO' => 'del medio',
+      _ => 'últimas',
+    };
+    final text = winningDigitsPosition == 'MEDIO' ? 'las $digits cifras del medio' : 'las $digits $where cifras';
+    return allowCombined ? '$text (también combinado)' : text;
+  }
+
+  /// Raffle number from a lottery result, using this raffle's rule (same logic as the server).
+  /// If the admin types the raffle number itself (no more digits than the raffle), it is used as is.
+  String winningNumberFrom(String input) {
+    final clean = input.replaceAll(RegExp(r'\D'), '');
+    if (clean.length <= digits) return clean.padLeft(digits, '0');
+    switch (winningDigitsPosition) {
+      case 'PRIMERAS':
+        return clean.substring(0, digits);
+      case 'MEDIO':
+        final start = (clean.length - digits) ~/ 2;
+        return clean.substring(start, start + digits);
+      default:
+        return clean.substring(clean.length - digits);
+    }
+  }
 }

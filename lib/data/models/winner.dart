@@ -59,6 +59,12 @@ class WinnerRecord {
   final String drawName;
   final String drawDate;
   final String winningNumber;
+
+  /// Full lottery result typed by the admin (winningNumber is the part that counts).
+  final String lotteryResult;
+
+  /// EXACTO or COMBINADO (same digits in another order); empty when nobody won.
+  final String matchType;
   final double basePrizeAmount;
   final double previousAccumulatedAmount;
   final double totalPrizePaid;
@@ -77,6 +83,8 @@ class WinnerRecord {
     required this.drawName,
     required this.drawDate,
     required this.winningNumber,
+    this.lotteryResult = '',
+    this.matchType = '',
     required this.basePrizeAmount,
     this.previousAccumulatedAmount = 0.0,
     required this.totalPrizePaid,
@@ -103,6 +111,8 @@ class WinnerRecord {
       drawName: json['drawName'] ?? '',
       drawDate: json['drawDate'] ?? '',
       winningNumber: json['winningNumber'] ?? '',
+      lotteryResult: json['lotteryResult'] ?? '',
+      matchType: json['matchType'] ?? '',
       basePrizeAmount: base,
       previousAccumulatedAmount: prevAcc,
       totalPrizePaid: total,

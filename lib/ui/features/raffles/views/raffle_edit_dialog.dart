@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/raffles/views/winning_rule_fields.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -36,6 +37,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   late TextEditingController _commissionValueController;
 
   late bool _hasWeeklyDraws;
+  late String _winningPosition;
+  late bool _allowCombined;
   late String _weeklyDrawDay;
   late String _lotteryName;
   late String _weeklyMinAbonoType;
@@ -59,6 +62,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _commissionValueController = TextEditingController(text: widget.raffle.commissionValue.toStringAsFixed(0));
 
     _hasWeeklyDraws = widget.raffle.hasWeeklyDraws;
+    _winningPosition = widget.raffle.winningDigitsPosition;
+    _allowCombined = widget.raffle.allowCombined;
     _weeklyDrawDay = widget.raffle.weeklyDrawDay;
     _lotteryName = widget.raffle.lotteryName;
     _weeklyMinAbonoType = widget.raffle.weeklyMinAbonoType;
@@ -835,6 +840,14 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 8),
+                WinningRuleFields(
+                  digits: widget.raffle.digits,
+                  position: _winningPosition,
+                  allowCombined: _allowCombined,
+                  onPositionChanged: (v) => setState(() => _winningPosition = v),
+                  onCombinedChanged: (v) => setState(() => _allowCombined = v),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     const Icon(Icons.stars, color: Colors.purple, size: 22),
@@ -1075,6 +1088,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             'commissionType': _commissionType,
                             'commissionValue': double.parse(_commissionValueController.text),
                             'hasWeeklyDraws': _hasWeeklyDraws,
+                            'winningDigitsPosition': _winningPosition,
+                            'allowCombined': _allowCombined,
                             'weeklyDrawDay': _weeklyDrawDay,
                             'lotteryName': _lotteryName,
                             'weeklyMinAbonoType': _weeklyMinAbonoType,

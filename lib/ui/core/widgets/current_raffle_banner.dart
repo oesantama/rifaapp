@@ -88,6 +88,7 @@ class CurrentRaffleBanner extends StatelessWidget {
       if (drawDate != null) 'Sorteo: ${DateFormat('dd/MM/yyyy').format(drawDate.toLocal())}',
       currency.format(raffle.ticketPrice),
       '${raffle.totalTickets} boletas',
+      'Gana con ${raffle.winningRuleText}',
     ].join('  •  ');
 
     return Container(

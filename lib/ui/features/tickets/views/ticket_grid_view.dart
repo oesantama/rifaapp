@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
+import 'package:rifaapp/ui/features/sale_channels/view_models/sale_channel_view_model.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:rifaapp/ui/core/widgets/status_badge.dart';
@@ -454,7 +455,9 @@ class _TicketGridViewState extends State<TicketGridView> {
 
   /// Small label with how the buyer was reached (Facebook, WhatsApp, ...).
   Widget _buildChannelChip(String channel) {
-    final color = SaleChannels.color(channel);
+    final master = context.read<SaleChannelViewModel>().byName(channel);
+    final color = SaleChannels.colorFrom(master?.color ?? '#64748B');
+    final icon = SaleChannels.iconFor(master?.icon ?? 'more');
     return Tooltip(
       message: 'Medio de venta: $channel',
       child: LayoutBuilder(
@@ -466,7 +469,7 @@ class _TicketGridViewState extends State<TicketGridView> {
               width: 20,
               height: 20,
               decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(SaleChannels.icon(channel), size: 12, color: color),
+              child: Icon(icon, size: 12, color: color),
             );
           }
           return Container(
@@ -479,7 +482,7 @@ class _TicketGridViewState extends State<TicketGridView> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(SaleChannels.icon(channel), size: 11, color: color),
+                Icon(icon, size: 11, color: color),
                 const SizedBox(width: 3),
                 Flexible(
                   child: Text(
