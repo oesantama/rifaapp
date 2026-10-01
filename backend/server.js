@@ -1589,7 +1589,7 @@ app.get('/api/audit/voids', adminOnly, (req, res) => {
       entries.push({
         type: 'VENTA', date: a.date, by: a.by, reason: a.reason,
         raffleId: raffle.id, raffleTitle: raffle.title, ticketId: t.id, numbers: t.numbers,
-        buyerName: p.buyerName || '', buyerPhone: p.buyerPhone || '', advisorName: p.advisorName || '',
+        buyerName: p.buyerName || '', buyerPhone: p.buyerPhone || '', buyerDocument: p.buyerDocument || '', advisorName: p.advisorName || '',
         saleChannel: p.saleChannel || '', amount: p.totalPaid || 0, previousStatus: p.status || ''
       });
     }
@@ -1603,6 +1603,7 @@ app.get('/api/audit/voids', adminOnly, (req, res) => {
         type: 'ABONO', date: v.voidedAt, by: v.voidedBy, reason: v.voidReason,
         raffleId: raffle.id, raffleTitle: raffle.title, ticketId: t.id, numbers: t.numbers,
         buyerName: v.buyerName || owner.buyerName || '', buyerPhone: v.buyerPhone || owner.buyerPhone || '',
+        buyerDocument: v.buyerDocument || owner.buyerDocument || '',
         advisorName: v.sellerName || '', saleChannel: owner.saleChannel || '', amount: v.amount || 0, paymentDate: v.date
       });
     }
@@ -1969,6 +1970,7 @@ app.get('/api/tickets', (req, res) => {
       t.ticketNumber.toString().includes(q) ||
       t.buyerName.toLowerCase().includes(q) ||
       t.buyerPhone.includes(q) ||
+      (t.buyerDocument || '').includes(q) ||
       t.numbers.some(n => n.includes(q))
     );
   }
@@ -2107,7 +2109,8 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
     voidReason: reason,
     // Who the ticket belonged to when the payment was voided (the ticket may be resold later)
     buyerName: ticket.buyerName || '',
-    buyerPhone: ticket.buyerPhone || ''
+    buyerPhone: ticket.buyerPhone || '',
+    buyerDocument: ticket.buyerDocument || ''
   });
   recalcTicketTotals(ticket);
 
@@ -2130,7 +2133,7 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
 
 app.post('/api/tickets/:id/abono', (req, res) => {
   const { id } = req.params;
-  const { amount, buyerName, buyerPhone, sellerId, sellerName, note, saleChannel, requestId } = req.body;
+  const { amount, buyerName, buyerPhone, buyerDocument, sellerId, sellerName, note, saleChannel, requestId } = req.body;
 
   const ticket = db.tickets.find(t => t.id === id);
   if (!ticket) {
@@ -2157,6 +2160,8 @@ app.post('/api/tickets/:id/abono', (req, res) => {
 
   if (typeof buyerName === 'string' && buyerName.trim().length > 0) ticket.buyerName = buyerName.trim();
   if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
+  // Optional ID number (cédula); letters/digits only, as typed
+  if (typeof buyerDocument === 'string') ticket.buyerDocument = buyerDocument.replace(/[^0-9A-Za-z]/g, '').slice(0, 20);
   // How the buyer was reached: an active channel from the SuperAdmin's master list
   // (a ticket may keep a channel that was deactivated after it was sold)
   if (typeof saleChannel === 'string' && (isActiveSaleChannel(saleChannel) || saleChannel === ticket.saleChannel)) {
@@ -2224,6 +2229,7 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
     status: ticket.status,
     buyerName: ticket.buyerName || '',
     buyerPhone: ticket.buyerPhone || '',
+    buyerDocument: ticket.buyerDocument || '',
     advisorId: ticket.advisorId || '',
     advisorName: ticket.advisorName || '',
     saleChannel: ticket.saleChannel || '',
@@ -2244,6 +2250,7 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
   ticket.status = 'DISPONIBLE';
   ticket.buyerName = '';
   ticket.buyerPhone = '';
+  ticket.buyerDocument = '';
   ticket.advisorId = '';
   ticket.advisorName = '';
   ticket.saleChannel = '';

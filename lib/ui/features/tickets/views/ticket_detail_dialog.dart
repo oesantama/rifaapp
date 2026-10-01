@@ -30,6 +30,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _buyerNameController;
   late TextEditingController _buyerPhoneController;
+  late TextEditingController _buyerDocumentController;
   String? _saleChannel; // how the buyer was reached
   bool _saving = false; // blocks repeated taps while the payment is being saved
   // One id per submission: if the same request reaches the server twice, it is applied once
@@ -46,6 +47,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     super.initState();
     _buyerNameController = TextEditingController(text: widget.ticket.buyerName);
     _buyerPhoneController = TextEditingController(text: widget.ticket.buyerPhone);
+    _buyerDocumentController = TextEditingController(text: widget.ticket.buyerDocument);
     _saleChannel = widget.ticket.saleChannel.isNotEmpty ? widget.ticket.saleChannel : null;
     _amountController = TextEditingController(text: '0');
     _noteController = TextEditingController();
@@ -57,13 +59,13 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   void dispose() {
     _buyerNameController.dispose();
     _buyerPhoneController.dispose();
+    _buyerDocumentController.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
   }
 
   void _copyReceiptToClipboard(BuildContext context) async {
-
     String name = _buyerNameController.text.trim().isNotEmpty
         ? _buyerNameController.text.trim()
         : (widget.ticket.buyerName.isNotEmpty ? widget.ticket.buyerName : "Pendiente");
@@ -475,13 +477,23 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                     TextFormField(
                       controller: _buyerPhoneController,
                       decoration: const InputDecoration(
-                        labelText: 'Teléfono / WhatsApp *',
+                        labelText: 'Teléfono / WhatsApp (opcional)',
                         prefixIcon: Icon(Icons.phone),
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.phone,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Ingrese teléfono' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _buyerDocumentController,
+                      decoration: const InputDecoration(
+                        labelText: 'Cédula (opcional)',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.text,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')), LengthLimitingTextInputFormatter(20)],
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(
@@ -660,6 +672,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                       'amount': amt,
                                       'buyerName': _buyerNameController.text.trim(),
                                       'buyerPhone': _buyerPhoneController.text.trim(),
+                                      'buyerDocument': _buyerDocumentController.text.trim(),
                                       if (_saleChannel != null) 'saleChannel': _saleChannel,
                                       'sellerId': newSellerId,
                                       'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),

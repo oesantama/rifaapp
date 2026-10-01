@@ -88,9 +88,15 @@ class _VoidHistoryTabState extends State<_VoidHistoryTab> {
     return _entries.where((e) {
       if (_type != 'TODOS' && e['type'] != _type) return false;
       if (q.isEmpty) return true;
-      final text = [e['buyerName'], e['buyerPhone'], e['advisorName'], e['reason'], e['by'], ((e['numbers'] as List?) ?? []).join(' ')]
-          .join(' ')
-          .toLowerCase();
+      final text = [
+        e['buyerName'],
+        e['buyerPhone'],
+        e['buyerDocument'],
+        e['advisorName'],
+        e['reason'],
+        e['by'],
+        ((e['numbers'] as List?) ?? []).join(' ')
+      ].join(' ').toLowerCase();
       return text.contains(q);
     }).toList();
   }
@@ -210,7 +216,8 @@ class _VoidHistoryTabState extends State<_VoidHistoryTab> {
                     Text(
                       [
                         if ('${e['buyerName'] ?? ''}'.isNotEmpty)
-                          'Comprador: ${e['buyerName']}${'${e['buyerPhone'] ?? ''}'.isNotEmpty ? ' (${e['buyerPhone']})' : ''}',
+                          'Comprador: ${e['buyerName']}${'${e['buyerPhone'] ?? ''}'.isNotEmpty ? ' (${e['buyerPhone']})' : ''}'
+                              '${'${e['buyerDocument'] ?? ''}'.isNotEmpty ? ' • CC ${e['buyerDocument']}' : ''}',
                         if ('${e['advisorName'] ?? ''}'.isNotEmpty) 'Asesor: ${e['advisorName']}',
                         if ('${e['saleChannel'] ?? ''}'.isNotEmpty) 'Medio: ${e['saleChannel']}',
                       ].join(' • '),

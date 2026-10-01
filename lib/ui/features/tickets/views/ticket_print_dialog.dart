@@ -453,6 +453,12 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                                               widget.ticket.buyerPhone.isNotEmpty ? widget.ticket.buyerPhone : 'N/A',
                                               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                             ),
+                                            if (widget.ticket.buyerDocument.isNotEmpty) ...[
+                                              const SizedBox(height: 6),
+                                              const Text('Cédula:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                                              Text(widget.ticket.buyerDocument,
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                            ],
                                             const SizedBox(height: 6),
                                             const Text('Vendedor / Asesor:', style: TextStyle(fontSize: 10, color: Colors.black54)),
                                             Text(

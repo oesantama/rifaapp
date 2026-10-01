@@ -45,6 +45,7 @@ class TicketViewModel extends ChangeNotifier {
     return t.ticketNumber.toString().contains(q) ||
         t.buyerName.toLowerCase().contains(q) ||
         t.buyerPhone.contains(q) ||
+        t.buyerDocument.toLowerCase().contains(q) ||
         t.numbers.any((n) => n.contains(q));
   }
 

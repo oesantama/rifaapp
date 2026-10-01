@@ -170,6 +170,9 @@ class Ticket {
   final String buyerName;
   final String buyerPhone;
 
+  /// Optional ID number (cédula) of the buyer.
+  final String buyerDocument;
+
   /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
   final String saleChannel;
 
@@ -199,6 +202,7 @@ class Ticket {
     required this.advisorName,
     required this.buyerName,
     required this.buyerPhone,
+    this.buyerDocument = '',
     this.saleChannel = '',
     this.annulments = const [],
     this.voidedAbonos = const [],
@@ -231,6 +235,7 @@ class Ticket {
       advisorName: json['advisorName'] ?? '',
       buyerName: json['buyerName'] ?? '',
       buyerPhone: json['buyerPhone'] ?? '',
+      buyerDocument: json['buyerDocument'] ?? '',
       saleChannel: json['saleChannel'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
       verificationCode: json['verificationCode'],
@@ -255,6 +260,7 @@ class Ticket {
         'advisorName': advisorName,
         'buyerName': buyerName,
         'buyerPhone': buyerPhone,
+        'buyerDocument': buyerDocument,
         'saleChannel': saleChannel,
         'totalPaid': totalPaid,
         'balancePending': balancePending,

@@ -439,7 +439,7 @@ class ExcelCsvHelper {
   /// Exports a list of [Ticket] objects to an Excel (.xlsx) file with fallback to CSV
   /// History of voided sales and payments (admin "Control" screen).
   static void exportVoidHistoryToExcel(List<Map<String, dynamic>> entries) {
-    const headers = ['Fecha anulación', 'Tipo', 'Rifa', 'Número(s)', 'Comprador', 'Teléfono', 'Asesor', 'Medio', 'Valor', 'Anulado por', 'Motivo'];
+    const headers = ['Fecha anulación', 'Tipo', 'Rifa', 'Número(s)', 'Comprador', 'Teléfono', 'Cédula', 'Asesor', 'Medio', 'Valor', 'Anulado por', 'Motivo'];
     String fmt(dynamic iso) {
       final d = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
       return d == null ? '' : DateFormat('dd/MM/yyyy HH:mm').format(d);
@@ -458,6 +458,7 @@ class ExcelCsvHelper {
         TextCellValue(((e['numbers'] as List?) ?? []).join(' - ')),
         TextCellValue('${e['buyerName'] ?? ''}'),
         TextCellValue('${e['buyerPhone'] ?? ''}'),
+        TextCellValue('${e['buyerDocument'] ?? ''}'),
         TextCellValue('${e['advisorName'] ?? ''}'),
         TextCellValue('${e['saleChannel'] ?? ''}'),
         IntCellValue(((e['amount'] as num?) ?? 0).round()),
@@ -478,6 +479,7 @@ class ExcelCsvHelper {
       'Estado',
       'Comprador',
       'Teléfono',
+      'Cédula',
       'Precio Boleta',
       'Total Abonado',
       'Saldo Pendiente',
@@ -501,6 +503,7 @@ class ExcelCsvHelper {
           TextCellValue(t.status),
           TextCellValue(t.buyerName.isNotEmpty ? t.buyerName : 'N/A'),
           TextCellValue(t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A'),
+          TextCellValue(t.buyerDocument.isNotEmpty ? t.buyerDocument : 'N/A'),
           IntCellValue(t.price.round()),
           IntCellValue(t.totalPaid.round()),
           IntCellValue(t.balancePending.round()),
@@ -523,6 +526,7 @@ class ExcelCsvHelper {
               t.status,
               t.buyerName.isNotEmpty ? t.buyerName : 'N/A',
               t.buyerPhone.isNotEmpty ? t.buyerPhone : 'N/A',
+              t.buyerDocument.isNotEmpty ? t.buyerDocument : 'N/A',
               t.price.round(),
               t.totalPaid.round(),
               t.balancePending.round(),
