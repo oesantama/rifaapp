@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/app_logo.dart';
@@ -15,6 +16,8 @@ class _LoginViewState extends State<LoginView> {
   UserRole _selectedRole = UserRole.admin;
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _userFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
   bool _obscurePassword = true;
   String? _errorMessage;
   bool _isLoading = false;
@@ -33,6 +36,8 @@ class _LoginViewState extends State<LoginView> {
   void dispose() {
     _userController.dispose();
     _passwordController.dispose();
+    _userFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
@@ -59,6 +64,8 @@ class _LoginViewState extends State<LoginView> {
       success = await authVM.loginAsAdvisor(_userController.text, _passwordController.text);
     }
 
+    if (success) TextInput.finishAutofillContext();
+
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -67,6 +74,8 @@ class _LoginViewState extends State<LoginView> {
               ? authVM.loginErrorMessage
               : 'Usuario o contraseña incorrectos. Verifique sus credenciales.';
           _passwordController.clear();
+          // Fields were disabled while waiting: put the cursor back so the user can retype
+          WidgetsBinding.instance.addPostFrameCallback((_) => _passwordFocus.requestFocus());
         }
       });
     }
@@ -291,59 +300,79 @@ class _LoginViewState extends State<LoginView> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Username / Email Input Field
-                  Text(
-                    _selectedRole == UserRole.admin ? 'Usuario o Correo (Admin):' : 'Usuario / Cédula / Correo (Asesor):',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _userController,
-                    autofillHints: const [AutofillHints.username],
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      prefixIcon: Icon(_selectedRole == UserRole.admin ? Icons.admin_panel_settings_outlined : Icons.person_outline,
-                          color: Colors.grey),
-                      hintText: _selectedRole == UserRole.admin ? 'Usuario o correo del administrador' : 'Código, cédula, usuario o correo',
-                      filled: true,
-                      fillColor: const Color(0xFF0F172A),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                  // One autofill group: browsers and password managers treat both fields as one login form
+                  AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Username / Email Input Field
+                        Text(
+                          _selectedRole == UserRole.admin ? 'Usuario o Correo (Admin):' : 'Usuario / Cédula / Correo (Asesor):',
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _userController,
+                          focusNode: _userFocus,
+                          enabled: !_isLoading,
+                          autofillHints: const [AutofillHints.username],
+                          textInputAction: TextInputAction.next,
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          onSubmitted: (_) => _passwordFocus.requestFocus(),
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            prefixIcon: Icon(_selectedRole == UserRole.admin ? Icons.admin_panel_settings_outlined : Icons.person_outline,
+                                color: Colors.grey),
+                            hintText:
+                                _selectedRole == UserRole.admin ? 'Usuario o correo del administrador' : 'Código, cédula, usuario o correo',
+                            filled: true,
+                            fillColor: const Color(0xFF0F172A),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
 
-                  // Password Input Field
-                  const Text(
-                    'Contraseña / Clave de Acceso:',
-                    style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    autofillHints: const [AutofillHints.password],
-                    textInputAction: TextInputAction.done,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      hintText: 'Ingrese su contraseña',
-                      filled: true,
-                      fillColor: const Color(0xFF0F172A),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        // Password Input Field
+                        const Text(
+                          'Contraseña / Clave de Acceso:',
+                          style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _passwordController,
+                          focusNode: _passwordFocus,
+                          enabled: !_isLoading,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          textInputAction: TextInputAction.done,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                            // The eye button must not take the focus: otherwise the next keystrokes go nowhere
+                            suffixIcon: ExcludeFocus(
+                              child: IconButton(
+                                icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+                                tooltip: _obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ),
+                            hintText: 'Ingrese su contraseña',
+                            filled: true,
+                            fillColor: const Color(0xFF0F172A),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                          onSubmitted: (_) => _handleLogin(),
+                        ),
+                      ],
                     ),
-                    onSubmitted: (_) => _handleLogin(),
                   ),
 
                   // Password Recovery Link

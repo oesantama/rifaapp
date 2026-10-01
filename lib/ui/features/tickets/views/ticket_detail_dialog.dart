@@ -586,27 +586,77 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
-                      TextFormField(
-                        controller: _amountController,
-                        decoration: InputDecoration(
-                          labelText: 'Monto a Abonar (\$) *',
-                          helperText: isDisponible
-                              ? 'Ingrese \$0 para registrar como Apartada / Fiada'
-                              : isApartada
-                                  ? 'Boleta ya está Apartada. Ingrese monto > \$0 para abonar'
-                                  : 'Boleta ya tiene abonos. Ingrese el monto del nuevo abono',
-                          prefixIcon: const Icon(Icons.attach_money),
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onChanged: (_) => setState(() {}),
-                        validator: (v) {
-                          if (v == null || v.trim().isEmpty) return 'Ingrese monto (0 para apartar/guardar)';
-                          double? val = double.tryParse(v);
-                          if (val == null || val < 0) return 'Monto inválido';
-                          if (val > widget.ticket.balancePending) return 'Excede el saldo pendiente';
-                          return null;
+                      Builder(
+                        builder: (context) {
+                          final amountField = TextFormField(
+                            controller: _amountController,
+                            decoration: InputDecoration(
+                              labelText: 'Monto a Abonar (\$) *',
+                              helperText: isDisponible
+                                  ? 'Ingrese \$0 para registrar como Apartada / Fiada'
+                                  : isApartada
+                                      ? 'Boleta ya está Apartada. Ingrese monto > \$0 para abonar'
+                                      : 'Boleta ya tiene abonos. Ingrese el monto del nuevo abono',
+                              prefixIcon: const Icon(Icons.attach_money),
+                              border: const OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            onChanged: (_) => setState(() {}),
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) return 'Ingrese monto (0 para apartar/guardar)';
+                              double? val = double.tryParse(v);
+                              if (val == null || val < 0) return 'Monto inválido';
+                              if (val > widget.ticket.balancePending) return 'Excede el saldo pendiente';
+                              return null;
+                            },
+                          );
+                          final pending = widget.ticket.balancePending;
+                          final pendingText = NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(pending);
+                          // One tap fills the whole pending balance (no typing for full payments)
+                          void fillFull() => setState(() => _amountController.text = pending.round().toString());
+                          final buttonStyle = OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            side: BorderSide(color: AppTheme.secondaryEmerald.withValues(alpha: 0.6)),
+                            foregroundColor: AppTheme.secondaryEmerald,
+                          );
+                          if (MediaQuery.of(context).size.width < 600) {
+                            // Phones: full-width button under the field, so the field keeps its width
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                amountField,
+                                const SizedBox(height: 6),
+                                OutlinedButton.icon(
+                                  onPressed: pending > 0 ? fillFull : null,
+                                  icon: const Icon(Icons.done_all, size: 18),
+                                  label: Text('Pago completo ($pendingText)'),
+                                  style: buttonStyle,
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: amountField),
+                              const SizedBox(width: 8),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Tooltip(
+                                  message: 'Registrar el saldo completo: $pendingText',
+                                  child: OutlinedButton.icon(
+                                    onPressed: pending > 0 ? fillFull : null,
+                                    icon: const Icon(Icons.done_all, size: 18),
+                                    label: const Text('Pago\ncompleto',
+                                        textAlign: TextAlign.center, style: TextStyle(fontSize: 12, height: 1.1)),
+                                    style: buttonStyle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
                         },
                       ),
                       const SizedBox(height: 10),
