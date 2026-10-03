@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [2.5.3] - 2026-10-03
+
+### Corregido
+- El recordatorio de pago ahora se comporta como el botón de comprobante: copia el mensaje y muestra "✓ Abriendo WhatsApp con el mensaje del comprador…"; si WhatsApp no abre, muestra el mensaje para copiarlo.
+
 ## [2.5.2] - 2026-10-03
 
 ### Nuevo

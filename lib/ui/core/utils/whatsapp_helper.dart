@@ -201,7 +201,24 @@ class WhatsAppHelper {
       await showShareMessageDialog(context, message);
       return true;
     }
-    return sendWhatsAppMessage(phone: phone, message: message);
+    // Like the receipt button: the message is also copied, in case it has to be pasted
+    try {
+      await Clipboard.setData(ClipboardData(text: message)).timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    final launched = await sendWhatsAppMessage(phone: phone, message: message);
+    if (context != null && context.mounted) {
+      if (launched) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: AppTheme.secondaryEmerald,
+            content: Text('✓ Abriendo WhatsApp con el mensaje del comprador...'),
+          ),
+        );
+      } else {
+        await showShareMessageDialog(context, message);
+      }
+    }
+    return launched;
   }
 
   /// Shows [message] with options to copy it or open WhatsApp to choose the contact.
