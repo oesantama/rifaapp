@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/data/services/api_service.dart';
+import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
 
@@ -174,9 +175,28 @@ class WhatsAppHelper {
     return b.toString();
   }
 
+  /// Sends the company's message for a saved ticket, filled on the server ([kind]: 'receipt' or
+  /// 'reminder'). If the server cannot be reached, [fallback] builds the text locally.
+  static Future<bool> sendSavedTicketMessage(Ticket ticket, {required String kind, required String Function() fallback}) async {
+    String message;
+    String phone = ticket.buyerPhone;
+    try {
+      final data = await RaffleRepository().fetchTicketWhatsAppMessage(ticket.id, kind: kind);
+      message = (data['message'] ?? '').toString();
+      if ((data['phone'] ?? '').toString().isNotEmpty) phone = data['phone'].toString();
+      if (message.isEmpty) message = fallback();
+    } catch (_) {
+      message = fallback();
+    }
+    return sendWhatsAppMessage(phone: phone, message: message);
+  }
+
   /// Opens WhatsApp with the payment reminder for [ticket] (to the buyer's phone if it has one).
-  static Future<bool> sendPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle}) => sendWhatsAppMessage(
-      phone: ticket.buyerPhone, message: buildPaymentReminder(ticket: ticket, raffle: raffle, raffleTitle: raffleTitle));
+  static Future<bool> sendPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle}) => sendSavedTicketMessage(
+        ticket,
+        kind: 'reminder',
+        fallback: () => buildPaymentReminder(ticket: ticket, raffle: raffle, raffleTitle: raffleTitle),
+      );
 
   /// Tickets that can get a payment reminder: reserved or with a partial payment, still owing.
   static bool canRemind(Ticket ticket) =>

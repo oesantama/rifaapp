@@ -421,15 +421,24 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     final phone = ticket.buyerPhone;
     final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
     final raffleMatches = raffleVM.raffles.where((r) => r.id == widget.ticket.raffleId);
-    final text = WhatsAppHelper.buildTicketReceipt(
-      ticket: ticket,
-      raffle: raffleMatches.isNotEmpty ? raffleMatches.first : null,
-      raffleTitle: widget.raffleTitle ?? 'RIFA',
-      buyerName: name,
-      buyerPhone: phone,
-      totalPaid: ticket.totalPaid,
-      status: ticket.status,
-    );
+    String localReceipt() => WhatsAppHelper.buildTicketReceipt(
+          ticket: ticket,
+          raffle: raffleMatches.isNotEmpty ? raffleMatches.first : null,
+          raffleTitle: widget.raffleTitle ?? 'RIFA',
+          buyerName: name,
+          buyerPhone: phone,
+          totalPaid: ticket.totalPaid,
+          status: ticket.status,
+        );
+
+    // The company's message for this situation (apartada / abono / pagada), filled by the server
+    String text;
+    try {
+      text = (await context.read<TicketViewModel>().fetchWhatsAppMessage(ticket.id))['message']?.toString() ?? '';
+      if (text.isEmpty) text = localReceipt();
+    } catch (_) {
+      text = localReceipt();
+    }
 
     Clipboard.setData(ClipboardData(text: text));
 

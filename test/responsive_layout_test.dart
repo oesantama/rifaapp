@@ -119,6 +119,15 @@ final mockClient = MockClient((req) async {
       {'id': 'bank-2', 'name': 'Bancolombia', 'active': true},
       {'id': 'bank-3', 'name': 'Banco Mundo Mujer', 'active': false},
     ];
+  } else if (path == '/message-templates') {
+    body = {
+      'types': [
+        for (final t in ['reservada', 'abono', 'pagada', 'recordatorio'])
+          {'type': t, 'label': 'Mensaje $t', 'description': 'Descripción $t.', 'required': ['comprador', 'numeros', 'debe'],
+            'template': 'Hola {comprador}, boleta {numeros}, debe {debe}', 'isDefault': t != 'pagada', 'defaultTemplate': ''},
+      ],
+      'placeholders': [for (final k in ['comprador', 'numeros', 'debe', 'empresa', 'enlace_verificacion']) {'key': k, 'description': k}],
+    };
   } else if (path == '/terms') {
     body = {'template': '1. La rifa {rifa} es organizada por {empresa}.', 'isDefault': true, 'defaultTemplate': '',
       'placeholders': [{'key': 'rifa', 'description': 'Nombre'}, {'key': 'empresa', 'description': 'Empresa'}, {'key': 'cifras_ganadoras', 'description': 'Cifras'}],

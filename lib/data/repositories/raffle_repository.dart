@@ -113,6 +113,16 @@ class RaffleRepository {
 
   Future<void> saveTerms(String template) => _apiService.saveTerms(template);
 
+  Future<Map<String, dynamic>> fetchMessageTemplates() => _apiService.fetchMessageTemplates();
+
+  Future<void> saveMessageTemplate(String type, String template) => _apiService.saveMessageTemplate(type, template);
+
+  Future<Map<String, dynamic>> previewMessageTemplate(String type, String template, {String? raffleId}) =>
+      _apiService.previewMessageTemplate(type, template, raffleId: raffleId);
+
+  Future<Map<String, dynamic>> fetchTicketWhatsAppMessage(String ticketId, {String kind = 'receipt'}) =>
+      _apiService.fetchTicketWhatsAppMessage(ticketId, kind: kind);
+
   Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) => _apiService.fetchVoidHistory(raffleId: raffleId);
 
   Future<Map<String, dynamic>> fetchServerInfo() => _apiService.fetchServerInfo();

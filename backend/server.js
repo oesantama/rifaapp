@@ -1719,6 +1719,291 @@ app.put('/api/terms', adminOnly, (req, res) => {
   res.json({ message: template ? 'Términos y condiciones guardados.' : 'Se restauró la plantilla genérica.', isDefault: !template });
 });
 
+// ---------------------------------------------------------------------------
+// WhatsApp messages: each company edits one template per situation (company.messageTemplates).
+// They are filled on the server from the SAVED ticket, so a buyer never gets data that was only
+// typed in a form. Placeholders that give the buyer confidence cannot be removed.
+// ---------------------------------------------------------------------------
+const SEP = '━━━━━━━━━━━━━━━━━━';
+const MESSAGE_TYPES = {
+  reservada: {
+    label: 'Boleta apartada (sin pago)',
+    description: 'Se envía al apartar o fiar una boleta sin abono.',
+    required: ['empresa', 'rifa', 'numeros', 'comprador', 'valor', 'debe', 'fecha_sorteo', 'loteria', 'enlace_verificacion'],
+    template: `🎟️ *BOLETA APARTADA* - {rifa}
+${SEP}
+Hola *{comprador}* 👋
+Tu boleta quedó apartada a tu nombre con *{empresa}*.
+
+🔢 *Número(s):* {numeros}
+💰 *Valor boleta:* {valor}
+🔴 *Pendiente por pagar:* {debe}
+👤 *Asesor(a):* {asesor}
+${SEP}
+📅 *Juega el:* {fecha_sorteo} con {loteria}
+🏆 *Gana con:* {cifras_ganadoras}
+⚠️ *Importante:* la boleta debe estar pagada en su totalidad antes del sorteo; si no, *no juega*.
+${SEP}
+💵 *Cómo pagar:* en efectivo con tu asesor(a) o por transferencia a:
+{cuentas}
+${SEP}
+🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+¡Gracias por tu confianza! 🍀`
+  },
+  abono: {
+    label: 'Abono registrado (pago parcial)',
+    description: 'Se envía al registrar un abono que no completa el valor de la boleta.',
+    required: ['empresa', 'rifa', 'numeros', 'comprador', 'abonado', 'debe', 'fecha_sorteo', 'loteria', 'enlace_verificacion'],
+    template: `💵 *ABONO RECIBIDO* - {rifa}
+${SEP}
+Hola *{comprador}* 👋
+*{empresa}* confirma que recibimos tu abono. ¡Gracias!
+
+🔢 *Número(s):* {numeros}
+💵 *Último abono:* {ultimo_abono} ({fecha_ultimo_abono})
+✅ *Total abonado:* {abonado} de {valor}
+🔴 *Saldo pendiente:* {debe}
+👤 *Asesor(a):* {asesor}
+${SEP}
+📅 *Juega el:* {fecha_sorteo} con {loteria}
+🏆 *Gana con:* {cifras_ganadoras}
+⚠️ *Recuerda:* completa el pago antes del sorteo; la boleta que no esté pagada en su totalidad *no juega*.
+🗓️ *Sorteos semanales:* {sorteos_semanales}
+${SEP}
+💵 *Para completar el pago:* en efectivo con tu asesor(a) o por transferencia a:
+{cuentas}
+${SEP}
+🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+¡Mucha suerte! 🍀`
+  },
+  pagada: {
+    label: 'Pago completo',
+    description: 'Se envía cuando la boleta queda pagada en su totalidad.',
+    required: ['empresa', 'rifa', 'numeros', 'comprador', 'valor', 'fecha_sorteo', 'loteria', 'enlace_verificacion'],
+    template: `🎉 *¡BOLETA PAGADA!* - {rifa}
+${SEP}
+Hola *{comprador}* 👋
+*{empresa}* confirma el pago completo de tu boleta. ¡Ya estás participando!
+
+🔢 *Número(s):* {numeros}
+💰 *Valor pagado:* {valor}
+✅ *Estado:* PAGADA
+👤 *Asesor(a):* {asesor}
+${SEP}
+📅 *Juega el:* {fecha_sorteo} con {loteria}
+🏆 *Gana con:* {cifras_ganadoras}
+🗓️ *Sorteos semanales:* {sorteos_semanales}
+${SEP}
+🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+🔑 *Código de verificación:* {codigo_verificacion}
+Guarda este mensaje: es tu comprobante. ¡Mucha suerte! 🍀`
+  },
+  recordatorio: {
+    label: 'Recordatorio de pago',
+    description: 'Se envía desde la campana de la boleta para cobrar una boleta apartada o con abono.',
+    required: ['empresa', 'rifa', 'numeros', 'comprador', 'debe', 'fecha_sorteo', 'loteria', 'cuentas'],
+    template: `🔔 *RECORDATORIO DE PAGO* - {rifa}
+${SEP}
+Hola *{comprador}* 👋
+Te escribimos de *{empresa}* para recordarte que tu boleta aún tiene saldo pendiente:
+
+🔢 *Número(s):* {numeros}
+💰 *Valor boleta:* {valor}
+✅ *Abonado:* {abonado}
+🔴 *Debes:* {debe}
+${SEP}
+📅 La rifa juega el *{fecha_sorteo}* con {loteria}.
+⚠️ *Recuerda: la boleta que no esté pagada en su totalidad NO juega.*
+${SEP}
+💵 Puedes pagar en *efectivo* con tu asesor(a) {asesor} o por *transferencia* a:
+{cuentas}
+📲 Si pagas por transferencia, envíanos el comprobante por este medio.
+${SEP}
+🔐 *Verifica tu boleta:* {enlace_verificacion}
+¡Gracias y muchos éxitos en el sorteo! 🍀`
+  }
+};
+
+const MESSAGE_PLACEHOLDERS = [
+  ['empresa', 'Nombre de la empresa'],
+  ['rifa', 'Nombre de la rifa'],
+  ['descripcion', 'Descripción de la rifa'],
+  ['comprador', 'Nombre del comprador'],
+  ['celular', 'Celular del comprador'],
+  ['numeros', 'Número(s) de la boleta'],
+  ['valor', 'Valor de la boleta'],
+  ['abonado', 'Total abonado'],
+  ['debe', 'Saldo pendiente'],
+  ['ultimo_abono', 'Valor del último abono'],
+  ['fecha_ultimo_abono', 'Fecha del último abono'],
+  ['estado', 'Estado de la boleta'],
+  ['asesor', 'Asesor(a) que vendió la boleta'],
+  ['fecha_sorteo', 'Fecha del sorteo principal (ej: sábado 03 de octubre de 2026)'],
+  ['loteria', 'Lotería del sorteo principal'],
+  ['cifras_ganadoras', 'Cifras que deciden el ganador'],
+  ['sorteos_semanales', 'Sorteos semanales: día, lotería y abono mínimo, o "no aplica"'],
+  ['cuentas', 'Cuentas de transferencia de la rifa (una por línea)'],
+  ['enlace_verificacion', 'Enlace para verificar la boleta en línea'],
+  ['codigo_verificacion', 'Código de verificación de la boleta']
+];
+
+const WEEKDAYS_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS_ES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "sábado 03 de octubre de 2026" in Colombian time. Plain dates ("2026-10-03") are taken as they are. */
+function colombiaLongDate(value) {
+  const str = String(value || '').trim();
+  let y, m, d;
+  const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (plain) { y = +plain[1]; m = +plain[2]; d = +plain[3]; } else {
+    const ms = Date.parse(str);
+    if (isNaN(ms)) return 'la fecha anunciada';
+    const col = new Date(ms - COLOMBIA_OFFSET_MS);
+    y = col.getUTCFullYear(); m = col.getUTCMonth() + 1; d = col.getUTCDate();
+  }
+  const weekday = WEEKDAYS_ES[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} ${String(d).padStart(2, '0')} de ${MONTHS_ES[m - 1]} de ${y}`;
+}
+
+/** Type of the message that confirms a saved ticket. */
+function receiptTypeOf(ticket) {
+  if ((ticket.totalPaid || 0) <= 0) return 'reservada';
+  return (ticket.totalPaid || 0) >= (ticket.price || 0) ? 'pagada' : 'abono';
+}
+
+function messageTemplateOf(company, type) {
+  const custom = company && company.messageTemplates && company.messageTemplates[type];
+  return custom || MESSAGE_TYPES[type].template;
+}
+
+function renderMessage(template, { ticket, raffle, company, baseUrl }) {
+  const money = v => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+  const price = Number(ticket.price) || 0;
+  const paid = Number(ticket.totalPaid) || 0;
+  const payments = (ticket.abonos || []).filter(a => (a.amount || 0) > 0);
+  const last = payments[payments.length - 1];
+  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
+  const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
+  const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
+  const weeklyLottery = lotteryPhrase(String(raffle.lotteryName || '').trim() || mainLotteryOf(raffle));
+  const accounts = (raffle.transferAccounts || []).map(a => `🏦 ${transferAccountLabel(a)}`);
+  const code = ticketVerificationCode(ticket);
+  const statusLabel = { RESERVADA: 'APARTADA', ABONO_PARCIAL: 'ABONO PARCIAL', PAGADA: 'PAGADA', CONFIRMADA: 'PAGADA Y CONFIRMADA' }[ticket.status] || ticket.status;
+  const values = {
+    empresa: company.name || 'la organización',
+    rifa: raffle.title || '',
+    descripcion: raffle.description || '',
+    comprador: ticket.buyerName || 'cliente',
+    celular: ticket.buyerPhone || 'no registrado',
+    numeros: (ticket.numbers || []).join(' - ') || String(ticket.ticketNumber || ''),
+    valor: money(price),
+    abonado: money(paid),
+    debe: money(Math.max(0, price - paid)),
+    ultimo_abono: last ? money(last.amount) : money(0),
+    fecha_ultimo_abono: last ? colombiaLongDate(last.date) : 'sin abonos',
+    estado: statusLabel,
+    asesor: ticket.advisorName || company.name || 'de la rifa',
+    fecha_sorteo: colombiaLongDate(raffle.mainDrawDate),
+    loteria: lotteryPhrase(mainLotteryOf(raffle)),
+    cifras_ganadoras: winningRuleText(raffle),
+    sorteos_semanales: raffle.hasWeeklyDraws === false
+      ? 'no aplica para esta rifa'
+      : `cada ${raffle.weeklyDrawDay || 'semana'} con ${weeklyLottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`,
+    cuentas: accounts.length ? accounts.join('\n') : 'Consulta las cuentas con tu asesor(a).',
+    enlace_verificacion: code ? `${baseUrl}/verificar/${code}` : '(disponible cuando la boleta esté registrada)',
+    codigo_verificacion: code || '—'
+  };
+  return String(template).replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
+}
+
+function publicBaseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function messageTypesResponse(company) {
+  return Object.entries(MESSAGE_TYPES).map(([type, def]) => ({
+    type,
+    label: def.label,
+    description: def.description,
+    required: def.required,
+    template: messageTemplateOf(company, type),
+    isDefault: !(company && company.messageTemplates && company.messageTemplates[type]),
+    defaultTemplate: def.template
+  }));
+}
+
+app.get('/api/message-templates', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  res.json({
+    types: messageTypesResponse(company),
+    placeholders: MESSAGE_PLACEHOLDERS.map(([key, description]) => ({ key, description }))
+  });
+});
+
+app.put('/api/message-templates', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const { type } = req.body || {};
+  const def = MESSAGE_TYPES[type];
+  if (!def) return res.status(400).json({ error: 'Tipo de mensaje no válido.' });
+  const template = typeof req.body.template === 'string' ? req.body.template.trim() : '';
+  if (template.length > 4000) return res.status(400).json({ error: 'El mensaje es demasiado largo (máximo 4.000 caracteres).' });
+  if (template) {
+    // The data that gives the buyer confidence cannot be left out
+    const missing = def.required.filter(key => !template.includes(`{${key}}`));
+    if (missing.length) {
+      return res.status(400).json({ error: `El mensaje debe incluir: ${missing.map(k => `{${k}}`).join(', ')}.`, missing });
+    }
+    company.messageTemplates = { ...(company.messageTemplates || {}), [type]: template };
+  } else if (company.messageTemplates) {
+    delete company.messageTemplates[type]; // empty text goes back to the default message
+  }
+  company.messageTemplatesUpdatedAt = new Date().toISOString();
+  saveDB();
+  res.json({ message: template ? 'Mensaje guardado.' : 'Se restauró el mensaje predeterminado.', types: messageTypesResponse(company) });
+});
+
+// Preview with a real ticket of the company (or a sample when there is none)
+app.post('/api/message-templates/preview', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const { type, raffleId } = req.body || {};
+  if (!MESSAGE_TYPES[type]) return res.status(400).json({ error: 'Tipo de mensaje no válido.' });
+  const raffles = (db.raffles || []).filter(r => r.companyId === company.id);
+  const raffle = raffles.find(r => r.id === raffleId) || raffles[0];
+  if (!raffle) return res.json({ preview: null });
+  const wanted = { reservada: ['RESERVADA'], abono: ['ABONO_PARCIAL'], pagada: ['PAGADA', 'CONFIRMADA'], recordatorio: ['ABONO_PARCIAL', 'RESERVADA'] }[type];
+  const real = (db.tickets || []).find(t => t.raffleId === raffle.id && wanted.includes(t.status));
+  const price = Number(raffle.ticketPrice) || 50000;
+  const samplePaid = { reservada: 0, abono: Math.round(price / 2), pagada: price, recordatorio: Math.round(price / 2) }[type];
+  const ticket = real || {
+    id: 'muestra', raffleId: raffle.id, numbers: ['07'], status: wanted[0], price, totalPaid: samplePaid,
+    buyerName: 'Nombre del comprador', buyerPhone: '3000000000', advisorName: 'Nombre del asesor',
+    abonos: samplePaid ? [{ amount: samplePaid, date: new Date().toISOString() }] : []
+  };
+  const template = String(req.body.template || '').slice(0, 4000) || messageTemplateOf(company, type);
+  res.json({ preview: renderMessage(template, { ticket, raffle, company, baseUrl: publicBaseUrl(req) }), previewRaffle: raffle.title, sample: !real });
+});
+
+// Message for a saved ticket: kind "receipt" (by its status) or "reminder"
+app.get('/api/tickets/:id/whatsapp-message', (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!ticket || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta está disponible: no tiene comprador para enviarle un mensaje.' });
+  const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
+  const type = req.query.kind === 'reminder' ? 'recordatorio' : receiptTypeOf(ticket);
+  if (type === 'recordatorio' && receiptTypeOf(ticket) === 'pagada') {
+    return res.status(400).json({ error: 'La boleta ya está pagada: no hay saldo que recordar.' });
+  }
+  res.json({
+    type,
+    phone: ticket.buyerPhone || '',
+    message: renderMessage(messageTemplateOf(company, type), { ticket, raffle, company, baseUrl: publicBaseUrl(req) })
+  });
+});
+
 // History of voided sales and voided payments (admins: own company; SuperAdmin: all or ?companyId=)
 app.get('/api/audit/voids', adminOnly, (req, res) => {
   const companyId = req.auth.role === 'admin' ? req.auth.record.id : req.query.companyId;

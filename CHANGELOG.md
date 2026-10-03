@@ -8,6 +8,13 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [2.5.0] - 2026-10-03
+
+### Nuevo
+- Mensajes de WhatsApp configurables por empresa (Control → Mensajes WhatsApp): uno para **boleta apartada**, otro para **abono**, otro para **pago completo** y otro para el **recordatorio de pago**. Vienen con mensajes predeterminados completos; cada empresa los edita con campos como `{comprador}`, `{numeros}`, `{debe}`, `{fecha_sorteo}`, `{loteria}`, `{cuentas}` y `{enlace_verificacion}`, con vista previa sobre una boleta real.
+- Los datos que dan confianza al comprador son obligatorios en cada mensaje (empresa, rifa, números, comprador, valores, fecha y lotería del sorteo, enlace de verificación y, en el recordatorio, las cuentas); el sistema no deja guardar un mensaje sin ellos.
+- El mensaje que se envía al guardar una venta o al tocar WhatsApp se elige según el estado guardado de la boleta y lo arma el servidor con los datos guardados.
+
 ## [2.4.0] - 2026-10-03
 
 ### Nuevo

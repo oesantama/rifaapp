@@ -6,8 +6,10 @@ import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
+import 'package:rifaapp/ui/features/control/views/message_templates_tab.dart';
 
-/// Admin control panel: history of voided sales / payments and the company's terms & conditions.
+/// Admin control panel: history of voided sales / payments, the company's terms & conditions and
+/// its WhatsApp messages.
 class ControlView extends StatelessWidget {
   const ControlView({super.key});
 
@@ -15,7 +17,7 @@ class ControlView extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           const CurrentRaffleBanner(),
@@ -31,10 +33,14 @@ class ControlView extends StatelessWidget {
                     icon: const Icon(Icons.gavel, size: 18),
                     text: isMobile ? 'Términos' : 'Términos y condiciones',
                     iconMargin: EdgeInsets.zero),
+                Tab(
+                    icon: const Icon(Icons.chat_outlined, size: 18),
+                    text: isMobile ? 'Mensajes' : 'Mensajes WhatsApp',
+                    iconMargin: EdgeInsets.zero),
               ],
             ),
           ),
-          const Expanded(child: TabBarView(children: [_VoidHistoryTab(), _TermsTab()])),
+          const Expanded(child: TabBarView(children: [_VoidHistoryTab(), _TermsTab(), MessageTemplatesTab()])),
         ],
       ),
     );

@@ -1193,6 +1193,40 @@ class ApiService {
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
   }
 
+  // WhatsApp messages: one editable template per situation, filled on the server from the saved ticket
+  Future<Map<String, dynamic>> fetchMessageTemplates() async {
+    final response = await authGet(Uri.parse('$baseUrl/message-templates')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> saveMessageTemplate(String type, String template) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/message-templates'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'type': type, 'template': template}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> previewMessageTemplate(String type, String template, {String? raffleId}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/message-templates/preview'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'type': type, 'template': template, 'raffleId': raffleId}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Message for a saved ticket: kind 'receipt' (by its status) or 'reminder'. Returns {type, phone, message}.
+  Future<Map<String, dynamic>> fetchTicketWhatsAppMessage(String ticketId, {String kind = 'receipt'}) async {
+    final response = await authGet(Uri.parse('$baseUrl/tickets/$ticketId/whatsapp-message?kind=$kind'))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) async {
     final query = raffleId != null ? '?raffleId=$raffleId' : '';
     final response = await authGet(Uri.parse('$baseUrl/audit/voids$query')).timeout(const Duration(seconds: 30));

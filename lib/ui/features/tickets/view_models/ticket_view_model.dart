@@ -129,6 +129,10 @@ class TicketViewModel extends ChangeNotifier {
   Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) =>
       _repository.checkTransferApproval(raffleId, approvalNumber);
 
+  /// The company's WhatsApp message for a saved ticket ('receipt' or 'reminder'); throws if it fails.
+  Future<Map<String, dynamic>> fetchWhatsAppMessage(String ticketId, {String kind = 'receipt'}) =>
+      _repository.fetchTicketWhatsAppMessage(ticketId, kind: kind);
+
   /// Voids one payment and reloads the raffle. Returns null on success or the error message.
   Future<String?> voidAbono(String ticketId, String abonoId, String reason, {String? raffleId}) async {
     try {
