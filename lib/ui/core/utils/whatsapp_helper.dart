@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/models/raffle.dart';
@@ -178,7 +180,12 @@ class WhatsAppHelper {
 
   /// Sends the company's message for a saved ticket, filled on the server ([kind]: 'receipt' or
   /// 'reminder'). If the server cannot be reached, [fallback] builds the text locally.
-  static Future<bool> sendSavedTicketMessage(Ticket ticket, {required String kind, required String Function() fallback}) async {
+  static Future<bool> sendSavedTicketMessage(
+    Ticket ticket, {
+    required String kind,
+    required String Function() fallback,
+    BuildContext? context,
+  }) async {
     String message;
     String phone = ticket.buyerPhone;
     try {
@@ -189,13 +196,87 @@ class WhatsAppHelper {
     } catch (_) {
       message = fallback();
     }
+    // Without a phone number the message can be copied and sent by any other means
+    if (cleanPhoneNumber(phone).isEmpty && context != null && context.mounted) {
+      await showShareMessageDialog(context, message);
+      return true;
+    }
     return sendWhatsAppMessage(phone: phone, message: message);
   }
 
+  /// Shows [message] with options to copy it or open WhatsApp to choose the contact.
+  static Future<void> showShareMessageDialog(BuildContext context, String message) {
+    return showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.phone_disabled_outlined, color: Colors.orange, size: 36),
+        title: const Text('El comprador no tiene celular registrado'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Copie el mensaje para enviarlo por otro medio, o abra WhatsApp y elija el contacto.',
+                  style: TextStyle(fontSize: 13)),
+              const SizedBox(height: 10),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDCF8C6).withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF25D366).withValues(alpha: 0.5)),
+                  ),
+                  child: SingleChildScrollView(child: SelectableText(message, style: const TextStyle(fontSize: 12.5, height: 1.4))),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
+          TextButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              sendWhatsAppMessage(phone: '', message: message);
+            },
+            icon: const Icon(Icons.chat_outlined),
+            label: const Text('Abrir WhatsApp'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              var copied = true;
+              try {
+                await Clipboard.setData(ClipboardData(text: message)).timeout(const Duration(seconds: 2));
+              } catch (_) {
+                copied = false;
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(copied
+                        ? '✓ Mensaje copiado. Péguelo en el medio que prefiera.'
+                        : 'No se pudo copiar automáticamente: mantenga presionado el texto para copiarlo.'),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.copy),
+            label: const Text('Copiar mensaje'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Opens WhatsApp with the payment reminder for [ticket] (to the buyer's phone if it has one).
-  static Future<bool> sendPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle}) => sendSavedTicketMessage(
+  static Future<bool> sendPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle, BuildContext? context}) =>
+      sendSavedTicketMessage(
         ticket,
         kind: 'reminder',
+        context: context,
         fallback: () => buildPaymentReminder(ticket: ticket, raffle: raffle, raffleTitle: raffleTitle),
       );
 

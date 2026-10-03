@@ -455,13 +455,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       }
     }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Comprobante digital copiado al portapapeles (Listo para pegar en WhatsApp)'),
-        ),
-      );
-    }
+    // No phone (or WhatsApp did not open): show the message to copy it or pick the contact
+    if (mounted) await WhatsAppHelper.showShareMessageDialog(context, text);
   }
 
   /// Voids one payment (e.g. saved twice) after asking for the reason; it stays in the history.
@@ -1387,6 +1382,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       ticket: widget.ticket,
                       raffle: context.read<RaffleViewModel>().raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull,
                       raffleTitle: widget.raffleTitle ?? 'RIFA',
+                      context: context,
                     ),
                     icon: const Icon(Icons.notifications_active_outlined, color: Color(0xFF128C7E)),
                     label: Text(

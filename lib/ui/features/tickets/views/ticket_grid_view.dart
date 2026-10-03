@@ -368,6 +368,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 ticket: ticket,
                                 raffle: context.read<RaffleViewModel>().raffles.where((r) => r.id == ticket.raffleId).firstOrNull,
                                 raffleTitle: raffleTitle ?? 'RIFA',
+                                context: context,
                               ),
                             ),
                           ],

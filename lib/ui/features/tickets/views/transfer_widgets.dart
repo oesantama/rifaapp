@@ -140,7 +140,12 @@ class TransferAccountsEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     void copySingleAccount(TransferAccount acc) {
       final text = '🏦 *${acc.bank}*\n'
-          '• ${[acc.accountType, acc.accountNumber, if (acc.key.isNotEmpty) "Llave: ${acc.key}", acc.holder].where((p) => p.isNotEmpty).join(" • ")}';
+          '• ${[
+        acc.accountType,
+        acc.accountNumber,
+        if (acc.key.isNotEmpty) "Llave: ${acc.key}",
+        acc.holder
+      ].where((p) => p.isNotEmpty).join(" • ")}';
       Clipboard.setData(ClipboardData(text: text));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

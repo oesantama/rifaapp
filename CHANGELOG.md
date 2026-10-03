@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [2.5.2] - 2026-10-03
+
+### Nuevo
+- Si el comprador no tiene celular registrado, el recordatorio de pago y el comprobante muestran el mensaje con las opciones **Copiar mensaje** (para enviarlo por otro medio) o **Abrir WhatsApp** (para elegir el contacto).
+
 ## [2.5.1] - 2026-10-03
 
 ### Corregido
