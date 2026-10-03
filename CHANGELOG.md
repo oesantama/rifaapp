@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [2.5.1] - 2026-10-03
+
+### Corregido
+- Las cuentas para pago ya no aparecen en el mensaje de una boleta pagada; solo se muestran a quien aún debe.
+- Cada cuenta se muestra en líneas separadas (banco, número, tipo, llave y titular), con una línea en blanco entre cuentas.
+
 ## [2.5.0] - 2026-10-03
 
 ### Nuevo

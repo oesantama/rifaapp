@@ -292,6 +292,16 @@ class TransferAccount {
         'key': key,
       };
 
+  /// One field per line, for WhatsApp messages:
+  /// 🏦 *Banco:* Nequi / 🔢 *Número:* ... / 📋 *Tipo:* ... / 🔑 *Llave:* ... / 👤 *Titular:* ...
+  String get messageBlock => [
+        if (bank.isNotEmpty) '🏦 *Banco:* $bank',
+        if (accountNumber.isNotEmpty) '🔢 *Número:* $accountNumber',
+        if (accountType.isNotEmpty) '📋 *Tipo:* $accountType',
+        if (key.isNotEmpty) '🔑 *Llave:* $key',
+        if (holder.isNotEmpty) '👤 *Titular:* $holder',
+      ].join('\n');
+
   /// One line, e.g. "Bancolombia • Ahorros • 123-456789-01 • llave @rifa • William S".
   String get label => [bank, accountType, accountNumber, if (key.isNotEmpty) 'llave $key', holder].where((p) => p.isNotEmpty).join(' • ');
 }

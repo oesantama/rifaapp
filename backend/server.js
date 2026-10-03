@@ -1886,7 +1886,15 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
   const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
   const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
   const weeklyLottery = lotteryPhrase(String(raffle.lotteryName || '').trim() || mainLotteryOf(raffle));
-  const accounts = (raffle.transferAccounts || []).map(a => `🏦 ${transferAccountLabel(a)}`);
+  const owes = paid < price;
+  // One field per line and a blank line between accounts; a paid ticket does not need them
+  const accounts = (raffle.transferAccounts || []).map(a => [
+    a.bank && `🏦 *Banco:* ${a.bank}`,
+    a.accountNumber && `🔢 *Número:* ${a.accountNumber}`,
+    a.accountType && `📋 *Tipo:* ${a.accountType}`,
+    a.key && `🔑 *Llave:* ${a.key}`,
+    a.holder && `👤 *Titular:* ${a.holder}`
+  ].filter(Boolean).join('\n'));
   const code = ticketVerificationCode(ticket);
   const statusLabel = { RESERVADA: 'APARTADA', ABONO_PARCIAL: 'ABONO PARCIAL', PAGADA: 'PAGADA', CONFIRMADA: 'PAGADA Y CONFIRMADA' }[ticket.status] || ticket.status;
   const values = {
@@ -1909,11 +1917,15 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
     sorteos_semanales: raffle.hasWeeklyDraws === false
       ? 'no aplica para esta rifa'
       : `cada ${raffle.weeklyDrawDay || 'semana'} con ${weeklyLottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`,
-    cuentas: accounts.length ? accounts.join('\n') : 'Consulta las cuentas con tu asesor(a).',
+    cuentas: !owes ? '' : (accounts.length ? accounts.join('\n\n') : 'Consulta las cuentas con tu asesor(a).'),
     enlace_verificacion: code ? `${baseUrl}/verificar/${code}` : '(disponible cuando la boleta esté registrada)',
     codigo_verificacion: code || '—'
   };
-  return String(template).replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
+  const lines = String(template).split('\n');
+  return lines
+    .filter(line => !(line.trim() === '{cuentas}' && !values.cuentas))
+    .join('\n')
+    .replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
 }
 
 function publicBaseUrl(req) {

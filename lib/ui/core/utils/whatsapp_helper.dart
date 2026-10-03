@@ -101,12 +101,11 @@ class WhatsAppHelper {
             '${weeklyLottery.isNotEmpty ? ' con la $weeklyLottery' : ''}');
         if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');
       }
-      if (raffle.transferAccounts.isNotEmpty) {
+      // Accounts only for who still owes
+      if (isDebt && raffle.transferAccounts.isNotEmpty) {
         b.writeln('----------------------------------------');
-        b.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
-        for (final acc in raffle.transferAccounts) {
-          b.writeln('• ${acc.label}');
-        }
+        b.writeln('💳 *CUENTAS PARA PAGO:*');
+        b.write(accountsBlock(raffle.transferAccounts));
       }
     }
 
@@ -116,6 +115,10 @@ class WhatsAppHelper {
         : '¡Gracias por tu compra y muchos éxitos en el sorteo! 🍀');
     return b.toString();
   }
+
+  /// Transfer accounts, one field per line and a blank line between accounts.
+  static String accountsBlock(List<TransferAccount> accounts) =>
+      accounts.isEmpty ? '' : '${accounts.map((a) => a.messageBlock).join('\n\n')}\n';
 
   static const _weekdays = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
   static const _months = [
@@ -166,9 +169,7 @@ class WhatsAppHelper {
     final advisor = ticket.advisorName.trim();
     b.writeln('💵 Puedes pagar en *efectivo*${advisor.isNotEmpty ? ' con tu asesor(a) $advisor' : ''}'
         '${accounts.isNotEmpty ? ' o por *transferencia* a:' : ' o por transferencia (pregúntanos por las cuentas).'}');
-    for (final acc in accounts) {
-      b.writeln('🏦 ${acc.label}');
-    }
+    b.write(accountsBlock(accounts));
     if (accounts.isNotEmpty) b.writeln('📲 Si pagas por transferencia, envíanos el comprobante por este medio.');
     b.writeln('----------------------------------------');
     b.writeln('¡Gracias y muchos éxitos en el sorteo! 🍀');
@@ -233,12 +234,10 @@ class WhatsAppHelper {
     }
 
     buffer.writeln('📊 *Estado:* $statusLabel');
-    if (raffle != null && raffle.transferAccounts.isNotEmpty) {
+    if (isDebt && raffle != null && raffle.transferAccounts.isNotEmpty) {
       buffer.writeln('----------------------------------------');
-      buffer.writeln('🏦 *CUENTAS DE TRANSFERENCIA PARA PAGO:*');
-      for (final acc in raffle.transferAccounts) {
-        buffer.writeln('• ${acc.label}');
-      }
+      buffer.writeln('💳 *CUENTAS PARA PAGO:*');
+      buffer.write(accountsBlock(raffle.transferAccounts));
     }
     buffer.writeln('----------------------------------------');
 
