@@ -1368,6 +1368,29 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   ),
                 ),
               ],
+              // Reserved or partially paid: remind the buyer what is owed (from the saved ticket)
+              if (WhatsAppHelper.canRemind(widget.ticket)) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => WhatsAppHelper.sendPaymentReminder(
+                      ticket: widget.ticket,
+                      raffle: context.read<RaffleViewModel>().raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull,
+                      raffleTitle: widget.raffleTitle ?? 'RIFA',
+                    ),
+                    icon: const Icon(Icons.notifications_active_outlined, color: Color(0xFF128C7E)),
+                    label: Text(
+                      'Recordar pago por WhatsApp (debe ${currency.format(widget.ticket.balancePending)})',
+                      style: const TextStyle(color: Color(0xFF128C7E), fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF25D366), width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Flex(
                 direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,

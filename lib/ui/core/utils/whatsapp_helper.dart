@@ -116,6 +116,72 @@ class WhatsAppHelper {
     return b.toString();
   }
 
+  static const _weekdays = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+  static const _months = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  /// "sábado 03 de octubre de 2026" in Colombian time (UTC-5), whatever the device's time zone.
+  static String? drawDateText(String iso) {
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return null;
+    final col = parsed.isUtc || iso.endsWith('Z') ? parsed.toUtc().subtract(const Duration(hours: 5)) : parsed;
+    return '${_weekdays[col.weekday - 1]} ${col.day.toString().padLeft(2, '0')} de ${_months[col.month - 1]} de ${col.year}';
+  }
+
+  /// Reminder for a reserved or partially paid ticket: what is still owed, when the raffle plays,
+  /// that an unpaid ticket does not play, and how to pay (cash or the raffle's transfer accounts).
+  static String buildPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle}) {
+    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final pending = ticket.balancePending > 0 ? ticket.balancePending : (ticket.price - ticket.totalPaid).clamp(0, double.infinity);
+    final b = StringBuffer();
+    b.writeln('🔔 *RECORDATORIO DE PAGO* - $raffleTitle');
+    b.writeln('----------------------------------------');
+    b.writeln(ticket.buyerName.isNotEmpty ? 'Hola *${ticket.buyerName}* 👋' : 'Hola 👋');
+    b.writeln('Te recordamos que tu boleta *N° ${ticket.displayNumber}* aún tiene saldo pendiente:');
+    b.writeln('💰 *Valor boleta:* ${currency.format(ticket.price)}');
+    b.writeln('✅ *Abonado:* ${currency.format(ticket.totalPaid)}');
+    b.writeln('🔴 *Debes:* ${currency.format(pending)}');
+    b.writeln('----------------------------------------');
+    final date = raffle != null ? drawDateText(raffle.mainDrawDate) : null;
+    final lottery = raffle?.mainLottery ?? '';
+    if (date != null) {
+      b.writeln('📅 La rifa juega el *$date*${lottery.isNotEmpty ? ' con la *$lottery*' : ''}.');
+    }
+    b.writeln('⚠️ *Recuerda: la boleta que no esté pagada en su totalidad NO juega.*');
+    b.writeln('----------------------------------------');
+    final accounts = raffle?.transferAccounts ?? const [];
+    final advisor = ticket.advisorName.trim();
+    b.writeln('💵 Puedes pagar en *efectivo*${advisor.isNotEmpty ? ' con tu asesor(a) $advisor' : ''}'
+        '${accounts.isNotEmpty ? ' o por *transferencia* a:' : ' o por transferencia (pregúntanos por las cuentas).'}');
+    for (final acc in accounts) {
+      b.writeln('🏦 ${acc.label}');
+    }
+    if (accounts.isNotEmpty) b.writeln('📲 Si pagas por transferencia, envíanos el comprobante por este medio.');
+    b.writeln('----------------------------------------');
+    b.writeln('¡Gracias y muchos éxitos en el sorteo! 🍀');
+    return b.toString();
+  }
+
+  /// Opens WhatsApp with the payment reminder for [ticket] (to the buyer's phone if it has one).
+  static Future<bool> sendPaymentReminder({required Ticket ticket, Raffle? raffle, required String raffleTitle}) => sendWhatsAppMessage(
+      phone: ticket.buyerPhone, message: buildPaymentReminder(ticket: ticket, raffle: raffle, raffleTitle: raffleTitle));
+
+  /// Tickets that can get a payment reminder: reserved or with a partial payment, still owing.
+  static bool canRemind(Ticket ticket) =>
+      (ticket.status == 'RESERVADA' || ticket.status == 'ABONO_PARCIAL') && ticket.totalPaid < ticket.price;
+
   /// Generates structured WhatsApp message for ticket receipt or payment reminder
   static String generateTicketMessage({
     required Ticket ticket,

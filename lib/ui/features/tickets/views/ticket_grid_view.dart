@@ -15,6 +15,7 @@ import 'package:rifaapp/ui/features/advisors/views/assigned_numbers_widgets.dart
 
 import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
+import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'ticket_detail_dialog.dart';
 import 'ticket_print_dialog.dart';
 import 'import_sold_tickets_dialog.dart';
@@ -336,20 +337,41 @@ class _TicketGridViewState extends State<TicketGridView> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.print_outlined, size: 18),
-                        padding: const EdgeInsets.all(4),
-                        constraints: const BoxConstraints(),
-                        tooltip: 'Imprimir Boleta',
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => TicketPrintDialog(
-                              ticket: ticket,
-                              raffleTitle: raffleTitle ?? 'GRAN RIFA',
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.print_outlined, size: 18),
+                            padding: EdgeInsets.zero,
+                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Imprimir Boleta',
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => TicketPrintDialog(
+                                  ticket: ticket,
+                                  raffleTitle: raffleTitle ?? 'GRAN RIFA',
+                                ),
+                              );
+                            },
+                          ),
+                          if (WhatsAppHelper.canRemind(ticket)) ...[
+                            const SizedBox(height: 8),
+                            IconButton(
+                              icon: const Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFF128C7E)),
+                              padding: EdgeInsets.zero,
+                              style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Recordar pago por WhatsApp',
+                              onPressed: () => WhatsAppHelper.sendPaymentReminder(
+                                ticket: ticket,
+                                raffle: context.read<RaffleViewModel>().raffles.where((r) => r.id == ticket.raffleId).firstOrNull,
+                                raffleTitle: raffleTitle ?? 'RIFA',
+                              ),
                             ),
-                          );
-                        },
+                          ],
+                        ],
                       ),
                     ],
                   ),
