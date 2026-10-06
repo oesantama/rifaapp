@@ -65,6 +65,7 @@ class _MonetizationSettingsTabState extends State<MonetizationSettingsTab> {
       'admobIosBannerId',
       'adsenseClient',
       'adsenseSlot',
+      'androidApkUrl',
     ])
       k: TextEditingController(),
   };
@@ -208,6 +209,23 @@ class _MonetizationSettingsTabState extends State<MonetizationSettingsTab> {
       padding: EdgeInsets.fromLTRB(isMobile ? 12 : 24, isMobile ? 12 : 24, isMobile ? 12 : 24, 40),
       children: [
         const LegalAdminSection(),
+        _section(
+            Icons.android,
+            'Descarga de la app Android',
+            'Enlace que abre el aviso "Hay una nueva versión" en el celular. '
+                'Por defecto descarga el APK de la última versión publicada; cuando la app esté en Google Play, ponga el enlace de la tienda.',
+            [
+              _field('androidApkUrl', 'Enlace de descarga', hint: 'https://...', keyboard: TextInputType.url),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: ElevatedButton.icon(
+                  onPressed:
+                      _saving ? null : () => _save({'androidApkUrl': _fields['androidApkUrl']!.text}, 'Enlace de descarga guardado.'),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Guardar enlace'),
+                ),
+              ),
+            ]),
         _section(Icons.sell_outlined, 'Precios del plan PRO', 'Se proponen al registrar pagos y se muestran a las empresas.', [
           for (final (key, label, months) in [
             ('monthlyPrice', '1 mes', 1),

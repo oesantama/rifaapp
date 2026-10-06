@@ -181,5 +181,10 @@ class RaffleRepository {
 
   Future<List<Map<String, dynamic>>> fetchVoidHistory({String? raffleId}) => _apiService.fetchVoidHistory(raffleId: raffleId);
 
+  Future<String> forgotPassword(String identifier) => _apiService.forgotPassword(identifier);
+
+  Future<String> resetPassword(String identifier, String code, String newPassword) =>
+      _apiService.resetPassword(identifier, code, newPassword);
+
   Future<Map<String, dynamic>> fetchServerInfo() => _apiService.fetchServerInfo();
 }

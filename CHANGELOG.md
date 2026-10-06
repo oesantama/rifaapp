@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.0.2] - 2026-10-06
+
+### Nuevo
+- El aviso "Hay una nueva versión" en el celular trae el botón **Descargar actualización**. Cada versión publicada crea un Release en GitHub con `rifa-master.apk`; el enlace se puede cambiar en Planes → Configuración (por ejemplo, al de Google Play).
+- **Recuperar contraseña por correo**: se envía un código de 6 dígitos (vence en 15 minutos, 5 intentos) al correo de la cuenta y con él se crea la nueva contraseña. Requiere configurar el correo de envío en el servidor (SMTP_USER y SMTP_PASS).
+
 ## [3.0.1] - 2026-10-06
 
 ### Corregido

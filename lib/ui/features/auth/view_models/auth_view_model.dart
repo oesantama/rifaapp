@@ -258,12 +258,6 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  String recoverPassword(String identifier) {
-    if (identifier.trim().isEmpty) return 'Ingrese su usuario o correo electrónico.';
-    return 'Por seguridad, las contraseñas solo pueden ser restablecidas por la administración. '
-        'Asesores: contacte a su administrador. Administradores: contacte al superadministrador.';
-  }
-
   /// Updates the name/email/username for the current logged in profile (SuperAdmin or Admin).
   Future<String?> updateCurrentAdminProfile({required String name, required String email, required String username}) async {
     try {

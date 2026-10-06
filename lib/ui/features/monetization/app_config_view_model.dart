@@ -11,6 +11,10 @@ class AppConfigViewModel extends ChangeNotifier {
   bool _demoEnabled = false;
   bool get demoEnabled => _demoEnabled;
 
+  /// Download link of the latest Android app (GitHub release, later Google Play).
+  String _androidApkUrl = 'https://github.com/oesantama/rifaapp/releases/latest/download/rifa-master.apk';
+  String get androidApkUrl => _androidApkUrl;
+
   Map<String, dynamic> _ad = const {};
   String _adValue(String key, String fallback) {
     final v = (_ad[key] ?? '').toString().trim();
@@ -33,6 +37,7 @@ class AppConfigViewModel extends ChangeNotifier {
     try {
       final data = await _repository.fetchAppConfig();
       _demoEnabled = data['demoEnabled'] == true;
+      if ((data['androidApkUrl'] ?? '').toString().isNotEmpty) _androidApkUrl = data['androidApkUrl'].toString();
       _ad = data['ad'] is Map ? Map<String, dynamic>.from(data['ad']) : const {};
       _googleAds = data['googleAds'] is Map ? Map<String, dynamic>.from(data['googleAds']) : null;
       notifyListeners();

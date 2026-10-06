@@ -1179,6 +1179,8 @@ const DEFAULT_MONETIZATION = {
   priceText: '',
   contactWhatsApp: '',
   contactUrl: '',
+  // Where the Android app is downloaded from (GitHub release of the latest version; later, Google Play)
+  androidApkUrl: 'https://github.com/oesantama/rifaapp/releases/latest/download/rifa-master.apk',
   monthlyPrice: 0,
   quarterlyPrice: 0, // 3 months
   semiannualPrice: 0, // 6 months
@@ -1518,6 +1520,7 @@ app.get('/api/public/app-config', (req, res) => {
   const m = monetizationSettings();
   res.json({
     demoEnabled: !!m.demoEnabled,
+    androidApkUrl: m.androidApkUrl,
     ad: {
       title: m.adTitle, text: m.adText, upgradeTitle: m.upgradeTitle, upgradeText: m.upgradeText,
       priceText: m.priceText, contactWhatsApp: m.contactWhatsApp, contactUrl: m.contactUrl
@@ -1537,6 +1540,109 @@ app.post('/api/auth/demo-login', (req, res) => {
     return res.status(500).json({ error: 'No se pudo inicializar la cuenta Demo.' });
   }
   res.json(issueSession('admin', demoCompany));
+});
+
+// ---------------------------------------------------------------------------
+// Password recovery by e-mail: a 6-digit code (15 minutes, 5 attempts) is sent to the account's
+// e-mail. Needs SMTP_USER / SMTP_PASS (e.g. Gmail with an app password) in the environment.
+// Answers never reveal whether an account exists.
+// ---------------------------------------------------------------------------
+const RESET_CODE_MS = 15 * 60 * 1000;
+const resetCodes = new Map(); // "kind:id" -> { hash, expires, attempts }
+const resetRequestsByIp = new Map();
+
+function mailTransport() {
+  if (process.env.MAIL_TEST === '1') return require('nodemailer').createTransport({ jsonTransport: true });
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return require('nodemailer').createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: Number(process.env.SMTP_PORT || 465) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  });
+}
+
+/** Account (any role) for a username / e-mail / ID number, with the e-mail to send the code to. */
+function findAccountForReset(identifier) {
+  const id = normalize(identifier);
+  if (!id) return null;
+  const sa = db.superAdmin;
+  if (sa && [sa.username, sa.email].some(v => v && normalize(v) === id)) return { kind: 'superadmin', record: sa, email: sa.email };
+  const company = (db.companies || []).find(c => !c.isDemo && [c.adminUsername, c.adminEmail].some(v => v && normalize(v) === id));
+  if (company) return { kind: 'admin', record: company, email: company.adminEmail };
+  const advisor = (db.advisors || []).find(a => [a.username, a.code, a.email, a.phone].some(v => v && normalize(v) === id));
+  if (advisor) {
+    const company = (db.companies || []).find(c => c.id === advisor.companyId);
+    if (company && company.isDemo) return null;
+    return { kind: 'asesor', record: advisor, email: advisor.email };
+  }
+  return null;
+}
+
+function resetHash(code) {
+  return require('crypto').createHmac('sha256', (db.settings || {}).verificationSecret || 'reset').update(String(code)).digest('hex');
+}
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const transport = mailTransport();
+  if (!transport) {
+    return res.status(503).json({ error: 'La recuperación por correo aún no está configurada. Pida a su administrador que le asigne una nueva contraseña.' });
+  }
+  const ip = req.ip || '';
+  const now = Date.now();
+  const hits = (resetRequestsByIp.get(ip) || []).filter(t => now - t < 3600000);
+  if (hits.length >= 5) return res.status(429).json({ error: 'Demasiadas solicitudes. Intente de nuevo en una hora.' });
+  resetRequestsByIp.set(ip, [...hits, now]);
+  const generic = {
+    message: 'Si el usuario existe y tiene un correo registrado, le enviamos un código de 6 dígitos. Revise su correo (también la carpeta de spam). '
+      + 'Si no tiene correo registrado, pida a su administrador que le asigne una nueva contraseña.'
+  };
+  const account = findAccountForReset((req.body || {}).identifier);
+  if (!account || !account.email || !/@/.test(account.email)) return res.json(generic);
+  const code = String(require('crypto').randomInt(0, 1000000)).padStart(6, '0');
+  resetCodes.set(`${account.kind}:${account.record.id || 'superadmin'}`, { hash: resetHash(code), expires: now + RESET_CODE_MS, attempts: 0 });
+  const brand = legalSettings().brandName;
+  try {
+    const info = await transport.sendMail({
+      from: process.env.MAIL_FROM || `${brand} <${process.env.SMTP_USER}>`,
+      to: account.email,
+      subject: `${brand}: código para restablecer su contraseña`,
+      text: `Su código para restablecer la contraseña de ${brand} es: ${code}\nVence en 15 minutos. Si usted no lo pidió, ignore este correo.`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:480px"><h2 style="color:#1E3A8A">${escapeHtml(brand)}</h2>
+<p>Recibimos una solicitud para restablecer su contraseña.</p><p style="font-size:30px;font-weight:bold;letter-spacing:6px">${code}</p>
+<p>Escríbalo en la aplicación. Vence en <b>15 minutos</b>.</p><p style="color:#64748B;font-size:12px">Si usted no lo pidió, ignore este correo: su contraseña no cambia.</p></div>`
+    });
+    if (process.env.MAIL_TEST === '1') console.log('MAIL_TEST código', account.email, code, info.messageId ? '' : '');
+  } catch (err) {
+    console.error('⚠️ No se pudo enviar el correo de recuperación:', err.message);
+    return res.status(502).json({ error: 'No se pudo enviar el correo en este momento. Intente más tarde.' });
+  }
+  res.json(generic);
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+  const { identifier, code, newPassword } = req.body || {};
+  const account = findAccountForReset(identifier);
+  const key = account ? `${account.kind}:${account.record.id || 'superadmin'}` : null;
+  const entry = key ? resetCodes.get(key) : null;
+  const invalid = () => res.status(400).json({ error: 'El código no es válido o ya venció. Solicite uno nuevo.' });
+  if (!entry || Date.now() > entry.expires) return invalid();
+  entry.attempts++;
+  if (entry.attempts > 5) {
+    resetCodes.delete(key);
+    return res.status(429).json({ error: 'Demasiados intentos con este código. Solicite uno nuevo.' });
+  }
+  if (resetHash(String(code || '').trim()) !== entry.hash) return invalid();
+  const policyError = security.validatePasswordPolicy(newPassword);
+  if (policyError) return res.status(400).json({ error: policyError });
+  const hash = security.hashPassword(newPassword);
+  if (account.kind === 'superadmin') { account.record.passwordHash = hash; account.record.mustChangePassword = false; }
+  else if (account.kind === 'admin') { account.record.adminPassword = hash; account.record.adminMustChangePassword = false; }
+  else { account.record.password = hash; account.record.mustChangePassword = false; }
+  resetCodes.delete(key);
+  security.clearFailures(req.ip || '', normalize(identifier));
+  saveDB();
+  res.json({ message: 'Contraseña actualizada. Ya puede iniciar sesión con la nueva contraseña.' });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -1612,7 +1718,8 @@ app.get('/api/drive/status', async (req, res) => {
 
 // Every other API route requires a valid session
 app.use('/api', (req, res, next) => {
-  if (req.path === '/auth/login' || req.path === '/auth/demo-login' || req.path === '/health' || req.path.startsWith('/public/')) {
+  if (req.path === '/auth/login' || req.path === '/auth/demo-login' || req.path === '/auth/forgot-password' ||
+      req.path === '/auth/reset-password' || req.path === '/health' || req.path.startsWith('/public/')) {
     return next();
   }
   const header = req.headers.authorization || '';
@@ -1901,6 +2008,11 @@ app.put('/api/monetization', superAdminOnly, (req, res) => {
   const current = monetizationSettings();
   const next = { ...current };
   if (body.demoEnabled !== undefined) next.demoEnabled = body.demoEnabled === true;
+  if (body.androidApkUrl !== undefined) {
+    const url = String(body.androidApkUrl || '').trim().slice(0, 300);
+    if (url && !/^https:\/\//i.test(url)) return res.status(400).json({ error: 'El enlace de descarga debe empezar por https://' });
+    next.androidApkUrl = url || DEFAULT_MONETIZATION.androidApkUrl;
+  }
   for (const key of ['adTitle', 'adText', 'upgradeTitle', 'upgradeText', 'priceText', 'contactUrl']) {
     if (body[key] !== undefined) next[key] = String(body[key] || '').trim().slice(0, key.endsWith('Text') ? 500 : 120);
   }

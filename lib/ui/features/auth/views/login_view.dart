@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/data/services/auth_http.dart';
+import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/legal/legal_widgets.dart';
 import 'package:rifaapp/version.dart';
 import 'package:rifaapp/ui/features/monetization/app_config_view_model.dart';
@@ -104,63 +106,154 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
+  /// Password recovery: (1) a 6-digit code is sent to the account's e-mail, (2) code + new password.
   void _showPasswordRecoveryDialog() {
-    final recoveryController = TextEditingController(text: _userController.text);
+    final idCtrl = TextEditingController(text: _userController.text.trim());
+    final codeCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    bool codeSent = false;
+    bool busy = false;
+    bool obscure = true;
+    String? info;
+    String? error;
 
     showDialog(
       context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.lock_reset, color: AppTheme.primaryBlue),
-              SizedBox(width: 10),
-              Expanded(child: Text('Recuperar Contraseña', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Ingrese su usuario o correo electrónico registrado. El sistema le enviará instrucciones de restablecimiento.',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: recoveryController,
-                decoration: const InputDecoration(
-                  labelText: 'Usuario o Correo Electrónico *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email_outlined),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) {
+          Future<void> run(Future<String> Function() action, {bool next = false}) async {
+            setD(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final msg = await action();
+              setD(() {
+                info = msg;
+                if (next) codeSent = true;
+              });
+              if (!next && ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text(msg)));
+              }
+            } catch (e) {
+              setD(() => error = e is ApiException ? e.message : e.toString());
+            } finally {
+              if (ctx.mounted) setD(() => busy = false);
+            }
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.lock_reset, color: AppTheme.primaryBlue),
+                SizedBox(width: 10),
+                Expanded(child: Text('Recuperar contraseña', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      codeSent
+                          ? 'Escriba el código de 6 dígitos que le llegó al correo y su nueva contraseña.'
+                          : 'Escriba su usuario o correo. Le enviaremos un código de 6 dígitos al correo registrado en su cuenta.',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: idCtrl,
+                      enabled: !codeSent,
+                      decoration: const InputDecoration(
+                        labelText: 'Usuario o correo *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                    ),
+                    if (codeSent) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: codeCtrl,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(
+                          labelText: 'Código de 6 dígitos *',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.pin_outlined),
+                          counterText: '',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: passCtrl,
+                        obscureText: obscure,
+                        autofillHints: const [AutofillHints.newPassword],
+                        decoration: InputDecoration(
+                          labelText: 'Nueva contraseña *',
+                          helperText: 'Mínimo 8 caracteres, con letras y números',
+                          helperMaxLines: 2,
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
+                            onPressed: () => setD(() => obscure = !obscure),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (info != null && error == null) ...[
+                      const SizedBox(height: 12),
+                      Text(info!, style: TextStyle(fontSize: 12.5, color: Colors.blue.shade800)),
+                    ],
+                    if (error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(error!, style: const TextStyle(color: AppTheme.dangerRose, fontWeight: FontWeight.w600)),
+                    ],
+                  ],
                 ),
               ),
+            ),
+            actions: [
+              TextButton(onPressed: busy ? null : () => Navigator.pop(ctx), child: const Text('Cancelar')),
+              if (codeSent)
+                TextButton(
+                  onPressed: busy ? null : () => run(() => RaffleRepository().forgotPassword(idCtrl.text.trim()), next: true),
+                  child: const Text('Reenviar código'),
+                ),
+              ElevatedButton(
+                onPressed: busy
+                    ? null
+                    : () {
+                        if (idCtrl.text.trim().isEmpty) {
+                          setD(() => error = 'Escriba su usuario o correo.');
+                          return;
+                        }
+                        if (!codeSent) {
+                          run(() => RaffleRepository().forgotPassword(idCtrl.text.trim()), next: true);
+                        } else {
+                          if (codeCtrl.text.trim().length != 6) {
+                            setD(() => error = 'El código tiene 6 dígitos.');
+                            return;
+                          }
+                          run(() => RaffleRepository().resetPassword(idCtrl.text.trim(), codeCtrl.text.trim(), passCtrl.text));
+                        }
+                      },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
+                child: busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(codeSent ? 'CAMBIAR CONTRASEÑA' : 'ENVIAR CÓDIGO'),
+              ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final authVM = Provider.of<AuthViewModel>(context, listen: false);
-                String msg = authVM.recoverPassword(recoveryController.text);
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: AppTheme.primaryBlue,
-                    content: Text(msg),
-                  ),
-                );
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryBlue),
-              child: const Text('ENVIAR INSTRUCCIONES'),
-            ),
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

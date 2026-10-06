@@ -1,3 +1,4 @@
+import 'package:url_launcher/url_launcher.dart';
 import 'ui/core/utils/url_launcher_helper.dart' as web_launcher;
 import 'version.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -151,7 +152,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
           content: Text(
             kIsWeb
                 ? 'Hay una nueva versión de Rifa Master (v$serverVersion). Recargue para usarla; usted tiene la v$appVersion.'
-                : 'Hay una nueva versión de Rifa Master (v$serverVersion). Instale el APK actualizado; usted tiene la v$appVersion.',
+                : 'Hay una nueva versión de Rifa Master (v$serverVersion); usted tiene la v$appVersion. Descárguela e instálela encima '
+                    '(no pierde sus datos).',
             style: const TextStyle(color: Colors.black87),
           ),
           actions: [
@@ -159,7 +161,17 @@ class _MainShellScreenState extends State<MainShellScreen> {
               onPressed: () => ScaffoldMessenger.of(context).hideCurrentMaterialBanner(),
               child: const Text('Más tarde'),
             ),
-            if (kIsWeb) ElevatedButton(onPressed: web_launcher.reloadPage, child: const Text('Recargar ahora')),
+            if (kIsWeb)
+              ElevatedButton(onPressed: web_launcher.reloadPage, child: const Text('Recargar ahora'))
+            else
+              ElevatedButton.icon(
+                onPressed: () {
+                  final url = Provider.of<AppConfigViewModel>(context, listen: false).androidApkUrl;
+                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                },
+                icon: const Icon(Icons.download),
+                label: const Text('Descargar actualización'),
+              ),
           ],
         ),
       );

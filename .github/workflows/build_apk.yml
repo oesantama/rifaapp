@@ -3,7 +3,12 @@ name: Build Android APK
 on:
   push:
     branches: [ master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
+
+# Needed to publish the APK as a GitHub release when a version tag is pushed
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -58,3 +63,18 @@ jobs:
         with:
           name: app-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      # Version tags (v3.0.2, ...) publish the APK as a release: the app's "new version" banner downloads
+      # https://github.com/oesantama/rifaapp/releases/latest/download/rifa-master.apk
+      - name: Publish release with the APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cp build/app/outputs/flutter-apk/app-release.apk rifa-master.apk
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Rifa Master ${{ github.ref_name }}
+          body: "Instale rifa-master.apk encima de la versión anterior; no pierde sus datos. Cambios: ver CHANGELOG.md."
+          files: rifa-master.apk
+          make_latest: true

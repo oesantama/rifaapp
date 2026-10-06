@@ -1438,6 +1438,28 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Password recovery (no session): sends a code to the account's e-mail / sets the new password.
+  Future<String> forgotPassword(String identifier) async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/auth/forgot-password'),
+            headers: {'Content-Type': 'application/json'}, body: jsonEncode({'identifier': identifier}))
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return (jsonDecode(response.body)['message'] ?? '').toString();
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<String> resetPassword(String identifier, String code, String newPassword) async {
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/reset-password'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'identifier': identifier, 'code': code, 'newPassword': newPassword}),
+        )
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return (jsonDecode(response.body)['message'] ?? '').toString();
+    throw ApiException.fromResponse(response);
+  }
+
   /// Version and commit the server is running (public endpoint).
   Future<Map<String, dynamic>> fetchServerInfo() async {
     final response = await http.get(Uri.parse('$baseUrl/health')).timeout(const Duration(seconds: 15));
