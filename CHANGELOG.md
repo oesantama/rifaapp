@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.0.1] - 2026-10-06
+
+### Corregido
+- La app Android se cerraba al abrir después del logo. Se retiró la librería de anuncios de Google (AdMob) de la app Android/iOS; se volverá a agregar con el ID real de AdMob y probada en un celular. La web conserva AdSense y el anuncio propio "Pásate a PRO" sigue en todas las plataformas.
+- Android vuelve a la versión mínima predeterminada.
+
 ## [3.0.0] - 2026-10-05
 
 Versión mayor: cambia la forma de trabajar la caja.

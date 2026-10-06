@@ -13,10 +13,9 @@ Guía para llenar Google Play Console. Las URLs asumen el servidor de producció
    - Eliminación de cuenta: `https://rifaapp-backend.onrender.com/eliminar-cuenta`
 3. **Modo demo activado** (Planes → Configuración): los revisores de Google entran con el botón
    *Probar modo demo* del inicio de sesión.
-4. **AdMob**: cree la app en AdMob y reemplace el **ID de la app de prueba** en
-   `android/app/src/main/AndroidManifest.xml` (`com.google.android.gms.ads.APPLICATION_ID`) y en
-   `ios/Runner/Info.plist` (`GADApplicationIdentifier`). Ponga los ID de bloque en Planes → Configuración →
-   Publicidad de Google. Sin esto, no publique: Google rechaza apps con el ID de prueba en producción.
+4. **AdMob (pendiente)**: en la versión 3.0.1 se retiró AdMob de la app Android/iOS porque cerraba la app al abrir.
+   Cuando tenga su cuenta de AdMob, se vuelve a agregar con su **ID real** y probándola en un celular conectado.
+   Mientras tanto la app muestra solo el anuncio propio "Pásate a PRO".
 5. **Firma**: el APK/AAB de producción debe firmarse con su llave (`release.keystore`). Guárdela en un lugar
    seguro: si se pierde no se puede actualizar la app.
 6. **Formato**: Google Play exige **AAB** (`flutter build appbundle --release`), no APK.
@@ -64,8 +63,10 @@ usuario demo_admin / contraseña demo123.
 
 ## 4. Anuncios
 
-- ¿La app contiene anuncios? **Sí** (plan gratuito, Google AdMob).
-- ID de publicidad: **Sí, se usa**, para publicidad.
+- Mientras la app no tenga AdMob: ¿contiene anuncios? **No** (el aviso "Pásate a PRO" promociona el propio plan
+  de la app). ID de publicidad: **No se usa**.
+- Cuando se agregue AdMob: anuncios **Sí** e ID de publicidad **Sí, para publicidad**; actualice también la fila de
+  "ID de publicidad" en Seguridad de los datos.
 
 ## 5. Clasificación de contenido
 
@@ -109,7 +110,7 @@ usuario demo_admin / contraseña demo123.
   clasifica como relacionada con loterías, puede pedir licencias: en Colombia las rifas requieren autorización
   de Coljuegos o de la entidad territorial. Tenga a mano la autorización de las rifas de sus clientes o una
   explicación de que la app es solo administrativa.
-- **Permisos**: solo `INTERNET` y `ACCESS_NETWORK_STATE`, más el ID de publicidad que agrega AdMob.
+- **Permisos**: solo `INTERNET` y `ACCESS_NETWORK_STATE`.
 
 ## 10. Checklist final
 

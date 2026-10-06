@@ -288,8 +288,9 @@ class _MonetizationSettingsTabState extends State<MonetizationSettingsTab> {
         _section(
           Icons.ads_click,
           'Publicidad de Google',
-          'Anuncios reales para las empresas con plan Gratis: AdMob en Android e iOS, AdSense en la web. En Windows no hay anuncios de '
-              'Google: se muestra el anuncio "Pásate a PRO". Las ganancias se consultan en los paneles de AdMob y AdSense.',
+          'Anuncios reales para las empresas con plan Gratis. Hoy funcionan en la web (AdSense); en Android e iOS (AdMob) se activarán '
+              'en una próxima versión, y en Windows no existen. Mientras tanto se muestra el anuncio "Pásate a PRO". '
+              'Las ganancias se consultan en los paneles de Google.',
           [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

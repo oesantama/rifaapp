@@ -139715,10 +139715,10 @@ return A.o(j.LP(),$async$Bj)
 case 7:m=b
 j=J.p(m,"version")
 l=A.i(j==null?"":j)
-if(n.c==null||J.bl(l)===0||!A.bLN(l,"3.0.0")){s=1
+if(n.c==null||J.bl(l)===0||!A.bLN(l,"3.0.1")){s=1
 break}n.e=!0
 j=n.c.R(t.q).f
-i=A.k("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.0.0.",null,null,null,null,B.bp8,null,null,null)
+i=A.k("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.0.1.",null,null,null,null,B.bp8,null,null,null)
 k=A.b([A.ct(B.bs8,null,null,new A.b0M(n),null,null)],t.p)
 J.fp(k,A.dX(B.bt8,A.bSq(),null))
 j.ale(A.bsa(k,null,B.a1S,i,null,null,null,!1,null,B.adk,null,null,52,null,B.PS,null,null,null))
@@ -139813,7 +139813,7 @@ m=q==null?f:q.d.b
 l=m==null?0:m
 k=A.b([],o)
 if(A.aw(a,f,s).w.a.a>=700){j=g.f
-i=A.aU(new A.dj(B.fA,f,f,new A.aC(B.jo,A.k("v3.0.0",f,f,f,f,A.ax(f,f,B.kZ,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
+i=A.aU(new A.dj(B.fA,f,f,new A.aC(B.jo,A.k("v3.0.1",f,f,f,f,A.ax(f,f,B.kZ,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
 h=d.d
 if(h===B.bd)h=B.b90
 else h=h===B.bg?B.b9g:B.b0G
@@ -146105,7 +146105,7 @@ g=b.BG("admobAndroidBannerId","AdMob \u2022 ID de bloque de anuncios Android",a0
 f=b.BG("admobIosBannerId","AdMob \u2022 ID de bloque de anuncios iOS",a0)
 e=b.BG("adsenseClient","AdSense \u2022 ID de editor (web)","ca-pub-XXXXXXXX")
 d=b.BG("adsenseSlot","AdSense \u2022 ID del bloque (web)","1234567890")
-return A.ju(A.b([B.ai7,m,l,k,b.Jq(B.acS,"Publicidad de Google",'Anuncios reales para las empresas con plan Gratis: AdMob en Android e iOS, AdSense en la web. En Windows no hay anuncios de Google: se muestra el anuncio "P\xe1sate a PRO". Las ganancias se consultan en los paneles de AdMob y AdSense.',A.b([i,g,f,e,d,new A.dj(B.e3,a,a,A.df(B.jM,B.bw7,b.x?a:new A.b2p(b),a),a)],n))],n),new A.ac(r,p,o,40),a,!1)}}
+return A.ju(A.b([B.ai7,m,l,k,b.Jq(B.acS,"Publicidad de Google",'Anuncios reales para las empresas con plan Gratis. Hoy funcionan en la web (AdSense); en Android e iOS (AdMob) se activar\xe1n en una pr\xf3xima versi\xf3n, y en Windows no existen. Mientras tanto se muestra el anuncio "P\xe1sate a PRO". Las ganancias se consultan en los paneles de Google.',A.b([i,g,f,e,d,new A.dj(B.e3,a,a,A.df(B.jM,B.bw7,b.x?a:new A.b2p(b),a),a)],n))],n),new A.ac(r,p,o,40),a,!1)}}
 A.b2q.prototype={
 $1(a){return this.a.IU()},
 $S:3}
@@ -165906,7 +165906,7 @@ B.btW=new A.z("Sorteo Activo",null,B.bS,null,null,null,null,null,null,null,null)
 B.bmw=new A.y(!0,B.bf,null,null,null,null,12,B.ax,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.btX=new A.z("Sistema Profesional de Control de Rifas, Juegos y Espect\xe1culos",null,B.bmw,B.cy,null,null,null,null,null,null,null)
 B.bmO=new A.y(!0,B.B2,null,null,null,null,11,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.btY=new A.z("Versi\xf3n 3.0.0",null,B.bmO,B.cy,null,null,null,null,null,null,null)
+B.btY=new A.z("Versi\xf3n 3.0.1",null,B.bmO,B.cy,null,null,null,null,null,null,null)
 B.bu_=new A.z("\ud83d\udcc5 Fechas y Registro de Pagos/Abonos:",null,B.h6,null,null,null,null,null,null,null,null)
 B.bu1=new A.z("Contrase\xf1a / Clave de Acceso:",null,B.W6,null,null,null,null,null,null,null,null)
 B.Wv=new A.z("Porcentaje (%)",null,B.dK,null,null,null,null,null,null,null,null)
