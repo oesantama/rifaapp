@@ -569,7 +569,33 @@ const publicDir = path.join(__dirname, 'public');
 const webDir = path.join(__dirname, '../build/web');
 const staticDir = fs.existsSync(publicDir) ? publicDir : (fs.existsSync(webDir) ? webDir : null);
 
+/** AdSense publisher id as Google expects it ("ca-pub-…"), or '' when not configured. */
+function adsenseClientId() {
+  const client = String(monetizationSettings().adsenseClient || '').trim();
+  return /^(ca-)?pub-\d+$/.test(client) ? (client.startsWith('ca-') ? client : `ca-${client}`) : '';
+}
+
+// AdSense checks the site's root for ads.txt and for its script in the page head before approving it
+app.get('/ads.txt', (req, res) => {
+  const client = adsenseClientId();
+  res.type('text/plain');
+  if (!client) return res.status(404).send('# AdSense no configurado\n');
+  res.send(`google.com, ${client.replace(/^ca-/, '')}, DIRECT, f08c47fec0942fa0\n`);
+});
+
+function sendIndexHtml(res) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  const file = path.join(staticDir, 'index.html');
+  const client = adsenseClientId();
+  if (!client) return res.sendFile(file);
+  const html = fs.readFileSync(file, 'utf8');
+  const tag = `<meta name="google-adsense-account" content="${client}">\n` +
+    `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}" crossorigin="anonymous" data-adsense="1"></script>\n`;
+  res.type('html').send(html.replace('</head>', `${tag}</head>`));
+}
+
 if (staticDir) {
+  app.get(['/', '/index.html'], (req, res) => sendIndexHtml(res));
   app.use(express.static(staticDir, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.html') || filePath.endsWith('main.dart.js') || filePath.endsWith('flutter_bootstrap.js')) {
@@ -581,8 +607,7 @@ if (staticDir) {
   }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(path.join(staticDir, 'index.html'));
+    sendIndexHtml(res);
   });
 }
 
@@ -1527,7 +1552,7 @@ app.get('/api/public/app-config', (req, res) => {
     },
     googleAds: m.adsEnabled ? {
       admobAndroidBannerId: m.admobAndroidBannerId, admobIosBannerId: m.admobIosBannerId,
-      adsenseClient: m.adsenseClient, adsenseSlot: m.adsenseSlot
+      adsenseClient: adsenseClientId(), adsenseSlot: m.adsenseSlot
     } : null
   });
 });
@@ -2024,6 +2049,8 @@ app.put('/api/monetization', superAdminOnly, (req, res) => {
   for (const key of ['admobAndroidBannerId', 'admobIosBannerId', 'adsenseClient', 'adsenseSlot']) {
     if (body[key] !== undefined) next[key] = String(body[key] || '').trim().replace(/[^\w\-\/~.]/g, '').slice(0, 80);
   }
+  // People paste the AdSense id as "pub-…"; the ad script needs "ca-pub-…"
+  if (/^pub-\d+$/.test(next.adsenseClient || '')) next.adsenseClient = `ca-${next.adsenseClient}`;
   if (next.contactUrl && !/^https?:\/\//i.test(next.contactUrl)) {
     return res.status(400).json({ error: 'El enlace de contacto debe empezar por http:// o https://' });
   }
@@ -4755,16 +4782,14 @@ app.delete('/api/advisors/:id/range-request', adminOnly, (req, res) => {
 
 // GET Advisors (Multi-tenant isolated)
 app.get('/api/advisors', (req, res) => {
-  const { companyId } = req.query;
-  let targetCompanyId = companyId;
-  if (!targetCompanyId && req.auth) {
-    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
-    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
-  }
+  // Admins and advisors only ever see their own company; the SuperAdmin may pick one with ?companyId=
+  let targetCompanyId = req.query.companyId;
+  if (req.auth && req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+  if (req.auth && req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
 
   let list = db.advisors || [];
   if (targetCompanyId) {
-    list = list.filter(a => !a.companyId || a.companyId === targetCompanyId);
+    list = list.filter(a => a.companyId === targetCompanyId);
   }
 
   const advisorsWithStats = list.map(adv => {
@@ -5312,11 +5337,26 @@ app.get('/api/dashboard', (req, res) => {
 });
 
 // GET Commissions Summary
+/**
+ * Raffle and advisors a commissions request may see: only the caller's company (the SuperAdmin passes a
+ * raffleId of any company). Without a raffle there is nothing to show, never another company's data.
+ */
+function commissionScope(req, raffleId) {
+  const ownCompanyId = req.auth.role === 'admin' ? req.auth.record.id
+    : (req.auth.role === 'asesor' ? req.auth.record.companyId : null);
+  const visible = (db.raffles || []).filter(r => canAccessRaffle(req, r) && (!ownCompanyId || r.companyId === ownCompanyId));
+  const raffle = visible.find(r => r.id === raffleId) || (raffleId ? null : visible[0]) || null;
+  if (!raffle) return { raffle: null, advisors: [] };
+  const advisors = (db.advisors || []).filter(a => a.companyId && a.companyId === raffle.companyId);
+  return { raffle, advisors };
+}
+
 app.get('/api/commissions', (req, res) => {
   if (!db.commissionPayouts) db.commissionPayouts = [];
   const { raffleId } = req.query;
-  const raffle = db.raffles.find(r => r.id === raffleId) || db.raffles[0];
-  const targetRaffleId = raffle ? raffle.id : 'raf-1';
+  const { raffle, advisors } = commissionScope(req, raffleId);
+  const targetRaffleId = raffle ? raffle.id : '';
+  const advisorIds = new Set(advisors.map(a => a.id));
   
   const commType = raffle ? (raffle.commissionType || 'PORCENTAJE') : 'PORCENTAJE';
   const commVal = raffle ? (parseFloat(raffle.commissionValue) || 10) : 10;
@@ -5324,7 +5364,7 @@ app.get('/api/commissions', (req, res) => {
 
   const raffleTickets = db.tickets.filter(t => t.raffleId === targetRaffleId);
 
-  const advisorStats = db.advisors.map(adv => {
+  const advisorStats = advisors.map(adv => {
     const advTickets = raffleTickets.filter(t => 
       t.advisorId === adv.id || 
       (t.advisorName && t.advisorName.trim().toLowerCase() === adv.name.trim().toLowerCase()) ||
@@ -5375,7 +5415,7 @@ app.get('/api/commissions', (req, res) => {
     globalCommissionPaid,
     globalPendingCommission,
     advisors: advisorStats,
-    payoutsHistory: db.commissionPayouts.filter(p => p.raffleId === targetRaffleId || !p.raffleId)
+    payoutsHistory: db.commissionPayouts.filter(p => advisorIds.has(p.advisorId) && (p.raffleId === targetRaffleId || !p.raffleId))
   });
 });
 
@@ -5383,17 +5423,18 @@ app.get('/api/commissions', (req, res) => {
 app.post('/api/commissions/payout', adminOnly, (req, res) => {
   if (!db.commissionPayouts) db.commissionPayouts = [];
   const { advisorId, amount, note, raffleId } = req.body;
-  const targetRaffleId = raffleId || (db.raffles[0] ? db.raffles[0].id : 'raf-1');
+  const { raffle, advisors } = commissionScope(req, raffleId);
+  if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada.' });
+  const targetRaffleId = raffle.id;
   const payoutAmount = parseFloat(amount) || 0;
 
   if (advisorId === 'ALL') {
-    const raffle = db.raffles.find(r => r.id === targetRaffleId) || db.raffles[0];
     const commType = raffle ? (raffle.commissionType || 'PORCENTAJE') : 'PORCENTAJE';
     const commVal = raffle ? (parseFloat(raffle.commissionValue) || 10) : 10;
     const raffleTickets = db.tickets.filter(t => t.raffleId === targetRaffleId);
 
     let totalPaidOut = 0;
-    db.advisors.forEach(adv => {
+    advisors.forEach(adv => {
       const advTickets = raffleTickets.filter(t => t.advisorId === adv.id || (t.advisorName && t.advisorName.trim().toLowerCase() === adv.name.trim().toLowerCase()));
       const totalTicketsSold = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'CONFIRMADA' || t.status === 'ABONO_PARCIAL').length;
       const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
@@ -5408,6 +5449,7 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
           id: `pay-${Date.now()}-${adv.id}`,
           advisorId: adv.id,
           advisorName: adv.name,
+          companyId: raffle.companyId,
           amount: pending,
           date: new Date().toISOString(),
           note: note || 'Liquidación Global de Comisiones',
@@ -5420,7 +5462,7 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
     return res.json({ message: `Se liquidaron comisiones a todos los asesores por un total de $${totalPaidOut.toFixed(0)} COP.`, totalPaidOut });
   }
 
-  const advisor = db.advisors.find(a => a.id === advisorId);
+  const advisor = advisors.find(a => a.id === advisorId);
   if (!advisor) {
     return res.status(404).json({ error: 'Asesor no encontrado' });
   }
@@ -5429,6 +5471,7 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
     id: `pay-${Date.now()}`,
     advisorId: advisor.id,
     advisorName: advisor.name,
+    companyId: raffle.companyId,
     amount: payoutAmount,
     date: new Date().toISOString(),
     note: note || 'Pago de Comisión Asesor',

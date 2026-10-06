@@ -139785,10 +139785,10 @@ return A.p(j.LQ(),$async$Bj)
 case 7:m=b
 j=J.o(m,"version")
 l=A.i(j==null?"":j)
-if(n.c==null||J.bl(l)===0||!A.bM1(l,"3.0.2")){s=1
+if(n.c==null||J.bl(l)===0||!A.bM1(l,"3.0.3")){s=1
 break}n.e=!0
 j=n.c.R(t.q).f
-i=A.k("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.0.2.",null,null,null,null,B.bpb,null,null,null)
+i=A.k("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.0.3.",null,null,null,null,B.bpb,null,null,null)
 k=A.b([A.cr(B.bsc,null,null,new A.b10(n),null,null)],t.p)
 J.fq(k,A.dY(B.btc,A.bSF(),null))
 j.alh(A.bsp(k,null,B.a1T,i,null,null,null,!1,null,B.adn,null,null,52,null,B.PU,null,null,null))
@@ -139883,7 +139883,7 @@ m=q==null?f:q.d.b
 l=m==null?0:m
 k=A.b([],o)
 if(A.aw(a,f,s).w.a.a>=700){j=g.f
-i=A.aU(new A.df(B.fA,f,f,new A.aD(B.jp,A.k("v3.0.2",f,f,f,f,A.ax(f,f,B.l1,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
+i=A.aU(new A.df(B.fA,f,f,new A.aD(B.jp,A.k("v3.0.3",f,f,f,f,A.ax(f,f,B.l1,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
 h=d.d
 if(h===B.bd)h=B.b93
 else h=h===B.bg?B.b9j:B.b0J
@@ -166089,7 +166089,7 @@ B.bu_=new A.z("Sorteo Activo",null,B.bS,null,null,null,null,null,null,null,null)
 B.bmz=new A.y(!0,B.bf,null,null,null,null,12,B.ax,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.bu0=new A.z("Sistema Profesional de Control de Rifas, Juegos y Espect\xe1culos",null,B.bmz,B.cy,null,null,null,null,null,null,null)
 B.bmR=new A.y(!0,B.B4,null,null,null,null,11,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.bu1=new A.z("Versi\xf3n 3.0.2",null,B.bmR,B.cy,null,null,null,null,null,null,null)
+B.bu1=new A.z("Versi\xf3n 3.0.3",null,B.bmR,B.cy,null,null,null,null,null,null,null)
 B.bu3=new A.z("\ud83d\udcc5 Fechas y Registro de Pagos/Abonos:",null,B.h6,null,null,null,null,null,null,null,null)
 B.bu5=new A.z("Contrase\xf1a / Clave de Acceso:",null,B.W7,null,null,null,null,null,null,null,null)
 B.Ww=new A.z("Porcentaje (%)",null,B.dK,null,null,null,null,null,null,null,null)

@@ -8,6 +8,15 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.0.3] - 2026-10-06
+
+### Corregido
+- **Seguridad**: el tablero de comisiones mostraba asesores de otras empresas (por ejemplo, los de la Empresa Demo) y "Liquidar a TODOS" podía registrar pagos a asesores ajenos. Ahora las comisiones, las liquidaciones y la lista de asesores solo incluyen la empresa de quien inicia sesión.
+
+### Publicidad (AdSense)
+- El servidor publica `/ads.txt` y pone el código de AdSense en la página, que Google exige para aprobar el sitio.
+- El ID de editor se acepta como `pub-…` o `ca-pub-…`.
+
 ## [3.0.2] - 2026-10-06
 
 ### Nuevo
