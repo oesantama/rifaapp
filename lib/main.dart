@@ -3,9 +3,11 @@ import 'version.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'ui/features/legal/legal_widgets.dart';
 import 'package:provider/provider.dart';
 import 'ui/core/theme.dart';
 import 'ui/core/widgets/app_logo.dart';
+import 'ui/core/widgets/monetization_banners.dart';
 import 'data/repositories/raffle_repository.dart';
 import 'ui/features/auth/view_models/auth_view_model.dart';
 import 'ui/features/auth/views/login_view.dart';
@@ -28,6 +30,10 @@ import 'ui/features/banks/view_models/bank_view_model.dart';
 import 'ui/features/banks/views/banks_view.dart';
 import 'ui/features/lotteries/view_models/lottery_view_model.dart';
 import 'ui/features/lotteries/views/lotteries_view.dart';
+import 'ui/features/monetization/app_config_view_model.dart';
+import 'ui/features/monetization/monetization_view.dart';
+import 'ui/features/admin_cash/view_models/cash_view_model.dart';
+import 'ui/features/admin_cash/views/advisor_cash_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
@@ -63,6 +69,8 @@ class _RifaAppState extends State<RifaApp> {
         ChangeNotifierProvider(create: (_) => SaleChannelViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => BankViewModel(repository: repository)),
         ChangeNotifierProvider(create: (_) => LotteryViewModel(repository: repository)),
+        ChangeNotifierProvider(create: (_) => AppConfigViewModel(repository: repository)..load()),
+        ChangeNotifierProvider(create: (_) => CashViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -183,7 +191,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
     _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       _checkForUpdate();
-      if (mounted) Provider.of<AuthViewModel>(context, listen: false).refreshActiveAdvisor();
+      if (mounted) {
+        final auth = Provider.of<AuthViewModel>(context, listen: false);
+        auth.refreshActiveAdvisor();
+        auth.refreshUser(); // plan / ads changed by the SuperAdmin
+        Provider.of<AppConfigViewModel>(context, listen: false).load();
+      }
     });
   }
 
@@ -234,6 +247,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const SaleChannelsView(),
             const BanksView(),
             const LotteriesView(),
+            const MonetizationView(),
           ]
         : authVM.isAdmin
             ? [
@@ -247,6 +261,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             : [
                 DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
                 const TicketGridView(),
+                const AdvisorCashView(),
                 const WinnerRegistrationView(),
               ];
 
@@ -357,16 +372,18 @@ class _MainShellScreenState extends State<MainShellScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   InkWell(
-                    onTap: () {
-                      if (authVM.isAdmin || authVM.isSuperAdmin) {
-                        showDialog(
-                          context: context,
-                          builder: (_) => const AdminProfileDialog(),
-                        );
-                      } else {
-                        ChangePasswordDialog.show(context);
-                      }
-                    },
+                    onTap: () => showAccountSheet(
+                      context,
+                      name: authVM.currentUserName,
+                      isSuperAdmin: authVM.isSuperAdmin,
+                      onProfile: () {
+                        if (authVM.isAdmin || authVM.isSuperAdmin) {
+                          showDialog(context: context, builder: (_) => const AdminProfileDialog());
+                        } else {
+                          ChangePasswordDialog.show(context);
+                        }
+                      },
+                    ),
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
                       padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: 4),
@@ -509,6 +526,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.confirmation_number),
                         label: Text('Loterías'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.workspace_premium_outlined),
+                        selectedIcon: Icon(Icons.workspace_premium),
+                        label: Text('Planes'),
+                      ),
                     ]
                   : authVM.isAdmin
                       ? const [
@@ -555,6 +577,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                             label: Text('Mis Boletas'),
                           ),
                           NavigationRailDestination(
+                            icon: Icon(Icons.account_balance_wallet_outlined),
+                            selectedIcon: Icon(Icons.account_balance_wallet),
+                            label: Text('Mi Caja'),
+                          ),
+                          NavigationRailDestination(
                             icon: Icon(Icons.emoji_events_outlined),
                             selectedIcon: Icon(Icons.emoji_events),
                             label: Text('Premios'),
@@ -563,7 +590,15 @@ class _MainShellScreenState extends State<MainShellScreen> {
             ),
           const VerticalDivider(thickness: 1, width: 1),
           // Main Body
-          Expanded(child: pages[_selectedIndex]),
+          Expanded(
+            child: Column(
+              children: [
+                const DemoBannerWidget(),
+                Expanded(child: pages[_selectedIndex]),
+                const AdBannerWidget(),
+              ],
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: MediaQuery.of(context).size.width < 700
@@ -577,6 +612,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Medios'),
                       BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Bancos'),
                       BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'Loterías'),
+                      BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: 'Planes'),
                     ]
                   : authVM.isAdmin
                       ? const [
@@ -590,6 +626,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       : const [
                           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
                           BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Mi Caja'),
                           BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                         ],
             )

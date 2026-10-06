@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/widgets/error_alert.dart';
+import 'package:rifaapp/ui/features/auth/views/change_password_dialog.dart' show validateNewPassword;
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/advisor_sales_breakdown.dart';
 import 'package:rifaapp/ui/features/advisors/views/assigned_numbers_widgets.dart';
@@ -56,6 +58,7 @@ class AdvisorManagementView extends StatelessWidget {
     String status = advisor?.status ?? 'ACTIVO';
 
     bool obscurePassword = true;
+    final formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
@@ -74,11 +77,15 @@ class AdvisorManagementView extends StatelessWidget {
                 ],
               ),
               content: SingleChildScrollView(
+                  child: Form(
+                key: formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextField(
+                    TextFormField(
                       controller: nameCtrl,
+                      validator: (v) => (v ?? '').trim().length < 3 ? 'Escriba el nombre completo (mínimo 3 letras)' : null,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         labelText: 'Nombre Completo *',
                         border: OutlineInputBorder(),
@@ -86,8 +93,14 @@ class AdvisorManagementView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: emailCtrl,
+                      validator: (v) => (v ?? '').trim().isEmpty
+                          ? 'Escriba el correo'
+                          : (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v!.trim())
+                              ? 'Correo no válido (ej: nombre@correo.com)'
+                              : null),
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         labelText: 'Correo Electrónico *',
                         hintText: 'asesor@rifamaster.com',
@@ -97,8 +110,14 @@ class AdvisorManagementView extends StatelessWidget {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: usernameCtrl,
+                      validator: (v) => (v ?? '').trim().length < 3
+                          ? 'Escriba el usuario (mínimo 3 caracteres)'
+                          : (v!.trim().contains(' ') ? 'El usuario no puede tener espacios' : null),
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      autofillHints: const [AutofillHints.newUsername],
+                      autocorrect: false,
                       decoration: const InputDecoration(
                         labelText: 'Nombre de Usuario de Acceso *',
                         hintText: 'Ej: adv01',
@@ -107,8 +126,12 @@ class AdvisorManagementView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: passwordCtrl,
+                      validator: (v) => (v ?? '').isEmpty ? (isEditing ? null : 'Escriba la contraseña') : validateNewPassword(v),
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      autofillHints: const [AutofillHints.newPassword],
+                      autocorrect: false,
                       obscureText: obscurePassword,
                       decoration: InputDecoration(
                         labelText: isEditing ? 'Nueva Contraseña (opcional)' : 'Contraseña de Acceso *',
@@ -129,8 +152,10 @@ class AdvisorManagementView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: phoneCtrl,
+                      validator: (v) => (v ?? '').trim().length != 10 ? 'Debe tener 10 dígitos (ej: 3001234567)' : null,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         labelText: 'Teléfono / WhatsApp *',
                         border: OutlineInputBorder(),
@@ -140,8 +165,11 @@ class AdvisorManagementView extends StatelessWidget {
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    TextFormField(
                       controller: codeCtrl,
+                      validator: (v) =>
+                          (v ?? '').trim().length < 5 || v!.trim().length > 15 ? 'Escriba la cédula (de 5 a 15 dígitos)' : null,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         labelText: 'Cédula / Documento de Identidad (Código) *',
                         border: OutlineInputBorder(),
@@ -205,12 +233,48 @@ class AdvisorManagementView extends StatelessWidget {
                     ],
                   ],
                 ),
-              ),
+              )),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
                 ElevatedButton(
                   onPressed: () async {
-                    if (nameCtrl.text.trim().isNotEmpty && codeCtrl.text.trim().isNotEmpty) {
+                    // Says exactly what is missing (each field also shows its error in red)
+                    final checks = <(String, String?)>[
+                      (
+                        'Nombre',
+                        ((v) => (v ?? '').trim().length < 3 ? 'Escriba el nombre completo (mínimo 3 letras)' : null)(nameCtrl.text)
+                      ),
+                      (
+                        'Correo',
+                        ((v) => (v ?? '').trim().isEmpty
+                            ? 'Escriba el correo'
+                            : (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v!.trim())
+                                ? 'Correo no válido (ej: nombre@correo.com)'
+                                : null))(emailCtrl.text)
+                      ),
+                      (
+                        'Usuario',
+                        ((v) => (v ?? '').trim().length < 3
+                            ? 'Escriba el usuario (mínimo 3 caracteres)'
+                            : (v!.trim().contains(' ') ? 'El usuario no puede tener espacios' : null))(usernameCtrl.text)
+                      ),
+                      (
+                        'Contraseña',
+                        ((v) =>
+                            (v ?? '').isEmpty ? (isEditing ? null : 'Escriba la contraseña') : validateNewPassword(v))(passwordCtrl.text)
+                      ),
+                      (
+                        'Teléfono',
+                        ((v) => (v ?? '').trim().length != 10 ? 'Debe tener 10 dígitos (ej: 3001234567)' : null)(phoneCtrl.text)
+                      ),
+                      (
+                        'Cédula',
+                        ((v) => (v ?? '').trim().length < 5 || v!.trim().length > 15 ? 'Escriba la cédula (de 5 a 15 dígitos)' : null)(
+                            codeCtrl.text)
+                      ),
+                    ].where((c) => c.$2 != null).toList();
+                    formKey.currentState?.validate();
+                    if (checks.isEmpty) {
                       final authVM = Provider.of<AuthViewModel>(context, listen: false);
                       final advVM = Provider.of<AdvisorViewModel>(context, listen: false);
                       List<String> ranges = rangeCtrl.text.isNotEmpty ? rangeCtrl.text.split(',').map((e) => e.trim()).toList() : [];
@@ -228,8 +292,6 @@ class AdvisorManagementView extends StatelessWidget {
                       };
                       if (passwordCtrl.text.trim().isNotEmpty) {
                         data['password'] = passwordCtrl.text.trim();
-                      } else if (!isEditing) {
-                        data['password'] = '12345678';
                       }
 
                       bool ok;
@@ -240,9 +302,7 @@ class AdvisorManagementView extends StatelessWidget {
                       }
 
                       if (!ok && ctx.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(backgroundColor: Colors.red, content: Text(advVM.lastError ?? 'No se pudo guardar el asesor')),
-                        );
+                        await showErrorAlert(ctx, 'No se pudo guardar el asesor', advVM.lastError ?? 'Intente de nuevo.');
                       }
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
@@ -251,11 +311,11 @@ class AdvisorManagementView extends StatelessWidget {
                         );
                       }
                     } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          backgroundColor: Colors.red,
-                          content: Text('Por favor complete Nombre y Cédula válidos'),
-                        ),
+                      await showErrorAlert(
+                        ctx,
+                        'Faltan datos del asesor',
+                        'Revise ${checks.length == 1 ? 'este campo' : 'estos campos'} (también están marcados en rojo):\n\n'
+                            '${checks.map((c) => '• ${c.$1}: ${c.$2}').join('\n')}',
                       );
                     }
                   },

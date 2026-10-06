@@ -51,6 +51,38 @@ class WinnerViewModel extends ChangeNotifier {
     }
   }
 
+  /// Records who received a prize (or removes it with cancel: true); returns the error or null.
+  Future<String?> savePrizeDelivery(String winnerId, Map<String, dynamic> body) async {
+    try {
+      final updated = await _repository.savePrizeDelivery(winnerId, body);
+      final idx = _winners.indexWhere((w) => w.id == winnerId);
+      if (idx != -1) _winners[idx] = updated;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Main draw (gran premio) results of a raffle, latest first (earlier ones were played again).
+  List<WinnerRecord> mainDrawsOf(String raffleId) =>
+      _winners.where((w) => w.raffleId == raffleId && w.isMainDraw).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  /// Plays a main draw without winner again on another date, or closes it. Returns
+  /// (error, raffle json) so the caller can refresh the raffle.
+  Future<(String?, Map<String, dynamic>?)> saveMainDrawDecision(String winnerId, Map<String, dynamic> body) async {
+    try {
+      final r = await _repository.saveMainDrawDecision(winnerId, body);
+      final updated = WinnerRecord.fromJson(Map<String, dynamic>.from(r['record']));
+      final idx = _winners.indexWhere((w) => w.id == winnerId);
+      if (idx != -1) _winners[idx] = updated;
+      notifyListeners();
+      return (null, r['raffle'] is Map ? Map<String, dynamic>.from(r['raffle']) : null);
+    } catch (e) {
+      return (e.toString(), null);
+    }
+  }
+
   Future<bool> deleteWinner(String id, String reason) async {
     _isLoading = true;
     notifyListeners();

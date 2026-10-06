@@ -89,10 +89,34 @@ class Raffle {
   final Map<String, dynamic>? templateConfig;
 
   /// Lottery of the main draw; older raffles only had the weekly one.
+  bool get isClosed => scheduledDeletionAt != null;
+
+  /// Days left before the closed raffle is deleted.
+  int get daysUntilDeletion {
+    final at = DateTime.tryParse(scheduledDeletionAt ?? '');
+    if (at == null) return 0;
+    final hours = at.difference(DateTime.now()).inHours;
+    return hours <= 0 ? 0 : (hours / 24).ceil();
+  }
+
+  /// The main draw date has passed (Colombian calendar).
+  bool get drawDatePassed {
+    final d = DateTime.tryParse(mainDrawDate);
+    if (d == null) return false;
+    final colNow = DateTime.now().toUtc().subtract(const Duration(hours: 5));
+    final today = DateTime(colNow.year, colNow.month, colNow.day);
+    return DateTime(d.year, d.month, d.day).isBefore(today);
+  }
+
   String get mainLottery => mainLotteryName.trim().isNotEmpty ? mainLotteryName.trim() : lotteryName.trim();
 
   /// Accounts where buyers pay by bank transfer.
   final List<TransferAccount> transferAccounts;
+
+  /// Closed after its draw: deleted with all its data on [scheduledDeletionAt].
+  final String? closedAt;
+  final String? closedBy;
+  final String? scheduledDeletionAt;
 
   /// Drive URLs and Folder metadata
   final String? aficheUrl;
@@ -133,6 +157,9 @@ class Raffle {
     this.companyId = 'comp-1',
     this.templateConfig,
     this.transferAccounts = const [],
+    this.closedAt,
+    this.closedBy,
+    this.scheduledDeletionAt,
     this.aficheUrl,
     this.aficheDriveId,
     this.fondoBoletaUrl,
@@ -180,6 +207,9 @@ class Raffle {
         for (final a in (json['transferAccounts'] as List? ?? []))
           if (a is Map) TransferAccount.fromJson(Map<String, dynamic>.from(a)),
       ],
+      closedAt: json['closedAt'],
+      closedBy: json['closedBy'],
+      scheduledDeletionAt: json['scheduledDeletionAt'],
       aficheUrl: json['aficheUrl'],
       aficheDriveId: json['aficheDriveId'],
       fondoBoletaUrl: json['fondoBoletaUrl'],

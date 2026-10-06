@@ -20,6 +20,7 @@ import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'ticket_print_dialog.dart';
 import 'transfer_widgets.dart';
+import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte;
 
 class TicketDetailDialog extends StatefulWidget {
   final Ticket ticket;
@@ -457,6 +458,19 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
 
     // No phone (or WhatsApp did not open): show the message to copy it or pick the contact
     if (mounted) await WhatsAppHelper.showShareMessageDialog(context, text);
+  }
+
+  Widget _cashStateLabel(Abono ab) {
+    const labels = {
+      'POR_VALIDAR': ('Transferencia por validar en caja', Colors.orange),
+      'VALIDADA': ('✓ Transferencia validada en caja', Colors.green),
+      'RECHAZADA': ('✗ Transferencia rechazada en caja', Colors.red),
+      'EN_PODER_ASESOR': ('Efectivo en poder del asesor', Colors.orange),
+      'EN_ENTREGA': ('Efectivo en entrega del asesor (por confirmar)', Colors.blue),
+      'RECIBIDO': ('✓ Efectivo recibido en caja', Colors.green),
+    };
+    final (text, color) = labels[ab.cashState] ?? (ab.cashState, Colors.grey);
+    return Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color.shade800));
   }
 
   /// Voids one payment (e.g. saved twice) after asking for the reason; it stays in the history.
@@ -1310,6 +1324,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                 'Aprobación ${ab.approvalNumber} • ${ab.originBank ?? ''} • ${ColombiaTime.format(ab.transferDate)}',
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                               ),
+                            if (ab.amount > 0) _cashStateLabel(ab),
                             if (ab.duplicateApprovalConfirmed)
                               Text('⚠ Aprobación repetida, confirmada al registrar',
                                   style: TextStyle(fontSize: 11, color: Colors.orange.shade900, fontWeight: FontWeight.w600)),
@@ -1322,9 +1337,24 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                               IconButton(
                                 icon: const Icon(Icons.image_search, color: AppTheme.primaryBlue),
                                 tooltip: 'Ver Soporte (Google Drive)',
-                                onPressed: () => _showReceiptDialog(context, ab),
+                                onPressed: () => showSoporte(
+                                  context,
+                                  driveId: ab.soporteDriveId,
+                                  url: ab.soporteUrl,
+                                  webViewUrl: ab.soporteWebViewUrl,
+                                  title: 'Soporte de transferencia • ${currency.format(ab.amount)}',
+                                ),
                               ),
-                            if (authVM.isAdmin && ab.amount > 0)
+                            // Reconciled payments are locked: voiding them would break the cash records
+                            if (authVM.isAdmin && ab.amount > 0 && ab.voidBlocker != null)
+                              Tooltip(
+                                message: '${ab.voidBlocker}: no se puede anular',
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(Icons.lock_outline, color: Colors.grey),
+                                ),
+                              )
+                            else if (authVM.isAdmin && ab.amount > 0)
                               IconButton(
                                 icon: const Icon(Icons.remove_circle_outline, color: AppTheme.dangerRose),
                                 tooltip: 'Anular este abono (por ejemplo, si quedó repetido)',
@@ -1357,7 +1387,26 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                 const SizedBox(height: 12),
                 _buildAnnulmentsHistory(currency),
               ],
-              if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE') ...[
+              if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE' && widget.ticket.abonos.any((a) => a.voidBlocker != null)) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_outline, color: Colors.grey, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'La venta tiene pagos conciliados en caja (o en una entrega pendiente): no se puede anular.',
+                          style: TextStyle(fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE') ...[
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,

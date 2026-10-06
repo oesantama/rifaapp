@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/widgets/error_alert.dart';
+import 'package:rifaapp/ui/features/company/views/plan_widgets.dart';
 import 'package:rifaapp/data/models/company.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/data/services/auth_http.dart';
@@ -51,11 +53,19 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     );
   }
 
+  /// The form has errors: say so (the fields with errors are marked in red; they may be scrolled out of view).
+  void _showMissing(GlobalKey<FormState> formKey) {
+    showErrorAlert(
+      context,
+      'Faltan datos',
+      'Revise los campos marcados en rojo: nombre de la empresa, usuario del administrador, contraseña '
+          '(8 o más caracteres con letras y números) y correo válido.',
+    );
+  }
+
   void _showError(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error is ApiException ? error.message : 'No se pudo guardar: $error')),
-    );
+    showErrorAlert(context, 'No se pudo guardar', error.toString());
   }
 
   void _showCreateCompanyDialog() {
@@ -66,6 +76,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     final adminEmailController = TextEditingController();
     final adminUsernameController = TextEditingController();
     final adminPasswordController = TextEditingController();
+    String tier = 'FREE';
+    String? proUntil;
 
     showDialog(
       context: context,
@@ -110,6 +122,15 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        PlanFields(
+                          tier: tier,
+                          proUntil: proUntil,
+                          onChanged: (t, until) => setDialogState(() {
+                            tier = t;
+                            proUntil = until;
+                          }),
+                        ),
+                        const SizedBox(height: 16),
                         const Divider(),
                         const Text(
                           '👤 Credenciales para el Administrador de la Empresa:',
@@ -130,6 +151,9 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: adminEmailController,
+                          validator: (val) => (val ?? '').trim().isEmpty || RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(val!.trim())
+                              ? null
+                              : 'Correo no válido (ej: nombre@correo.com)',
                           decoration: const InputDecoration(
                             labelText: 'Correo Electrónico',
                             hintText: 'admin@empresa.com',
@@ -140,6 +164,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         _responsivePair(
                           TextFormField(
                             controller: adminUsernameController,
+                            autofillHints: const [AutofillHints.newUsername],
+                            autocorrect: false,
                             decoration: const InputDecoration(
                               labelText: 'Usuario Admin *',
                               hintText: 'ej: admin_sanmartin',
@@ -149,6 +175,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                           TextFormField(
                             controller: adminPasswordController,
+                            autofillHints: const [AutofillHints.newPassword],
                             decoration: InputDecoration(
                               labelText: 'Contraseña temporal *',
                               helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
@@ -191,6 +218,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         'adminEmail': adminEmailController.text.trim(),
                         'adminUsername': adminUsernameController.text.trim(),
                         'adminPassword': adminPasswordController.text,
+                        'tier': tier,
+                        'proUntil': proUntil ?? '',
                       };
                       final Company created;
                       try {
@@ -212,6 +241,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           );
                         }
                       }
+                    } else {
+                      _showMissing(formKey);
                     }
                   },
                   child: const Text('Crear Empresa y Admin'),
@@ -233,6 +264,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     final adminUsernameController = TextEditingController(text: company.adminUsername);
     final adminPasswordController = TextEditingController();
     String selectedStatus = company.status;
+    String tier = company.tier;
+    String? proUntil = company.proUntil;
 
     showDialog(
       context: context,
@@ -292,6 +325,17 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        if (!company.isDemo) ...[
+                          PlanFields(
+                            tier: tier,
+                            proUntil: proUntil,
+                            onChanged: (t, until) => setDialogState(() {
+                              tier = t;
+                              proUntil = until;
+                            }),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         const Divider(),
                         const Text(
                           '👤 Credenciales del Administrador:',
@@ -311,6 +355,9 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: adminEmailController,
+                          validator: (val) => (val ?? '').trim().isEmpty || RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(val!.trim())
+                              ? null
+                              : 'Correo no válido (ej: nombre@correo.com)',
                           decoration: const InputDecoration(
                             labelText: 'Correo Electrónico',
                             prefixIcon: Icon(Icons.email),
@@ -320,6 +367,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         _responsivePair(
                           TextFormField(
                             controller: adminUsernameController,
+                            autofillHints: const [AutofillHints.newUsername],
+                            autocorrect: false,
                             decoration: const InputDecoration(
                               labelText: 'Usuario Admin *',
                               prefixIcon: Icon(Icons.account_circle),
@@ -328,6 +377,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ),
                           TextFormField(
                             controller: adminPasswordController,
+                            autofillHints: const [AutofillHints.newPassword],
                             decoration: InputDecoration(
                               labelText: 'Nueva contraseña (opcional)',
                               helperText: 'Déjela vacía para no cambiarla.',
@@ -367,6 +417,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         'name': nameController.text.trim(),
                         'code': codeController.text.trim(),
                         'status': selectedStatus,
+                        if (!company.isDemo) 'tier': tier,
+                        if (!company.isDemo) 'proUntil': proUntil ?? '',
                         'adminName': adminNameController.text.trim(),
                         'adminEmail': adminEmailController.text.trim(),
                         'adminUsername': adminUsernameController.text.trim(),
@@ -391,6 +443,8 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           );
                         }
                       }
+                    } else {
+                      _showMissing(formKey);
                     }
                   },
                   icon: const Icon(Icons.save),
@@ -868,6 +922,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                             ),
                           ),
+                          PlanBadge(company: comp),
                         ],
                       ),
                     ],

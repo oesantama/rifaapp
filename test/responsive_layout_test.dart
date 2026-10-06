@@ -19,7 +19,7 @@ final _companies = [
     'id': 'comp-1', 'name': 'contruexito', 'code': 'EMP01', 'status': 'ACTIVA', 'adminUsername': 'william', 'adminPassword': '1234',
     'adminName': 'WILLIAM SANTAMARIA', 'adminEmail': 'william@santamaria.com', 'createdAt': '2026-09-29T19:54:13.535Z',
     'adminsCount': 1, 'admins': [{'name': 'WILLIAM SANTAMARIA', 'username': 'william', 'email': 'william@santamaria.com', 'password': '1234'}],
-    'rafflesCount': 1, 'raffles': [], 'advisorsCount': 1, 'advisors': [],
+    'rafflesCount': 1, 'raffles': [], 'advisorsCount': 1, 'advisors': [], 'tier': 'PRO', 'proUntil': '2027-01-31', 'effectiveTier': 'PRO',
   },
   {
     'id': 'comp-2', 'name': 'marisol y edgar distribuciones del norte', 'code': 'SANT-01', 'status': 'INACTIVA', 'adminUsername': 'marisol',
@@ -107,6 +107,34 @@ final mockClient = MockClient((req) async {
         'raffleTitle': 'Gran rifa', 'numbers': ['48'], 'buyerName': 'Julio Arvey Amaya', 'buyerPhone': '3229484689',
         'advisorName': 'edgar santamaria', 'saleChannel': '', 'amount': 50000},
     ];
+  } else if (path == '/cash/deliveries') {
+    body = [
+      {'id': 'ent-1', 'raffleId': 'raf-1', 'advisorId': 'adv-1', 'advisorName': 'Carlos Andrés Mendoza Rodríguez', 'method': 'transferencia',
+        'total': 7000, 'status': 'PENDIENTE', 'reportedAt': '2026-10-05T15:00:00Z', 'transferDate': '2026-10-05', 'originBank': 'Nequi',
+        'approvalNumber': 'M123456', 'destination': 'Bancolombia • Ahorros • 123', 'soporteWebViewUrl': 'https://drive.google.com/x',
+        'items': [{'ticketId': 'tk-1', 'abonoId': 'ab-1', 'numbers': ['00', '25', '50', '75'], 'amount': 5000, 'buyerName': 'María Fernanda Gómez', 'state': 'EN_ENTREGA'},
+                  {'ticketId': 'tk-2', 'abonoId': 'ab-2', 'numbers': ['01', '26', '51', '76'], 'amount': 2000, 'buyerName': 'María Fernanda Gómez', 'state': 'EN_ENTREGA'}]},
+    ];
+  } else if (path == '/public/app-config') {
+    body = {'demoEnabled': true, 'ad': {'title': 'Publicidad • Versión Gratuita', 'text': 'Pasa a PRO', 'priceText': '\$49.900 al mes'}};
+  } else if (path == '/monetization/summary') {
+    body = {
+      'thisMonth': 149800, 'total': 1248000, 'mrr': 91600,
+      'months': [for (var i = 0; i < 12; i++) {'month': '2026-${(i % 12 + 1).toString().padLeft(2, '0')}', 'total': i * 49900}],
+      'counts': {'pro': 2, 'porVencer': 1, 'vencido': 1, 'gratis': 3, 'demo': 1},
+      'companies': [
+        {'id': 'comp-1', 'name': 'contruexito', 'status': 'POR_VENCER', 'tier': 'PRO', 'proUntil': '2026-10-09',
+          'lastPayment': {'amount': 49900, 'months': 1, 'paidOn': '2026-09-09'}, 'totalPaid': 449100},
+        {'id': 'comp-2', 'name': 'marisol y edgar distribuciones del norte', 'status': 'GRATIS', 'tier': 'FREE', 'proUntil': null, 'lastPayment': null, 'totalPaid': 0},
+      ],
+    };
+  } else if (path == '/my-plan') {
+    body = {'tier': 'PRO', 'status': 'POR_VENCER', 'proUntil': '2026-10-09', 'isDemo': false, 'monthlyPrice': 49900, 'yearlyPrice': 499000,
+      'contactWhatsApp': '3001234567', 'contactUrl': '', 'payments': [{'id': 'p1', 'amount': 49900, 'months': 1, 'paidOn': '2026-09-09', 'periodStart': '2026-09-10', 'periodEnd': '2026-10-09'}]};
+  } else if (path == '/monetization') {
+    body = {'demoEnabled': true, 'adTitle': 'Publicidad • Versión Gratuita', 'adText': 'Pasa a la versión PRO para eliminar anuncios.',
+      'upgradeTitle': 'Actualizar a RifaApp PRO', 'upgradeText': 'Sin anuncios y rifas ilimitadas.', 'priceText': '\$49.900 al mes',
+      'contactWhatsApp': '3001234567', 'contactUrl': '', 'lastDemoReset': '2026-10-05T10:00:00Z'};
   } else if (path == '/lotteries') {
     body = [
       {'id': 'lot-1', 'name': 'Lotería de Boyacá', 'active': true},

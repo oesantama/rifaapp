@@ -13,6 +13,10 @@ class Company {
   final List<Map<String, dynamic>> raffles;
   final int advisorsCount;
   final List<Map<String, dynamic>> advisors;
+  final String tier; // FREE (with ads) or PRO (no ads)
+  final String? proUntil; // last day of PRO ("YYYY-MM-DD"); null = no end date
+  final String effectiveTier; // plan in force today (an expired PRO is FREE)
+  final bool isDemo;
 
   Company({
     required this.id,
@@ -29,6 +33,10 @@ class Company {
     this.raffles = const [],
     this.advisorsCount = 0,
     this.advisors = const [],
+    this.tier = 'FREE',
+    this.proUntil,
+    this.effectiveTier = 'FREE',
+    this.isDemo = false,
   });
 
   factory Company.fromJson(Map<String, dynamic> json) {
@@ -66,6 +74,10 @@ class Company {
       raffles: rawRaffles,
       advisorsCount: json['advisorsCount'] ?? rawAdvisors.length,
       advisors: rawAdvisors,
+      tier: json['tier'] ?? 'FREE',
+      proUntil: (json['proUntil'] ?? '').toString().isEmpty ? null : json['proUntil'].toString(),
+      effectiveTier: json['effectiveTier'] ?? json['tier'] ?? 'FREE',
+      isDemo: json['isDemo'] == true,
     );
   }
 
@@ -78,6 +90,8 @@ class Company {
         'adminName': adminName,
         'adminEmail': adminEmail,
         'createdAt': createdAt,
+        'tier': tier,
+        'proUntil': proUntil,
         'adminsCount': adminsCount,
         'admins': admins,
         'rafflesCount': rafflesCount,

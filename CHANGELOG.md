@@ -8,6 +8,37 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.0.0] - 2026-10-05
+
+Versión mayor: cambia la forma de trabajar la caja.
+
+### Monetización
+- Planes por empresa: **Gratis** (con publicidad) o **PRO** (sin publicidad) con fecha de vencimiento; al vencer vuelve a Gratis sola. Las empresas existentes quedan en PRO.
+- SuperAdmin → **Planes**: tablero de **ingresos** (mes, recurrente, total y últimos 12 meses), **registro de pagos** por empresa (1, 3, 6 o 12 meses; el PRO se extiende solo) y anulación de pagos.
+- Precios de 1, 3, 6 y 12 meses; anuncio "Pásate a PRO" editable con WhatsApp y enlace para contratar.
+- Publicidad de Google: AdMob (Android/iOS) y AdSense (web) configurables; en Windows se muestra el anuncio propio.
+- **Mi plan** en el Dashboard de cada administrador: estado, vencimiento, precios, renovar y sus pagos.
+- **Modo demo** con empresa de prueba que se reinicia cada 48 horas; el SuperAdmin lo activa/apaga y lo reinicia.
+
+### Caja
+- Transferencias de compradores: datos y soporte en Caja; el administrador las **valida** o **rechaza**.
+- El asesor reporta en **Mi Caja** la entrega del efectivo cobrado (en efectivo o por transferencia con soporte obligatorio, una o varias boletas); el administrador la **confirma** o **rechaza**.
+- Una boleta queda confirmada en caja cuando todos sus pagos están conciliados. **Lo conciliado ya no se puede anular.**
+- Los soportes se ven dentro de la app y las entregas se guardan en Drive en `Entregas_Asesores/[asesor]`.
+
+### Ganadores y rifas
+- **Gran premio**: resultado del sorteo principal (la boleta debe estar pagada completa) y registro de la **entrega del premio** (también en semanales). Si no hay ganador: **volver a jugar en otra fecha** o **cerrar sin ganador**, con historial de intentos.
+- **Cierre de rifas**: después del sorteo se cierra la rifa, se descarga su información (**Excel + soportes**) y a los **7 días se elimina** toda su información (con copia de seguridad previa; la carpeta de Drive va a la papelera). Se puede reactivar durante esos 7 días.
+
+### Google Play y legal
+- Páginas públicas de **política de privacidad**, **términos y condiciones** y **eliminación de cuenta**, con los datos legales que configura el SuperAdmin; solicitud de eliminación de cuenta dentro de la app.
+- Guía de publicación en `docs/PUBLICACION_GOOGLE_PLAY.md`.
+
+### Corregido
+- Al crear asesores o empresas se indica exactamente qué falta y los errores se muestran en una alerta visible; usuario y cédula se validan en toda la plataforma.
+- El plan y la publicidad se actualizan sin cerrar sesión.
+- Android ahora requiere 7.0 o superior (requisito de AdMob).
+
 ## [2.5.3] - 2026-10-03
 
 ### Corregido

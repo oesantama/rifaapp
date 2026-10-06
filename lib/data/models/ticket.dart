@@ -15,6 +15,38 @@ class Abono {
   final String? approvalNumber;
   final String? originBank;
   final bool duplicateApprovalConfirmed; // saved although the approval number already existed
+  // Cash control
+  final String? transferAccountId;
+  final Map<String, dynamic>? verification; // buyer transfer validated / rejected by the admin
+  final Map<String, dynamic>? received; // cash received by the company
+  final String? deliveryId; // in an advisor's delivery waiting for the admin
+
+  bool get isTransfer => metodoPago == 'transferencia';
+
+  /// Reconciled in cash (same rule as the server): it can no longer be voided.
+  bool get isReconciled {
+    if (amount <= 0) return false;
+    if (isTransfer) return verification?['status'] == 'VALIDADA';
+    return received != null && received!['auto'] != true;
+  }
+
+  /// Why this payment cannot be voided, or null.
+  String? get voidBlocker {
+    if (isReconciled) return isTransfer ? 'Transferencia validada en caja' : 'Pago conciliado en caja';
+    if (deliveryId != null) return 'En una entrega del asesor pendiente de revisión';
+    return null;
+  }
+
+  /// POR_VALIDAR / VALIDADA / RECHAZADA (transfers) or EN_PODER_ASESOR / EN_ENTREGA / RECIBIDO (cash).
+  String get cashState {
+    if (isTransfer) {
+      if (verification == null) return 'POR_VALIDAR';
+      return verification!['status'] == 'VALIDADA' ? 'VALIDADA' : 'RECHAZADA';
+    }
+    if (received != null) return 'RECIBIDO';
+    if (deliveryId != null) return 'EN_ENTREGA';
+    return 'EN_PODER_ASESOR';
+  }
 
   Abono({
     required this.id,
@@ -32,6 +64,10 @@ class Abono {
     this.approvalNumber,
     this.originBank,
     this.duplicateApprovalConfirmed = false,
+    this.transferAccountId,
+    this.verification,
+    this.received,
+    this.deliveryId,
   });
 
   factory Abono.fromJson(Map<String, dynamic> json) {
@@ -51,6 +87,10 @@ class Abono {
       approvalNumber: json['approvalNumber'],
       originBank: json['originBank'],
       duplicateApprovalConfirmed: json['duplicateApprovalConfirmed'] == true,
+      transferAccountId: json['transferAccountId'],
+      verification: json['verification'] is Map ? Map<String, dynamic>.from(json['verification']) : null,
+      received: json['received'] is Map ? Map<String, dynamic>.from(json['received']) : null,
+      deliveryId: json['deliveryId'],
     );
   }
 

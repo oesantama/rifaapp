@@ -1,14 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
+import 'package:rifaapp/data/models/cash_delivery.dart';
 import 'package:rifaapp/data/models/ticket.dart';
-import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
-import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
-import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
-import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
+import 'package:rifaapp/ui/features/admin_cash/view_models/cash_view_model.dart';
+import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart';
+import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
+import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 
+/// A ticket payment with its ticket, for the cash lists.
+class CashPayment {
+  final Ticket ticket;
+  final Abono abono;
+
+  const CashPayment(this.ticket, this.abono);
+}
+
+List<CashPayment> cashPaymentsOf(Iterable<Ticket> tickets) => [
+      for (final t in tickets)
+        for (final a in t.abonos)
+          if (a.amount > 0) CashPayment(t, a),
+    ];
+
+/// Admin cash control for the current raffle:
+///  - buyers' transfers: see the data and proof, validate or reject
+///  - advisors' cash deliveries (cash or transfer with proof): confirm or reject
+///  - cash still held by advisors (they report it from "Mi Caja"; the admin can also receive it in hand)
 class AdminCashView extends StatefulWidget {
   const AdminCashView({super.key});
 
@@ -17,411 +36,482 @@ class AdminCashView extends StatefulWidget {
 }
 
 class _AdminCashViewState extends State<AdminCashView> {
-  final TextEditingController _searchController = TextEditingController();
-  String _selectedAdvisorId = 'TODOS';
+  String? _advisorId; // filter
+  bool _showRejected = false;
+
+  String? get _raffleId => context.read<RaffleViewModel>().selectedRaffle?.id;
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
+
+  Future<void> _refresh() async {
+    final raffleId = _raffleId;
+    await Future.wait([
+      context.read<CashViewModel>().loadDeliveries(raffleId: raffleId),
+      context.read<TicketViewModel>().loadTickets(raffleId: raffleId),
+    ]);
+  }
+
+  Future<void> _after(String? error, String done) async {
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error)));
+      return;
+    }
+    await context.read<TicketViewModel>().loadTickets(raffleId: _raffleId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text(done)));
+    }
+  }
+
+  bool _matchesAdvisor(String advisorId) => _advisorId == null || advisorId == _advisorId;
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+    final tickets = context.watch<TicketViewModel>().tickets;
+    final cashVM = context.watch<CashViewModel>();
+    final advisors = context.watch<AdvisorViewModel>().advisors;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
-    return Consumer3<TicketViewModel, RaffleViewModel, AdvisorViewModel>(
-      builder: (context, ticketVM, raffleVM, advisorVM, _) {
-        final currentRaffle = raffleVM.selectedRaffle;
+    final payments = cashPaymentsOf(tickets);
+    final transfers = payments
+        .where((p) => p.abono.isTransfer && (p.abono.cashState == 'POR_VALIDAR' || (_showRejected && p.abono.cashState == 'RECHAZADA')))
+        .where((p) => _matchesAdvisor(p.abono.sellerId))
+        .toList();
+    final withAdvisors = payments.where((p) => p.abono.cashState == 'EN_PODER_ASESOR' && _matchesAdvisor(p.abono.sellerId)).toList();
+    final deliveries = cashVM.deliveries.where((d) => _matchesAdvisor(d.advisorId)).toList();
+    final pendingDeliveries = deliveries.where((d) => d.isPending).toList();
 
-        // Pending unconfirmed tickets
-        List<Ticket> pendingConfirmTickets = ticketVM.tickets.where((t) => t.totalPaid > 0 && !t.confirmedByAdmin).toList();
+    double sum(Iterable<CashPayment> list) => list.fold(0.0, (s, p) => s + p.abono.amount);
+    final settledTotal = sum(payments.where((p) => p.abono.cashState == 'RECIBIDO' || p.abono.cashState == 'VALIDADA'));
+    final transfersPending = payments.where((p) => p.abono.cashState == 'POR_VALIDAR');
 
-        // Apply search filter
-        String search = _searchController.text.trim().toLowerCase();
-        if (search.isNotEmpty) {
-          pendingConfirmTickets = pendingConfirmTickets.where((t) {
-            return t.ticketNumber.toString().contains(search) ||
-                t.buyerName.toLowerCase().contains(search) ||
-                t.buyerPhone.contains(search) ||
-                t.advisorName.toLowerCase().contains(search) ||
-                t.numbers.any((n) => n.contains(search));
-          }).toList();
-        }
+    final kpis = [
+      CashKpi(
+        title: 'TRANSFERENCIAS POR VALIDAR',
+        value: cashCurrency.format(sum(transfersPending)),
+        subtitle: '${transfersPending.length} pago(s)',
+        color: Colors.deepPurple,
+        icon: Icons.account_balance,
+      ),
+      CashKpi(
+        title: 'ENTREGAS POR CONFIRMAR',
+        value: cashCurrency.format(cashVM.pendingDeliveries.fold(0.0, (s, d) => s + d.total)),
+        subtitle: '${cashVM.pendingDeliveries.length} entrega(s) de asesores',
+        color: Colors.blue.shade700,
+        icon: Icons.move_to_inbox,
+      ),
+      CashKpi(
+        title: 'EFECTIVO EN PODER DE ASESORES',
+        value: cashCurrency.format(sum(payments.where((p) => p.abono.cashState == 'EN_PODER_ASESOR'))),
+        subtitle: 'Aún no entregado',
+        color: Colors.orange.shade800,
+        icon: Icons.payments_outlined,
+      ),
+      CashKpi(
+        title: 'CONCILIADO EN CAJA',
+        value: cashCurrency.format(settledTotal),
+        subtitle: 'Recibido y validado',
+        color: AppTheme.secondaryEmerald,
+        icon: Icons.verified,
+      ),
+    ];
 
-        // Apply advisor filter
-        if (_selectedAdvisorId != 'TODOS') {
-          pendingConfirmTickets = pendingConfirmTickets.where((t) => t.advisorId == _selectedAdvisorId).toList();
-        }
-
-        double totalFilteredPending = pendingConfirmTickets.fold(0.0, (sum, t) => sum + t.totalPaid);
-
-        final isMobile = MediaQuery.of(context).size.width < 600;
-
-        final pendingCard = Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.amber.shade900, Colors.amber.shade700],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.amber.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
+    return DefaultTabController(
+      length: 3,
+      child: NestedScrollView(
+        headerSliverBuilder: (context, _) => [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(isMobile ? 12 : 20, 0, isMobile ? 12 : 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.pending_actions, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'DINERO PENDIENTE POR REVISION',
-                      style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold),
-                    ),
+                  const CurrentRaffleBanner(),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, c) {
+                      final perRow = c.maxWidth >= 900 ? 4 : 2;
+                      final w = (c.maxWidth - (perRow - 1) * 10) / perRow;
+                      return Wrap(spacing: 10, runSpacing: 10, children: [for (final k in kpis) SizedBox(width: w, child: k)]);
+                    },
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                currency.format(ticketVM.totalPendingTurnIn),
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${ticketVM.tickets.where((t) => t.totalPaid > 0 && !t.confirmedByAdmin).length} boletas por auditar en caja',
-                style: const TextStyle(fontSize: 11, color: Colors.white70),
-              ),
-            ],
-          ),
-        );
-        final confirmedCard = Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.teal.shade800, AppTheme.secondaryEmerald],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.teal.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.verified_user, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'DINERO AUDITADO Y RECIBIDO EN CAJA',
-                      style: TextStyle(fontSize: 11, color: Colors.white70, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                currency.format(ticketVM.totalConfirmed),
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Efectivo verificado e ingresado a la caja admin',
-                style: TextStyle(fontSize: 11, color: Colors.white70),
-              ),
-            ],
-          ),
-        );
-
-        return RefreshIndicator(
-          onRefresh: () => ticketVM.loadTickets(raffleId: currentRaffle?.id),
-          child: ListView(
-            padding: EdgeInsets.all(isMobile ? 12 : 20),
-            children: [
-              const CurrentRaffleBanner(),
-              SizedBox(height: isMobile ? 12 : 16),
-              // Summary Cards Header
-              if (isMobile) ...[
-                pendingCard,
-                const SizedBox(height: 10),
-                confirmedCard,
-              ] else
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  const SizedBox(height: 12),
+                  Row(
                     children: [
-                      Expanded(child: pendingCard),
-                      const SizedBox(width: 14),
-                      Expanded(child: confirmedCard),
-                    ],
-                  ),
-                ),
-
-              SizedBox(height: isMobile ? 12 : 20),
-
-              // Search & Filter Controls Toolbar
-              Card(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                child: Padding(
-                  padding: EdgeInsets.all(isMobile ? 12 : 16),
-                  child: Column(
-                    children: [
-                      Flex(
-                        direction: isMobile ? Axis.vertical : Axis.horizontal,
-                        crossAxisAlignment: isMobile ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
-                        children: [
-                          ResponsiveFlexChild(
-                            expand: !isMobile,
-                            child: TextField(
-                              controller: _searchController,
-                              decoration: InputDecoration(
-                                hintText: isMobile
-                                    ? 'Buscar boleta, comprador o asesor...'
-                                    : 'Buscar por N° boleta, comprador, teléfono o asesor...',
-                                prefixIcon: const Icon(Icons.search),
-                                suffixIcon: _searchController.text.isNotEmpty
-                                    ? IconButton(
-                                        icon: const Icon(Icons.clear),
-                                        onPressed: () {
-                                          setState(() => _searchController.clear());
-                                        },
-                                      )
-                                    : null,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              ),
-                              onChanged: (_) => setState(() {}),
-                            ),
-                          ),
-                          const SizedBox(width: 12, height: 12),
-                          SizedBox(
-                            width: isMobile ? null : 220,
-                            child: DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              value: _selectedAdvisorId,
-                              decoration: const InputDecoration(
-                                labelText: 'Filtrar por Asesor',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              items: [
-                                const DropdownMenuItem(value: 'TODOS', child: Text('Todos los Asesores')),
-                                ...advisorVM.advisors
-                                    .map((adv) => DropdownMenuItem(value: adv.id, child: Text(adv.name, overflow: TextOverflow.ellipsis))),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) setState(() => _selectedAdvisorId = val);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (pendingConfirmTickets.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Wrap(
-                          alignment: WrapAlignment.spaceBetween,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: [
-                            Text(
-                              'Mostrando ${pendingConfirmTickets.length} cobro(s) pendiente(s) (${currency.format(totalFilteredPending)})',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () async {
-                                bool? confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Confirmar Cobros Filtrados'),
-                                    content: Text(
-                                      '¿Desea marcar como CONFIRMADOS en caja todos los ${pendingConfirmTickets.length} cobros mostrados por un total de ${currency.format(totalFilteredPending)}?',
-                                    ),
-                                    actions: [
-                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                      ElevatedButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
-                                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald),
-                                        child: const Text('CONFIRMAR TODOS'),
-                                      ),
-                                    ],
-                                  ),
-                                );
-
-                                if (confirm == true) {
-                                  for (var t in pendingConfirmTickets) {
-                                    await ticketVM.confirmTicketPayment(t.id, raffleId: currentRaffle?.id);
-                                  }
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Todos los cobros seleccionados han sido confirmados en caja.')),
-                                    );
-                                  }
-                                }
-                              },
-                              icon: const Icon(Icons.done_all, size: 18),
-                              label: const Text('Confirmar Todo lo Filtrado'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryBlue,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              ),
-                            ),
+                      Expanded(
+                        child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
+                          initialValue: _advisorId,
+                          decoration: const InputDecoration(labelText: 'Asesor', isDense: true, border: OutlineInputBorder()),
+                          items: [
+                            const DropdownMenuItem(value: null, child: Text('Todos los asesores')),
+                            for (final a in advisors) DropdownMenuItem(value: a.id, child: Text(a.name, overflow: TextOverflow.ellipsis)),
                           ],
+                          onChanged: (v) => setState(() => _advisorId = v),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(onPressed: _refresh, icon: const Icon(Icons.refresh), tooltip: 'Actualizar'),
                     ],
                   ),
-                ),
+                ],
               ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Material(
+              color: Theme.of(context).cardColor,
+              child: TabBar(
+                isScrollable: isMobile,
+                tabs: [
+                  Tab(text: 'Transferencias (${transfersPending.length})'),
+                  Tab(text: 'Entregas (${pendingDeliveries.length})'),
+                  Tab(text: 'En poder de asesores (${withAdvisors.length})'),
+                ],
+              ),
+            ),
+          ),
+        ],
+        body: TabBarView(
+          children: [
+            _TransfersTab(
+              payments: transfers,
+              showRejected: _showRejected,
+              onToggleRejected: (v) => setState(() => _showRejected = v),
+              onValidate: (p) async => _after(
+                await context.read<CashViewModel>().verifyTransfer(p.ticket.id, p.abono.id, 'validar', raffleId: _raffleId),
+                'Transferencia validada.',
+              ),
+              onReject: (p) async {
+                final reason = await askReason(context, 'Rechazar transferencia', hint: 'Ej: no llegó a la cuenta');
+                if (reason == null || !mounted) return;
+                _after(
+                  await context
+                      .read<CashViewModel>()
+                      .verifyTransfer(p.ticket.id, p.abono.id, 'rechazar', note: reason, raffleId: _raffleId),
+                  'Transferencia rechazada.',
+                );
+              },
+            ),
+            _DeliveriesTab(
+              deliveries: deliveries,
+              onConfirm: (d) async => _after(
+                await context.read<CashViewModel>().reviewDelivery(d.id, 'confirmar', raffleId: _raffleId),
+                'Entrega confirmada: el dinero quedó conciliado en caja.',
+              ),
+              onReject: (d) async {
+                final reason = await askReason(context, 'Rechazar entrega de ${d.advisorName}', hint: 'Ej: el valor no coincide');
+                if (reason == null || !mounted) return;
+                _after(await context.read<CashViewModel>().reviewDelivery(d.id, 'rechazar', reason: reason, raffleId: _raffleId),
+                    'Entrega rechazada.');
+              },
+            ),
+            _WithAdvisorsTab(
+              payments: withAdvisors,
+              onReceive: (p) async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Recibir efectivo en mano'),
+                    content: Text(
+                      '¿Recibió ${cashCurrency.format(p.abono.amount)} de ${p.abono.sellerName} por la boleta ${p.ticket.displayNumber}? '
+                      'Queda conciliado en caja y ya no se podrá anular.',
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí, recibido')),
+                    ],
+                  ),
+                );
+                if (ok != true || !mounted) return;
+                _after(await context.read<CashViewModel>().receiveCash(p.ticket.id, p.abono.id, raffleId: _raffleId), 'Efectivo recibido.');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-              const SizedBox(height: 16),
+Widget _empty(String text) => ListView(children: [
+      Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600]))),
+      ),
+    ]);
 
-              // Pending Tickets List
-              pendingConfirmTickets.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Center(
+class _TransfersTab extends StatelessWidget {
+  final List<CashPayment> payments;
+  final bool showRejected;
+  final ValueChanged<bool> onToggleRejected;
+  final void Function(CashPayment) onValidate;
+  final void Function(CashPayment) onReject;
+
+  const _TransfersTab({
+    required this.payments,
+    required this.showRejected,
+    required this.onToggleRejected,
+    required this.onValidate,
+    required this.onReject,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SwitchListTile(
+          dense: true,
+          title: const Text('Mostrar también las rechazadas'),
+          value: showRejected,
+          onChanged: onToggleRejected,
+        ),
+        Expanded(
+          child: payments.isEmpty
+              ? _empty('No hay transferencias de compradores por validar.')
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                  itemCount: payments.length,
+                  itemBuilder: (context, i) {
+                    final p = payments[i];
+                    final a = p.abono;
+                    final rejected = a.cashState == 'RECHAZADA';
+                    final hasProof = a.soporteUrl != null || a.soporteWebViewUrl != null;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.verified, size: 60, color: AppTheme.secondaryEmerald),
-                            const SizedBox(height: 14),
-                            Text(
-                              search.isNotEmpty || _selectedAdvisorId != 'TODOS'
-                                  ? 'No hay cobros pendientes con esos criterios de búsqueda'
-                                  : '¡Excelente! No hay cobros pendientes por confirmar en caja.',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('Boleta N° ${p.ticket.displayNumber}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                Text(cashCurrency.format(a.amount),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.deepPurple)),
+                                if (rejected) CashChip('RECHAZADA', Colors.red.shade700),
+                                if (!hasProof) CashChip('SIN SOPORTE', Colors.orange.shade800, icon: Icons.warning_amber),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            const Text('Todo el dinero recaudado de la rifa está auditado.',
-                                textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            CashInfoLine('Comprador', p.ticket.buyerName),
+                            CashInfoLine('Registró', '${a.sellerName} • ${cashDate(a.date)}'),
+                            CashInfoLine('Fecha transferencia', cashDate(a.transferDate)),
+                            CashInfoLine('Banco origen', a.originBank ?? ''),
+                            CashInfoLine('N° aprobación', a.approvalNumber ?? ''),
+                            CashInfoLine('Cuenta destino', a.cuentaDestino ?? ''),
+                            if (a.duplicateApprovalConfirmed)
+                              CashChip('APROBACIÓN REPETIDA (confirmada al registrar)', Colors.orange.shade800),
+                            if (rejected) CashInfoLine('Motivo del rechazo', (a.verification?['note'] ?? '').toString()),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                if (hasProof)
+                                  OutlinedButton.icon(
+                                    onPressed: () => showSoporte(context,
+                                        driveId: a.soporteDriveId,
+                                        url: a.soporteUrl,
+                                        webViewUrl: a.soporteWebViewUrl,
+                                        title: 'Soporte de transferencia'),
+                                    icon: const Icon(Icons.image_search, size: 18),
+                                    label: const Text('Ver soporte'),
+                                  ),
+                                ElevatedButton.icon(
+                                  onPressed: () => onValidate(p),
+                                  icon: const Icon(Icons.verified, size: 18),
+                                  label: const Text('Validar (llegó a la cuenta)'),
+                                  style:
+                                      ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
+                                ),
+                                if (!rejected)
+                                  TextButton.icon(
+                                    onPressed: () => onReject(p),
+                                    icon: const Icon(Icons.block, size: 18, color: AppTheme.dangerRose),
+                                    label: const Text('Rechazar', style: TextStyle(color: AppTheme.dangerRose)),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: pendingConfirmTickets.length,
-                      itemBuilder: (context, i) {
-                        final t = pendingConfirmTickets[i];
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            side: BorderSide(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: Builder(
-                              builder: (context) {
-                                final avatar = CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.15),
-                                  child: Text(
-                                    t.numbers.length == 1 ? t.displayNumber : '${t.numbers.length}',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.accentAmber, fontSize: 13),
-                                  ),
-                                );
-                                final info = Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
-                                      children: [
-                                        Text('Boleta N° ${t.displayNumber}',
-                                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: Colors.purple.withValues(alpha: 0.15),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: Text('Números: ${t.numbers.join(', ')}',
-                                              style: const TextStyle(fontSize: 10, color: Colors.purple, fontWeight: FontWeight.bold)),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Comprador: ${t.buyerName.isNotEmpty ? t.buyerName : "Sin Nombre"} • Tel: ${t.buyerPhone.isNotEmpty ? t.buyerPhone : "Sin teléfono"}',
-                                      style: const TextStyle(fontSize: 13, color: Colors.grey),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Vendedor: ${t.advisorName.isNotEmpty ? t.advisorName : "General"} • Recaudado: ${currency.format(t.totalPaid)}',
-                                      style: const TextStyle(fontSize: 12, color: AppTheme.secondaryEmerald, fontWeight: FontWeight.w600),
-                                    ),
-                                  ],
-                                );
-                                final confirmButton = ElevatedButton.icon(
-                                  onPressed: () async {
-                                    bool ok = await ticketVM.confirmTicketPayment(t.id, raffleId: currentRaffle?.id);
-                                    if (ok && context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Pago de Boleta N° ${t.displayNumber} confirmado en caja.')),
-                                      );
-                                    }
-                                  },
-                                  icon: const Icon(Icons.check_circle_outline, size: 18),
-                                  label: const Text('Confirmar Recibido'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppTheme.secondaryEmerald,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  ),
-                                );
-                                if (isMobile) {
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [avatar, const SizedBox(width: 12), Expanded(child: info)],
-                                      ),
-                                      const SizedBox(height: 10),
-                                      confirmButton,
-                                    ],
-                                  );
-                                }
-                                return Row(
-                                  children: [
-                                    avatar,
-                                    const SizedBox(width: 14),
-                                    Expanded(child: info),
-                                    const SizedBox(width: 12),
-                                    confirmButton,
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeliveriesTab extends StatelessWidget {
+  final List<CashDelivery> deliveries;
+  final void Function(CashDelivery) onConfirm;
+  final void Function(CashDelivery) onReject;
+
+  const _DeliveriesTab({required this.deliveries, required this.onConfirm, required this.onReject});
+
+  @override
+  Widget build(BuildContext context) {
+    if (deliveries.isEmpty) return _empty('Los asesores aún no han reportado entregas de dinero.\nLas reportan desde "Mi Caja" en su app.');
+    final sorted = [...deliveries]
+      ..sort((a, b) => (a.isPending == b.isPending) ? b.reportedAt.compareTo(a.reportedAt) : (a.isPending ? -1 : 1));
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      itemCount: sorted.length,
+      itemBuilder: (context, i) => DeliveryCard(
+        delivery: sorted[i],
+        onConfirm: sorted[i].isPending ? () => onConfirm(sorted[i]) : null,
+        onReject: sorted[i].isPending ? () => onReject(sorted[i]) : null,
+      ),
+    );
+  }
+}
+
+/// A delivery with its tickets, transfer data and proof; admin actions when given.
+class DeliveryCard extends StatelessWidget {
+  final CashDelivery delivery;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onReject;
+
+  const DeliveryCard({super.key, required this.delivery, this.onConfirm, this.onReject});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = delivery;
+    final (statusText, statusColor) = switch (d.status) {
+      'CONFIRMADA' => ('CONFIRMADA', AppTheme.secondaryEmerald),
+      'RECHAZADA' => ('RECHAZADA', AppTheme.dangerRose),
+      _ => ('POR CONFIRMAR', Colors.blue.shade700),
+    };
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(d.advisorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(cashCurrency.format(d.total),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.primaryBlue)),
+                CashChip(statusText, statusColor),
+                CashChip(
+                  d.isTransfer ? 'POR TRANSFERENCIA' : 'EN EFECTIVO',
+                  d.isTransfer ? Colors.deepPurple : Colors.green.shade800,
+                  icon: d.isTransfer ? Icons.account_balance : Icons.payments_outlined,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            CashInfoLine('Reportada', cashDate(d.reportedAt)),
+            if (d.isTransfer) ...[
+              CashInfoLine('Fecha transferencia', cashDate(d.transferDate)),
+              CashInfoLine('Banco origen', d.originBank ?? ''),
+              CashInfoLine('N° aprobación', d.approvalNumber ?? ''),
+              CashInfoLine('Cuenta destino', d.destination ?? ''),
             ],
+            CashInfoLine('Nota', d.note),
+            if (!d.isPending)
+              CashInfoLine(d.status == 'CONFIRMADA' ? 'Confirmó' : 'Rechazó', '${d.reviewedBy ?? ''} • ${cashDate(d.reviewedAt)}'),
+            if ((d.reviewNote ?? '').isNotEmpty) CashInfoLine('Motivo', d.reviewNote!),
+            const SizedBox(height: 6),
+            Text('Boletas (${d.items.length}):', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+            for (final item in d.items)
+              Text(
+                '• N° ${((item['numbers'] as List?) ?? []).join('-')}  ${cashCurrency.format((item['amount'] as num?) ?? 0)}'
+                '${(item['buyerName'] ?? '').toString().isNotEmpty ? '  — ${item['buyerName']}' : ''}'
+                '${item['state'] == 'ANULADO' ? '  (pago anulado)' : ''}',
+                style: const TextStyle(fontSize: 12.5),
+              ),
+            if (d.isTransfer || onConfirm != null) const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (d.isTransfer)
+                  OutlinedButton.icon(
+                    onPressed: () => showSoporte(context,
+                        driveId: d.soporteDriveId, url: d.soporteUrl, webViewUrl: d.soporteWebViewUrl, title: 'Soporte de la entrega'),
+                    icon: const Icon(Icons.image_search, size: 18),
+                    label: const Text('Ver soporte'),
+                  ),
+                if (onConfirm != null)
+                  ElevatedButton.icon(
+                    onPressed: onConfirm,
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: Text(d.isTransfer ? 'Confirmar (llegó la transferencia)' : 'Confirmar recibido en efectivo'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
+                  ),
+                if (onReject != null)
+                  TextButton.icon(
+                    onPressed: onReject,
+                    icon: const Icon(Icons.block, size: 18, color: AppTheme.dangerRose),
+                    label: const Text('Rechazar', style: TextStyle(color: AppTheme.dangerRose)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WithAdvisorsTab extends StatelessWidget {
+  final List<CashPayment> payments;
+  final void Function(CashPayment) onReceive;
+
+  const _WithAdvisorsTab({required this.payments, required this.onReceive});
+
+  @override
+  Widget build(BuildContext context) {
+    if (payments.isEmpty) return _empty('Ningún asesor tiene efectivo pendiente por entregar.');
+    final byAdvisor = <String, List<CashPayment>>{};
+    for (final p in payments) {
+      byAdvisor.putIfAbsent(p.abono.sellerName, () => []).add(p);
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+      children: [
+        Text(
+          'Efectivo cobrado por los asesores que aún no han entregado. Ellos reportan la entrega desde "Mi Caja"; '
+          'si le entregan el dinero en mano, márquelo como recibido.',
+          style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
+        ),
+        const SizedBox(height: 10),
+        for (final entry in byAdvisor.entries)
+          Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ExpansionTile(
+              initiallyExpanded: byAdvisor.length == 1,
+              title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${entry.value.length} pago(s) • ${cashCurrency.format(entry.value.fold(0.0, (s, p) => s + p.abono.amount))}'),
+              children: [
+                for (final p in entry.value)
+                  ListTile(
+                    dense: true,
+                    title: Text('Boleta N° ${p.ticket.displayNumber} • ${cashCurrency.format(p.abono.amount)}'),
+                    subtitle: Text('${p.ticket.buyerName} • ${cashDate(p.abono.date)}'),
+                    trailing: TextButton(onPressed: () => onReceive(p), child: const Text('Recibido en mano')),
+                  ),
+              ],
+            ),
           ),
-        );
-      },
+      ],
     );
   }
 }

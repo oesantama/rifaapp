@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/winners/views/main_draw_widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -530,6 +531,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
         final isAsesor = authVM.isAsesor;
 
         final isMobile = MediaQuery.of(context).size.width < 600;
+        // The main draw has its own card; the history lists the weekly draws
+        final weeklyDraws = winnerVM.winners.where((w) => !w.isMainDraw).toList();
 
         return SingleChildScrollView(
           padding: EdgeInsets.all(isMobile ? 12 : 20),
@@ -538,6 +541,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
             children: [
               const CurrentRaffleBanner(),
               SizedBox(height: isMobile ? 12 : 16),
+              if (currentRaffle != null) MainDrawCard(raffle: currentRaffle),
               // VISTA REGISTRO SOLO PARA ADMINISTRADOR / LECTURA PARA ASESORES
               if (isAsesor) ...[
                 Card(
@@ -823,7 +827,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
               const Text('Historial de Sorteos Realizados:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
 
-              winnerVM.winners.isEmpty
+              weeklyDraws.isEmpty
                   ? const Card(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -833,9 +837,9 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                   : ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: winnerVM.winners.length,
+                      itemCount: weeklyDraws.length,
                       itemBuilder: (context, i) {
-                        final w = winnerVM.winners[i];
+                        final w = weeklyDraws[i];
                         final det = w.winnerDetails;
                         List<Widget> abonoDetailWidgets = [];
                         if (w.isWinner && det != null) {
@@ -947,6 +951,10 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
                                 if (w.photoUrl != null && w.photoUrl!.trim().isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   EvidencePreviewTile(url: w.photoUrl!.trim()),
+                                ],
+                                if (w.isWinner) ...[
+                                  const SizedBox(height: 8),
+                                  PrizeDeliveryInfo(record: w, isAdmin: !isAsesor),
                                 ],
                               ],
                             ),

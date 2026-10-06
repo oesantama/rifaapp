@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/raffles/views/raffle_close_card.dart';
+import 'package:rifaapp/ui/features/monetization/my_plan_card.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/ui/core/widgets/stat_card.dart';
@@ -72,6 +74,10 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Company admin: plan (Gratis / PRO), its end date and payments
+                if (authVM.isAdmin && !authVM.isSuperAdmin) const MyPlanCard(),
+                // After the draw: close the raffle (deleted 7 days later) and download its information
+                if (authVM.isAdmin && currentRaffle != null) RaffleCloseCard(raffle: currentRaffle),
                 if (currentRaffle != null)
                   Container(
                     width: double.infinity,
@@ -309,7 +315,7 @@ class DashboardScreen extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => onNavigateTab(authVM.isAdmin ? 4 : 2),
+                        onPressed: () => onNavigateTab(authVM.isAdmin ? 4 : 3),
                         icon: const Icon(Icons.emoji_events),
                         label: const Text('Consultar Ganadores', textAlign: TextAlign.center),
                         style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8)),

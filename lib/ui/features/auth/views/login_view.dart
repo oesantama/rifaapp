@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/legal/legal_widgets.dart';
 import 'package:rifaapp/version.dart';
+import 'package:rifaapp/ui/features/monetization/app_config_view_model.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -77,6 +79,26 @@ class _LoginViewState extends State<LoginView> {
           _passwordController.clear();
           // Fields were disabled while waiting: put the cursor back so the user can retype
           WidgetsBinding.instance.addPostFrameCallback((_) => _passwordFocus.requestFocus());
+        }
+      });
+    }
+  }
+
+  void _handleDemoLogin() async {
+    if (_isLoading) return;
+    setState(() {
+      _errorMessage = null;
+      _isLoading = true;
+    });
+
+    final authVM = Provider.of<AuthViewModel>(context, listen: false);
+    final success = await authVM.loginDemo();
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        if (!success) {
+          _errorMessage = authVM.loginErrorMessage.isNotEmpty ? authVM.loginErrorMessage : 'No fue posible iniciar la sesión Demo.';
         }
       });
     }
@@ -434,6 +456,26 @@ class _LoginViewState extends State<LoginView> {
                             ),
                           ),
                   ),
+
+                  const SizedBox(height: 14),
+
+                  // Demo Mode Button (only when the SuperAdmin offers the demo)
+                  if (context.watch<AppConfigViewModel>().demoEnabled)
+                    OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _handleDemoLogin,
+                      icon: const Icon(Icons.science_outlined, color: Colors.amber, size: 20),
+                      label: const Text(
+                        'PROBAR MODO DEMO (Reset 48h)',
+                        style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.amber, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  const LegalLinks(),
                 ],
               ),
             ),

@@ -93,6 +93,20 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  /// Re-reads the signed-in user from the server (plan, ads, demo), e.g. after the SuperAdmin
+  /// changes the company's plan while the app stays open.
+  Future<void> refreshUser() async {
+    if (!_isLoggedIn) return;
+    try {
+      final user = await _repository.currentUser();
+      if (!_isLoggedIn) return;
+      _applyUser(user);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('No se pudo actualizar la sesión: $e');
+    }
+  }
+
   Future<void> _clearLegacySessionKeys(SharedPreferences prefs) async {
     for (final key in [
       'session_logged_in',
@@ -107,6 +121,15 @@ class AuthViewModel extends ChangeNotifier {
       await prefs.remove(key);
     }
   }
+
+  bool _isDemo = false;
+  bool get isDemo => _isDemo;
+
+  String _tier = 'FREE';
+  String get tier => _tier;
+
+  bool _showAds = true;
+  bool get showAds => _showAds;
 
   void _applyUser(Map<String, dynamic> user) {
     switch (user['role']) {
@@ -125,6 +148,9 @@ class AuthViewModel extends ChangeNotifier {
     _selectedCompanyId = (user['companyId'] ?? '').toString();
     _companyName = (user['companyName'] ?? '').toString();
     _mustChangePassword = user['mustChangePassword'] == true;
+    _isDemo = user['isDemo'] == true;
+    _tier = (user['tier'] ?? 'FREE').toString();
+    _showAds = user['showAds'] == true;
     _activeAdvisor = user['advisor'] is Map ? Advisor.fromJson(Map<String, dynamic>.from(user['advisor'])) : null;
   }
 
@@ -177,6 +203,22 @@ class AuthViewModel extends ChangeNotifier {
   Future<bool> loginAsAdmin(String userOrEmail, String password) => _login('admin', userOrEmail, password);
 
   Future<bool> loginAsAdvisor(String userOrEmail, String password) => _login('asesor', userOrEmail, password);
+
+  Future<bool> loginDemo() async {
+    _loginErrorMessage = '';
+    try {
+      final session = await _repository.loginDemo();
+      await _startSession(session);
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _loginErrorMessage = e.message;
+    } catch (_) {
+      _loginErrorMessage = 'No fue posible conectar con el servidor para iniciar sesión Demo.';
+    }
+    notifyListeners();
+    return false;
+  }
 
   /// Credentials are always validated by the server (never locally).
   Future<bool> _login(String role, String userOrEmail, String password) async {

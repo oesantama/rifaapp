@@ -360,6 +360,167 @@ body{margin:0;font-family:Roboto,"Segoe UI",system-ui,sans-serif;background:#0F1
 <div class="body">${rowsHtml}${note ? `<div class="note">${escapeHtml(note)}</div>` : ''}${terms ? `<details class="terms"><summary>Términos y condiciones</summary><div>${escapeHtml(terms)}</div></details>` : ''}</div><div class="brand">VERIFICADO POR RIFA MASTER</div></div></body></html>`;
 }
 
+// ---------------------------------------------------------------------------
+// Legal pages (public, required by Google Play): privacy policy, terms of service and account /
+// data deletion request. The platform's legal data is set by the SuperAdmin (db.settings.legal).
+// ---------------------------------------------------------------------------
+const DEFAULT_LEGAL = {
+  brandName: 'RifaMaster',
+  legalName: '',
+  nit: '',
+  contactEmail: '',
+  contactPhone: '',
+  address: '',
+  city: 'Colombia',
+  updatedOn: '2026-10-06'
+};
+
+function legalSettings() {
+  return { ...DEFAULT_LEGAL, ...((db.settings || {}).legal || {}) };
+}
+
+function legalPage(title, bodyHtml) {
+  const l = legalSettings();
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)} - ${escapeHtml(l.brandName)}</title>
+<style>
+body{margin:0;font-family:Roboto,"Segoe UI",system-ui,sans-serif;background:#F1F5F9;color:#0F172A;line-height:1.6}
+header{background:#0F172A;color:#fff;padding:18px 16px;text-align:center}header b{font-size:18px}header div{font-size:12px;color:#94A3B8}
+main{max-width:820px;margin:0 auto;padding:20px 16px 40px}article{background:#fff;border-radius:16px;padding:20px 22px;box-shadow:0 4px 20px rgba(15,23,42,.08)}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:22px 0 6px;color:#1E3A8A}p,li{font-size:14.5px}.muted{color:#64748B;font-size:13px}
+nav{text-align:center;margin-top:18px;font-size:13px}nav a{color:#2563EB;margin:0 8px}
+label{display:block;font-weight:600;margin:12px 0 4px;font-size:14px}input,textarea,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #CBD5E1;border-radius:10px;font:inherit}
+button{margin-top:16px;background:#DC2626;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-weight:700;font-size:15px;cursor:pointer}
+.ok{background:#ECFDF5;border:1px solid #6EE7B7;border-radius:12px;padding:14px}.warn{background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:12px;font-size:13.5px}
+</style></head><body><header><b>${escapeHtml(l.brandName)}</b><div>Plataforma de administración de rifas</div></header>
+<main><article>${bodyHtml}</article><nav><a href="/terminos">Términos y condiciones</a>·<a href="/privacidad">Política de privacidad</a>·<a href="/eliminar-cuenta">Eliminar cuenta</a></nav></main></body></html>`;
+}
+
+/** Responsible party line, with the data the SuperAdmin filled in. */
+function legalOwner() {
+  const l = legalSettings();
+  const parts = [
+    l.legalName ? `<b>${escapeHtml(l.legalName)}</b>` : `<b>${escapeHtml(l.brandName)}</b>`,
+    l.nit ? `NIT ${escapeHtml(l.nit)}` : '',
+    l.address ? escapeHtml(l.address) : '',
+    l.city ? escapeHtml(l.city) : ''
+  ].filter(Boolean).join(', ');
+  const contact = [l.contactEmail ? `correo <a href="mailto:${escapeHtml(l.contactEmail)}">${escapeHtml(l.contactEmail)}</a>` : '',
+    l.contactPhone ? `teléfono ${escapeHtml(l.contactPhone)}` : ''].filter(Boolean).join(' y ');
+  return { parts, contact: contact || 'los canales de contacto publicados en la aplicación', l };
+}
+
+app.get('/privacidad', (req, res) => {
+  const { parts, contact, l } = legalOwner();
+  const b = escapeHtml(l.brandName);
+  res.send(legalPage('Política de privacidad', `
+<h1>Política de privacidad y tratamiento de datos personales</h1>
+<p class="muted">Última actualización: ${escapeHtml(l.updatedOn)}. Aplica a la aplicación ${b} (Android, iOS, Windows y web).</p>
+<h2>1. Responsable</h2>
+<p>${parts}. Contacto para asuntos de datos personales: ${contact}. Esta política se rige por la Ley 1581 de 2012, el Decreto 1377 de 2013 y demás normas colombianas de protección de datos.</p>
+<h2>2. Qué es ${b} y roles en el tratamiento</h2>
+<p>${b} es una herramienta para que empresas organizadoras administren sus rifas: boletas, compradores, pagos, asesores y sorteos. La aplicación <b>no vende boletas al público ni procesa pagos</b>: las empresas registran las ventas y los pagos que reciben por sus propios medios.</p>
+<p>Respecto de los datos de los <b>compradores</b> que cada empresa registra, la empresa organizadora es la <b>Responsable</b> del tratamiento y ${b} actúa como <b>Encargado</b>, tratándolos solo para prestar el servicio. Respecto de los datos de las cuentas de usuario (administradores y asesores), ${b} es Responsable.</p>
+<h2>3. Datos que se tratan</h2>
+<ul>
+<li><b>Cuentas de usuario:</b> nombre, correo electrónico, usuario, teléfono, cédula (asesores), contraseña (guardada cifrada con un algoritmo irreversible) y registros de actividad.</li>
+<li><b>Compradores registrados por las empresas:</b> nombre, teléfono, cédula (opcional), números de boleta, abonos y pagos, medio de venta y, cuando hay transferencias, fecha, banco, número de aprobación y la imagen del soporte.</li>
+<li><b>Datos técnicos:</b> dirección IP y datos del dispositivo necesarios para la seguridad (por ejemplo, limitar intentos de inicio de sesión) y, en el plan gratuito, identificadores de publicidad usados por Google para mostrar anuncios.</li>
+</ul>
+<p>La aplicación no accede a la ubicación, contactos, cámara ni micrófono del dispositivo. Las imágenes de soportes solo se cargan cuando el usuario las selecciona.</p>
+<h2>4. Finalidades</h2>
+<ul><li>Prestar el servicio: administrar rifas, ventas, pagos, caja, ganadores y comprobantes verificables.</li>
+<li>Seguridad de las cuentas y prevención de fraude (por ejemplo, detectar números de aprobación de transferencias repetidos).</li>
+<li>Enviar, a solicitud del usuario, mensajes por WhatsApp con comprobantes o recordatorios (la app solo abre WhatsApp con el mensaje; el envío lo hace el usuario).</li>
+<li>Facturar y gestionar los planes de suscripción de las empresas.</li>
+<li>Mostrar publicidad en el plan gratuito.</li></ul>
+<h2>5. Con quién se comparten</h2>
+<p>Los datos no se venden. Se usan proveedores tecnológicos que los procesan por cuenta de ${b}: <b>Google Cloud / Firebase</b> (almacenamiento de la base de datos), <b>Google Drive</b> (imágenes de soportes y copias de seguridad), <b>Render</b> (servidor) y, en el plan gratuito, <b>Google AdMob / AdSense</b> (publicidad). Estos proveedores pueden almacenar información fuera de Colombia, con medidas de seguridad adecuadas. Los datos también podrán entregarse a autoridades cuando la ley lo exija.</p>
+<h2>6. Seguridad</h2>
+<p>Las comunicaciones viajan cifradas (HTTPS), las contraseñas se guardan con hash y la base de datos se almacena cifrada. Cada empresa solo accede a sus propios datos.</p>
+<h2>7. Conservación y eliminación</h2>
+<ul><li>Cuando una empresa cierra una rifa, sus datos (boletas, compradores, pagos, ganadores y soportes) se eliminan automáticamente <b>7 días después</b> del cierre.</li>
+<li>Las cuentas de usuario se conservan mientras estén activas o hasta que se solicite su eliminación.</li>
+<li>Las copias de seguridad se renuevan periódicamente y se eliminan con el tiempo; pueden conservar datos por un período adicional limitado.</li>
+<li>Algunos datos pueden conservarse cuando una obligación legal o contable lo exija.</li></ul>
+<h2>8. Derechos de los titulares</h2>
+<p>Usted puede conocer, actualizar, rectificar y solicitar la supresión de sus datos, revocar la autorización y presentar quejas ante la Superintendencia de Industria y Comercio. Escríbanos a ${contact}. Si usted es comprador de una rifa, también puede dirigirse a la empresa organizadora. Responderemos en los plazos de ley (consultas: 10 días hábiles; reclamos: 15 días hábiles).</p>
+<p>Para eliminar una cuenta de usuario y sus datos use <a href="/eliminar-cuenta">esta página</a> o la opción "Solicitar eliminación de mi cuenta" dentro de la aplicación.</p>
+<h2>9. Menores de edad</h2>
+<p>La aplicación está dirigida a mayores de 18 años y no recolecta intencionalmente datos de menores.</p>
+<h2>10. Cambios</h2>
+<p>Esta política puede actualizarse; la fecha de la última actualización se indica al inicio.</p>`));
+});
+
+app.get('/terminos', (req, res) => {
+  const { parts, contact, l } = legalOwner();
+  const b = escapeHtml(l.brandName);
+  res.send(legalPage('Términos y condiciones', `
+<h1>Términos y condiciones de uso</h1>
+<p class="muted">Última actualización: ${escapeHtml(l.updatedOn)}. Prestador del servicio: ${parts}.</p>
+<h2>1. El servicio</h2>
+<p>${b} es un software de administración para empresas que organizan rifas: registro de boletas y compradores, pagos, asesores, caja, sorteos, ganadores, comprobantes verificables y reportes. ${b} <b>no organiza rifas, no vende boletas al público, no recibe dineros de los compradores ni procesa pagos</b>; tampoco garantiza premios.</p>
+<h2>2. Responsabilidad de la empresa organizadora</h2>
+<ul><li>Cada empresa es la única responsable de sus rifas: obtener las autorizaciones que exija la ley (en Colombia, las rifas son juegos de suerte y azar regulados por la Ley 643 de 2001 y requieren autorización de la autoridad competente, como Coljuegos o la entidad territorial), cumplir sus condiciones, entregar los premios y atender a sus compradores.</li>
+<li>Es responsable de los datos personales de sus compradores y de contar con su autorización para tratarlos, conforme a la Ley 1581 de 2012.</li>
+<li>Debe registrar información veraz y no usar la plataforma para actividades ilegales, fraude o lavado de activos.</li></ul>
+<h2>3. Cuentas</h2>
+<p>Las cuentas son personales. El usuario debe guardar su contraseña y avisar de inmediato cualquier uso no autorizado. La empresa responde por las acciones de sus administradores y asesores.</p>
+<h2>4. Planes, pagos y publicidad</h2>
+<p>El plan Gratis incluye publicidad. El plan PRO se paga por períodos (1, 3, 6 o 12 meses) según los precios publicados en la aplicación; al vencer sin renovación, la cuenta vuelve al plan Gratis. Los pagos de los planes no son reembolsables, salvo que la ley disponga lo contrario.</p>
+<h2>5. Datos y eliminación</h2>
+<p>El tratamiento de datos se rige por la <a href="/privacidad">Política de privacidad</a>. Al cerrar una rifa, sus datos se eliminan 7 días después; la empresa debe descargar antes la información que necesite conservar.</p>
+<h2>6. Disponibilidad y responsabilidad</h2>
+<p>El servicio se presta "tal como está". Se hacen copias de seguridad periódicas, pero ${b} no responde por pérdidas derivadas de un uso indebido, de información incorrecta registrada por los usuarios, ni de las relaciones entre las empresas y sus compradores. En lo permitido por la ley, la responsabilidad de ${b} se limita al valor pagado por el plan en los últimos 3 meses.</p>
+<h2>7. Suspensión y terminación</h2>
+<p>${b} puede suspender cuentas que incumplan estos términos o la ley. El usuario puede dejar de usar el servicio y solicitar la eliminación de su cuenta en cualquier momento.</p>
+<h2>8. Ley aplicable y contacto</h2>
+<p>Estos términos se rigen por las leyes de la República de Colombia. Contacto: ${contact}.</p>`));
+});
+
+const deletionHits = new Map();
+app.get('/eliminar-cuenta', (req, res) => {
+  const { contact, l } = legalOwner();
+  res.send(legalPage('Eliminar cuenta', `
+<h1>Solicitar la eliminación de una cuenta</h1>
+<p>Puede pedir que se elimine su cuenta de ${escapeHtml(l.brandName)} (administrador o asesor) y los datos asociados. También puede hacerlo dentro de la aplicación: toque su nombre (arriba) → <b>Solicitar eliminación de mi cuenta</b>.</p>
+<h2>Qué se elimina</h2>
+<ul><li>Su cuenta de usuario: nombre, correo, usuario, teléfono, cédula y contraseña.</li>
+<li>Si es el administrador de una empresa: la empresa, sus rifas, boletas, compradores, pagos, soportes y asesores.</li></ul>
+<h2>Qué se conserva y por cuánto</h2>
+<p>Los registros que la ley obligue a conservar (por ejemplo, contables) y la información incluida en copias de seguridad, que se renuevan y eliminan periódicamente. La solicitud se atiende en un máximo de 15 días hábiles.</p>
+<div class="warn">Si usted es comprador de una rifa (no tiene cuenta), pida la eliminación de sus datos a la empresa organizadora o escríbanos a ${contact}.</div>
+<form method="post" action="/eliminar-cuenta">
+<label>Nombre completo *</label><input name="name" required maxlength="100">
+<label>Usuario, correo o cédula con que ingresa *</label><input name="identifier" required maxlength="100">
+<label>Empresa</label><input name="company" maxlength="100">
+<label>Correo o teléfono para responderle *</label><input name="contact" required maxlength="100">
+<label>Motivo (opcional)</label><textarea name="reason" rows="3" maxlength="500"></textarea>
+<button type="submit">Enviar solicitud de eliminación</button>
+</form>`));
+});
+
+app.post('/eliminar-cuenta', express.urlencoded({ extended: false, limit: '10kb' }), (req, res) => {
+  const ip = req.ip || '';
+  const now = Date.now();
+  const hit = deletionHits.get(ip) || { count: 0, since: now };
+  if (now - hit.since > 3600000) { hit.count = 0; hit.since = now; }
+  hit.count++;
+  deletionHits.set(ip, hit);
+  if (hit.count > 5) return res.status(429).send(legalPage('Eliminar cuenta', '<p>Demasiadas solicitudes. Intente más tarde.</p>'));
+  const clean = v => String(v || '').trim().slice(0, 500);
+  const body = req.body || {};
+  if (!clean(body.name) || !clean(body.identifier) || !clean(body.contact)) {
+    return res.status(400).send(legalPage('Eliminar cuenta', '<p>Faltan datos. <a href="/eliminar-cuenta">Volver</a></p>'));
+  }
+  db.deletionRequests.unshift({
+    id: `del-${now}`, source: 'web', name: clean(body.name), identifier: clean(body.identifier), company: clean(body.company),
+    contact: clean(body.contact), reason: clean(body.reason), status: 'PENDIENTE', createdAt: new Date(now).toISOString()
+  });
+  saveDB();
+  res.send(legalPage('Solicitud recibida', '<div class="ok"><b>Recibimos su solicitud.</b><br>Verificaremos su identidad y la atenderemos en un máximo de 15 días hábiles. Le responderemos al contacto que indicó.</div>'));
+});
+
 app.get('/verificar/:code', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (verifyRateLimited(req.ip || '')) {
@@ -801,7 +962,7 @@ setInterval(maybeDailySnapshot, 15 * 60 * 1000);
 
 /** Every known collection exists; unknown sections from backups are kept untouched. */
 function ensureDbShape(target) {
-  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts']) {
+  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests']) {
     if (!Array.isArray(target[key])) target[key] = [];
   }
   return target;
@@ -852,6 +1013,246 @@ function migrateCredentials() {
   }
   return changed;
 }
+
+// ---------------------------------------------------------------------------
+// Demo Account Management & 48-Hour Auto-Reset
+// ---------------------------------------------------------------------------
+const DEMO_COMPANY_ID = 'comp-demo';
+const DEMO_RESET_INTERVAL_MS = 48 * 60 * 60 * 1000; // 48 horas
+
+function resetDemoAccountData() {
+  console.log('🔄 Restableciendo datos de la cuenta DEMO (reset cada 48h)...');
+  if (!Array.isArray(db.companies)) db.companies = [];
+
+  let demoComp = db.companies.find(c => c.id === DEMO_COMPANY_ID || c.isDemo);
+  if (!demoComp) {
+    demoComp = {
+      id: DEMO_COMPANY_ID,
+      name: 'Empresa Demo (Pruebas)',
+      adminName: 'Administrador Demo',
+      adminEmail: 'demo@rifaapp.com',
+      adminUsername: 'demo_admin',
+      adminPassword: security.hashPassword('demo123'),
+      status: 'ACTIVA',
+      isDemo: true,
+      tier: 'FREE',
+      createdAt: new Date().toISOString()
+    };
+    db.companies.push(demoComp);
+  } else {
+    demoComp.isDemo = true;
+    demoComp.tier = 'FREE';
+    demoComp.adminPassword = security.hashPassword('demo123');
+  }
+
+  // Restablecer sólo los datos del entorno DEMO
+  db.raffles = (db.raffles || []).filter(r => r.companyId !== DEMO_COMPANY_ID && r.id !== 'raf-demo');
+  db.advisors = (db.advisors || []).filter(a => a.companyId !== DEMO_COMPANY_ID && a.id !== 'adv-demo-1' && a.id !== 'adv-demo-2');
+  db.tickets = (db.tickets || []).filter(t => t.companyId !== DEMO_COMPANY_ID && !t.id.startsWith('tkt-demo-'));
+  db.winners = (db.winners || []).filter(w => w.companyId !== DEMO_COMPANY_ID);
+  db.commissionPayouts = (db.commissionPayouts || []).filter(p => p.companyId !== DEMO_COMPANY_ID);
+  db.auditLogs = (db.auditLogs || []).filter(l => l.companyId !== DEMO_COMPANY_ID);
+
+  const demoRaffle = {
+    id: 'raf-demo',
+    companyId: DEMO_COMPANY_ID,
+    title: 'Rifa Demo de Prueba - Smartphone & $1.000.000 COP',
+    description: 'Rifa de demostración con reset automático cada 48 horas para pruebas de administración.',
+    mainDrawDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    weeklyPrizesStartDate: new Date().toISOString(),
+    digits: 4,
+    totalTickets: 100,
+    totalNumbers: 400,
+    opportunitiesPerTicket: 4,
+    ticketPrice: 20000,
+    weeklyPrizes: [
+      { id: 'wp-demo-1', name: 'Sorteo Semanal Demo', amount: 200000, drawDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }
+    ],
+    commissionType: 'PORCENTAJE',
+    commissionValue: 10,
+    status: 'ACTIVA',
+    createdAt: new Date().toISOString()
+  };
+  db.raffles.push(demoRaffle);
+
+  const adv1 = {
+    id: 'adv-demo-1',
+    companyId: DEMO_COMPANY_ID,
+    name: 'Asesor Demo 1',
+    email: 'asesor1@demo.com',
+    username: 'ADV_DEMO1',
+    password: security.hashPassword('123'),
+    status: 'ACTIVO',
+    phone: '3000000001',
+    code: 'ADV_DEMO1',
+    mode: 'POOL_GENERAL',
+    assignedTicketRanges: ['1-50'],
+    createdAt: new Date().toISOString()
+  };
+  const adv2 = {
+    id: 'adv-demo-2',
+    companyId: DEMO_COMPANY_ID,
+    name: 'Asesor Demo 2',
+    email: 'asesor2@demo.com',
+    username: 'ADV_DEMO2',
+    password: security.hashPassword('123'),
+    status: 'ACTIVO',
+    phone: '3000000002',
+    code: 'ADV_DEMO2',
+    mode: 'ASSIGNED',
+    assignedTicketRanges: ['51-100'],
+    createdAt: new Date().toISOString()
+  };
+  db.advisors.push(adv1, adv2);
+
+  for (let i = 1; i <= 100; i++) {
+    const series = [];
+    for (let k = 0; k < 4; k++) {
+      const numVal = (i - 1) + (k * 100);
+      series.push(numVal.toString().padStart(4, '0'));
+    }
+
+    let status = 'DISPONIBLE';
+    let buyerName = '';
+    let buyerPhone = '';
+    let advisorId = '';
+    let advisorName = '';
+    let totalPaid = 0;
+    let abonos = [];
+    let confirmedByAdmin = false;
+
+    if (i === 1) {
+      status = 'PAGADA';
+      buyerName = 'Cliente Demo Pagado';
+      buyerPhone = '3001112233';
+      advisorId = adv1.id;
+      advisorName = adv1.name;
+      totalPaid = 20000;
+      confirmedByAdmin = true;
+      abonos = [{ id: 'ab-demo-1', amount: 20000, date: new Date().toISOString(), sellerId: adv1.id, sellerName: adv1.name, note: 'Pago Total' }];
+    } else if (i === 2) {
+      status = 'ABONO_PARCIAL';
+      buyerName = 'Cliente Demo Abono';
+      buyerPhone = '3004445566';
+      advisorId = adv2.id;
+      advisorName = adv2.name;
+      totalPaid = 10000;
+      confirmedByAdmin = false;
+      abonos = [{ id: 'ab-demo-2', amount: 10000, date: new Date().toISOString(), sellerId: adv2.id, sellerName: adv2.name, note: 'Abono 50%' }];
+    }
+
+    db.tickets.push({
+      id: `tkt-demo-${i}`,
+      companyId: DEMO_COMPANY_ID,
+      raffleId: demoRaffle.id,
+      ticketNumber: i,
+      numbers: series,
+      price: demoRaffle.ticketPrice,
+      status,
+      advisorId,
+      advisorName,
+      buyerName,
+      buyerPhone,
+      totalPaid,
+      balancePending: demoRaffle.ticketPrice - totalPaid,
+      confirmedByAdmin,
+      assignedDate: status !== 'DISPONIBLE' ? new Date().toISOString() : null,
+      abonos
+    });
+  }
+
+  db.lastDemoReset = new Date().toISOString();
+  console.log('✅ Auto-reset de la cuenta DEMO completado exitosamente.');
+}
+
+// ---------------------------------------------------------------------------
+// Plans: each company is FREE (with ads) or PRO (no ads), optionally until a date (proUntil,
+// "YYYY-MM-DD", Colombian calendar; after that day the company is FREE again). The SuperAdmin
+// manages the plans, the demo mode and the text of the "upgrade to PRO" banner.
+// ---------------------------------------------------------------------------
+const DEFAULT_MONETIZATION = {
+  demoEnabled: true,
+  adTitle: 'Publicidad • Versión Gratuita',
+  adText: 'Pasa a la versión PRO para eliminar anuncios y desbloquear rifas ilimitadas.',
+  upgradeTitle: 'Actualizar a RifaApp PRO',
+  upgradeText: 'Sin anuncios publicitarios, rifas y boletas ilimitadas, logo propio en las boletas, reportes y asesores ilimitados.',
+  priceText: '',
+  contactWhatsApp: '',
+  contactUrl: '',
+  monthlyPrice: 0,
+  quarterlyPrice: 0, // 3 months
+  semiannualPrice: 0, // 6 months
+  yearlyPrice: 0,
+  // Google ads for FREE companies (empty = only the platform's own "upgrade to PRO" banner)
+  adsEnabled: false,
+  admobAndroidBannerId: '',
+  admobIosBannerId: '',
+  adsenseClient: '',
+  adsenseSlot: ''
+};
+
+function monetizationSettings() {
+  return { ...DEFAULT_MONETIZATION, ...((db.settings || {}).monetization || {}) };
+}
+
+function todayColombia() {
+  return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/** Plan in force: a PRO whose date has passed counts as FREE. */
+function effectiveTier(company) {
+  if (!company || company.tier !== 'PRO') return 'FREE';
+  if (company.proUntil && company.proUntil < todayColombia()) return 'FREE';
+  return 'PRO';
+}
+
+/** Companies created before plans existed keep working without ads (once, on first start). */
+function ensureCompanyPlans(target) {
+  if (!target.settings || typeof target.settings !== 'object') target.settings = {};
+  if (target.settings.plansMigrated) return false;
+  for (const c of target.companies || []) {
+    if (!c.tier && !c.isDemo) c.tier = 'PRO';
+  }
+  target.settings.plansMigrated = new Date().toISOString();
+  return true;
+}
+
+/** Validates a plan change sent by the SuperAdmin; returns { error } or the fields to apply. */
+function planFields(body) {
+  const out = {};
+  if (body.tier !== undefined) {
+    if (!['FREE', 'PRO'].includes(body.tier)) return { error: 'Plan no válido (FREE o PRO).' };
+    out.tier = body.tier;
+  }
+  if (body.proUntil !== undefined) {
+    const v = String(body.proUntil || '').trim();
+    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return { error: 'Fecha de vencimiento no válida.' };
+    out.proUntil = v || null;
+  }
+  if (out.tier === 'FREE') out.proUntil = null;
+  return { fields: out };
+}
+
+function checkAndResetDemo() {
+  if (!monetizationSettings().demoEnabled) return false;
+  if (!db.lastDemoReset) {
+    resetDemoAccountData();
+    return true;
+  }
+  const elapsed = Date.now() - new Date(db.lastDemoReset).getTime();
+  if (elapsed >= DEMO_RESET_INTERVAL_MS) {
+    resetDemoAccountData();
+    return true;
+  }
+  return false;
+}
+
+setInterval(() => {
+  if (isDbLoaded && checkAndResetDemo()) {
+    saveDB();
+  }
+}, 60 * 60 * 1000);
+
 
 let isDbLoaded = false;
 let loadedEncrypted = false;
@@ -928,6 +1329,8 @@ async function loadDB() {
 
   const templatesMoved = await extractEmbeddedTemplates(db);
   const channelsSeeded = ensureSaleChannels(db);
+  const plansMigrated = ensureCompanyPlans(db);
+  const cashMigrated = ensureCashMigration(db);
   const banksSeeded = ensureBanks(db);
   const lotteriesSeeded = ensureLotteries(db);
   const verificationSeeded = ensureVerificationSecret(db);
@@ -940,6 +1343,8 @@ async function loadDB() {
   const needsRewrite =
     templatesMoved ||
     channelsSeeded ||
+    plansMigrated ||
+    cashMigrated ||
     banksSeeded ||
     lotteriesSeeded ||
     verificationSeeded ||
@@ -973,6 +1378,7 @@ async function reloadFromFirestore() {
   // Data written by an older server may lack what this version seeds at startup (sale channels,
   // receipt signing secret): seed it again so sales and QR receipts keep working
   const seededChannels = ensureSaleChannels(db);
+  if (ensureCompanyPlans(db) | ensureCashMigration(db)) saveDB();
   const seededBanks = ensureBanks(db);
   const seededLotteries = ensureLotteries(db);
   const seededSecret = ensureVerificationSecret(db);
@@ -1046,6 +1452,8 @@ function sessionUser(kind, record) {
     };
   }
   if (kind === 'admin') {
+    const tier = effectiveTier(record);
+    const isDemo = !!record.isDemo;
     return {
       role: 'admin',
       id: record.id,
@@ -1054,10 +1462,16 @@ function sessionUser(kind, record) {
       username: record.adminUsername,
       companyId: record.id,
       companyName: record.name,
+      tier,
+      proUntil: record.proUntil || null,
+      isDemo,
+      showAds: tier !== 'PRO',
       mustChangePassword: !!record.adminMustChangePassword
     };
   }
   const company = (db.companies || []).find(c => c.id === record.companyId);
+  const companyTier = effectiveTier(company);
+  const isCompanyDemo = company ? !!company.isDemo : false;
   return {
     role: 'asesor',
     id: record.id,
@@ -1066,6 +1480,9 @@ function sessionUser(kind, record) {
     username: record.username || record.code,
     companyId: record.companyId || null,
     companyName: company ? company.name : '',
+    tier: companyTier,
+    isDemo: isCompanyDemo,
+    showAds: companyTier !== 'PRO',
     mustChangePassword: !!record.mustChangePassword,
     advisor: record
   };
@@ -1087,9 +1504,40 @@ function resolveAccount(payload) {
   if (!record) return null;
   if (security.passwordVersion(passwordHashOf(payload.role, record)) !== payload.pv) return null;
   if (payload.role === 'admin' && record.status === 'INACTIVA') return null;
+  // Demo mode switched off by the SuperAdmin: demo sessions end
+  if (!monetizationSettings().demoEnabled) {
+    const company = payload.role === 'admin' ? record : (payload.role === 'asesor' ? (db.companies || []).find(c => c.id === record.companyId) : null);
+    if (company && company.isDemo) return null;
+  }
   if (payload.role === 'asesor' && record.status === 'INHABILITADO') return null;
   return { kind: payload.role, record };
 }
+
+// Public: what the login screen and the ads banner need (no secrets)
+app.get('/api/public/app-config', (req, res) => {
+  const m = monetizationSettings();
+  res.json({
+    demoEnabled: !!m.demoEnabled,
+    ad: {
+      title: m.adTitle, text: m.adText, upgradeTitle: m.upgradeTitle, upgradeText: m.upgradeText,
+      priceText: m.priceText, contactWhatsApp: m.contactWhatsApp, contactUrl: m.contactUrl
+    },
+    googleAds: m.adsEnabled ? {
+      admobAndroidBannerId: m.admobAndroidBannerId, admobIosBannerId: m.admobIosBannerId,
+      adsenseClient: m.adsenseClient, adsenseSlot: m.adsenseSlot
+    } : null
+  });
+});
+
+app.post('/api/auth/demo-login', (req, res) => {
+  if (!monetizationSettings().demoEnabled) return res.status(403).json({ error: 'El modo demo no está disponible.' });
+  checkAndResetDemo();
+  let demoCompany = (db.companies || []).find(c => c.isDemo || c.id === 'comp-demo');
+  if (!demoCompany) {
+    return res.status(500).json({ error: 'No se pudo inicializar la cuenta Demo.' });
+  }
+  res.json(issueSession('admin', demoCompany));
+});
 
 app.post('/api/auth/login', (req, res) => {
   const { role, username, password } = req.body || {};
@@ -1144,6 +1592,10 @@ app.post('/api/auth/login', (req, res) => {
   if (kind === 'asesor' && record.status === 'INHABILITADO') {
     return res.status(403).json({ error: 'Su cuenta de asesor se encuentra INHABILITADA por la administración.' });
   }
+  const demoCompany = kind === 'admin' ? record : (kind === 'asesor' ? (db.companies || []).find(c => c.id === record.companyId) : null);
+  if (demoCompany && demoCompany.isDemo && !monetizationSettings().demoEnabled) {
+    return res.status(403).json({ error: 'El modo demo no está disponible en este momento.' });
+  }
 
   security.clearFailures(ip, identifier);
   res.json(issueSession(kind, record));
@@ -1160,6 +1612,9 @@ app.get('/api/drive/status', async (req, res) => {
 
 // Every other API route requires a valid session
 app.use('/api', (req, res, next) => {
+  if (req.path === '/auth/login' || req.path === '/auth/demo-login' || req.path === '/health' || req.path.startsWith('/public/')) {
+    return next();
+  }
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   const payload = token ? security.verifyToken(token) : null;
@@ -1292,6 +1747,8 @@ app.get('/api/companies', (req, res) => {
 
     return {
       ...comp,
+      tier: comp.tier || 'FREE',
+      effectiveTier: effectiveTier(comp),
       adminsCount: admins.length,
       admins: admins,
       rafflesCount: raffles.length,
@@ -1340,8 +1797,13 @@ app.post('/api/companies', superAdminOnly, (req, res) => {
     adminMustChangePassword: true,
     adminName: adminName || 'Admin Empresa',
     adminEmail: adminEmail || '',
+    tier: 'FREE',
+    proUntil: null,
     createdAt: new Date().toISOString()
   };
+  const plan = planFields(req.body);
+  if (plan.error) return res.status(400).json({ error: plan.error });
+  Object.assign(newCompany, plan.fields);
 
   if (!db.companies) db.companies = [];
   db.companies.push(newCompany);
@@ -1357,9 +1819,13 @@ app.put('/api/companies/:id', superAdminOnly, (req, res) => {
     return res.status(404).json({ error: 'Empresa no encontrada' });
   }
 
+  const plan = planFields(req.body);
+  if (plan.error) return res.status(400).json({ error: plan.error });
+
   if (req.body.name !== undefined) company.name = req.body.name;
   if (req.body.code !== undefined) company.code = req.body.code;
   if (req.body.status !== undefined) company.status = req.body.status;
+  Object.assign(company, plan.fields);
   if (req.body.adminUsername !== undefined) {
     if (normalize(req.body.adminUsername) !== normalize(company.adminUsername) && isUsernameTaken(req.body.adminUsername)) {
       return res.status(409).json({ error: 'Ese usuario administrador ya existe.' });
@@ -1376,6 +1842,226 @@ app.put('/api/companies/:id', superAdminOnly, (req, res) => {
   if (req.body.adminName !== undefined) company.adminName = req.body.adminName;
   saveDB();
   res.json(company);
+});
+
+// Account deletion requested from inside the app
+app.post('/api/account/deletion-request', (req, res) => {
+  if (req.auth.role === 'superadmin') return res.status(400).json({ error: 'La cuenta SuperAdmin no se elimina desde aquí.' });
+  const r = req.auth.record;
+  const isAdmin = req.auth.role === 'admin';
+  const already = (db.deletionRequests || []).find(d => d.accountId === r.id && d.status === 'PENDIENTE');
+  if (already) return res.json({ message: 'Ya tiene una solicitud pendiente.', request: already });
+  const request = {
+    id: `del-${Date.now()}`, source: 'app', accountType: req.auth.role, accountId: r.id,
+    name: isAdmin ? (r.adminName || '') : (r.name || ''), identifier: isAdmin ? r.adminUsername : (r.username || r.code),
+    company: isAdmin ? r.name : (((db.companies || []).find(c => c.id === r.companyId)) || {}).name || '',
+    contact: isAdmin ? (r.adminEmail || '') : (r.email || r.phone || ''), reason: String((req.body || {}).reason || '').trim().slice(0, 500),
+    status: 'PENDIENTE', createdAt: new Date().toISOString()
+  };
+  db.deletionRequests.unshift(request);
+  saveDB();
+  res.status(201).json({ message: 'Solicitud enviada. Se atenderá en un máximo de 15 días hábiles.', request });
+});
+
+app.get('/api/deletion-requests', superAdminOnly, (req, res) => res.json(db.deletionRequests || []));
+
+app.put('/api/deletion-requests/:id', superAdminOnly, (req, res) => {
+  const request = (db.deletionRequests || []).find(d => d.id === req.params.id);
+  if (!request) return res.status(404).json({ error: 'Solicitud no encontrada.' });
+  const status = (req.body || {}).status;
+  if (!['ATENDIDA', 'RECHAZADA', 'PENDIENTE'].includes(status)) return res.status(400).json({ error: 'Estado no válido.' });
+  request.status = status;
+  request.note = String((req.body || {}).note || '').trim().slice(0, 300);
+  request.resolvedBy = actorName(req);
+  request.resolvedAt = new Date().toISOString();
+  saveDB();
+  res.json(request);
+});
+
+app.get('/api/legal', superAdminOnly, (req, res) => res.json(legalSettings()));
+
+app.put('/api/legal', superAdminOnly, (req, res) => {
+  const next = { ...legalSettings() };
+  for (const key of Object.keys(DEFAULT_LEGAL)) {
+    if ((req.body || {})[key] !== undefined) next[key] = String(req.body[key] || '').trim().slice(0, 200);
+  }
+  next.updatedOn = colombiaDay(Date.now());
+  if (!db.settings) db.settings = {};
+  db.settings.legal = next;
+  saveDB();
+  res.json(next);
+});
+
+app.get('/api/monetization', superAdminOnly, (req, res) => {
+  res.json({ ...monetizationSettings(), lastDemoReset: db.lastDemoReset || null, defaults: DEFAULT_MONETIZATION });
+});
+
+app.put('/api/monetization', superAdminOnly, (req, res) => {
+  const body = req.body || {};
+  const current = monetizationSettings();
+  const next = { ...current };
+  if (body.demoEnabled !== undefined) next.demoEnabled = body.demoEnabled === true;
+  for (const key of ['adTitle', 'adText', 'upgradeTitle', 'upgradeText', 'priceText', 'contactUrl']) {
+    if (body[key] !== undefined) next[key] = String(body[key] || '').trim().slice(0, key.endsWith('Text') ? 500 : 120);
+  }
+  if (body.contactWhatsApp !== undefined) next.contactWhatsApp = String(body.contactWhatsApp || '').replace(/[^\d+]/g, '').slice(0, 15);
+  for (const key of ['monthlyPrice', 'quarterlyPrice', 'semiannualPrice', 'yearlyPrice']) {
+    if (body[key] !== undefined) next[key] = Math.max(0, Math.round(Number(body[key]) || 0));
+  }
+  if (body.adsEnabled !== undefined) next.adsEnabled = body.adsEnabled === true;
+  for (const key of ['admobAndroidBannerId', 'admobIosBannerId', 'adsenseClient', 'adsenseSlot']) {
+    if (body[key] !== undefined) next[key] = String(body[key] || '').trim().replace(/[^\w\-\/~.]/g, '').slice(0, 80);
+  }
+  if (next.contactUrl && !/^https?:\/\//i.test(next.contactUrl)) {
+    return res.status(400).json({ error: 'El enlace de contacto debe empezar por http:// o https://' });
+  }
+  for (const key of ['adTitle', 'adText', 'upgradeTitle']) if (!next[key]) next[key] = DEFAULT_MONETIZATION[key];
+  if (!db.settings) db.settings = {};
+  db.settings.monetization = next;
+  saveDB();
+  res.json({ ...next, lastDemoReset: db.lastDemoReset || null, defaults: DEFAULT_MONETIZATION });
+});
+
+// ── Subscriptions: payments of each company for its PRO plan ──
+function addMonthsToDay(day, months) {
+  const [y, m, d] = day.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1 + months, d));
+  // Same day next period minus one: 05/10 + 1 month = until 04/11
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function nextDay(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+}
+
+function planStatus(company) {
+  if (company.isDemo) return 'DEMO';
+  if (effectiveTier(company) !== 'PRO') return company.tier === 'PRO' ? 'VENCIDO' : 'GRATIS';
+  if (!company.proUntil) return 'PRO';
+  const days = Math.round((Date.parse(company.proUntil) - Date.parse(todayColombia())) / 86400000);
+  return days <= 7 ? 'POR_VENCER' : 'PRO';
+}
+
+app.get('/api/monetization/payments', superAdminOnly, (req, res) => {
+  let list = db.subscriptionPayments || [];
+  if (req.query.companyId) list = list.filter(p => p.companyId === req.query.companyId);
+  res.json(list.slice().sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
+});
+
+app.post('/api/monetization/payments', superAdminOnly, (req, res) => {
+  const body = req.body || {};
+  const company = (db.companies || []).find(c => c.id === body.companyId && !c.isDemo);
+  if (!company) return res.status(404).json({ error: 'Empresa no encontrada.' });
+  const amount = Math.round(Number(body.amount) || 0);
+  if (amount <= 0) return res.status(400).json({ error: 'Indique el valor pagado.' });
+  const months = parseInt(body.months, 10);
+  if (!months || months < 1 || months > 36) return res.status(400).json({ error: 'Indique cuántos meses paga (1 a 36).' });
+  const paidOn = String(body.paidOn || todayColombia());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > todayColombia()) return res.status(400).json({ error: 'Fecha de pago no válida.' });
+  // The new period starts when the current PRO ends (renewal in advance) or today
+  const today = todayColombia();
+  const current = effectiveTier(company) === 'PRO' && company.proUntil ? company.proUntil : null;
+  const start = current && current >= today ? nextDay(current) : today;
+  const until = addMonthsToDay(start, months);
+  const payment = {
+    id: `pay-${Date.now()}`,
+    companyId: company.id,
+    companyName: company.name,
+    amount,
+    months,
+    method: String(body.method || 'Transferencia').trim().slice(0, 40),
+    reference: String(body.reference || '').trim().slice(0, 60),
+    paidOn,
+    periodStart: start,
+    periodEnd: until,
+    proUntilBefore: company.tier === 'PRO' ? (company.proUntil || null) : 'FREE',
+    note: String(body.note || '').trim().slice(0, 300),
+    registeredBy: actorName(req),
+    createdAt: new Date().toISOString()
+  };
+  company.tier = 'PRO';
+  company.proUntil = until;
+  db.subscriptionPayments.unshift(payment);
+  saveDB();
+  res.status(201).json({ payment, company: { id: company.id, tier: company.tier, proUntil: company.proUntil } });
+});
+
+// Voids a payment registered by mistake; if it was the latest one, the plan goes back to its previous end
+app.post('/api/monetization/payments/:id/void', superAdminOnly, (req, res) => {
+  const payment = (db.subscriptionPayments || []).find(p => p.id === req.params.id);
+  if (!payment || payment.voided) return res.status(404).json({ error: 'Pago no encontrado.' });
+  const reason = String((req.body || {}).reason || '').trim();
+  if (reason.length < 5) return res.status(400).json({ error: 'Explique por qué anula el pago.' });
+  const company = (db.companies || []).find(c => c.id === payment.companyId);
+  const latest = (db.subscriptionPayments || []).find(p => p.companyId === payment.companyId && !p.voided);
+  if (company && latest && latest.id === payment.id && company.proUntil === payment.periodEnd) {
+    if (payment.proUntilBefore === 'FREE') { company.tier = 'FREE'; company.proUntil = null; } else company.proUntil = payment.proUntilBefore;
+  }
+  payment.voided = { by: actorName(req), at: new Date().toISOString(), reason };
+  saveDB();
+  res.json(payment);
+});
+
+app.get('/api/monetization/summary', superAdminOnly, (req, res) => {
+  const payments = (db.subscriptionPayments || []).filter(p => !p.voided);
+  const byMonth = {};
+  for (const p of payments) byMonth[p.paidOn.slice(0, 7)] = (byMonth[p.paidOn.slice(0, 7)] || 0) + p.amount;
+  const months = [];
+  const [ty, tm] = todayColombia().split('-').map(Number);
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(ty, tm - 1 - i, 1));
+    const key = d.toISOString().slice(0, 7);
+    months.push({ month: key, total: byMonth[key] || 0 });
+  }
+  const companies = (db.companies || []).map(c => {
+    const last = payments.find(p => p.companyId === c.id);
+    return {
+      id: c.id, name: c.name, status: planStatus(c), tier: c.tier || 'FREE', proUntil: c.proUntil || null,
+      lastPayment: last ? { amount: last.amount, months: last.months, paidOn: last.paidOn } : null,
+      totalPaid: payments.filter(p => p.companyId === c.id).reduce((s, p) => s + p.amount, 0)
+    };
+  });
+  const count = st => companies.filter(c => c.status === st).length;
+  // Monthly recurring revenue: each active PRO's last payment spread over its months
+  const mrr = companies.filter(c => ['PRO', 'POR_VENCER'].includes(c.status) && c.lastPayment)
+    .reduce((s, c) => s + c.lastPayment.amount / c.lastPayment.months, 0);
+  res.json({
+    thisMonth: months[months.length - 1].total,
+    total: payments.reduce((s, p) => s + p.amount, 0),
+    mrr: Math.round(mrr),
+    months,
+    counts: { pro: count('PRO'), porVencer: count('POR_VENCER'), vencido: count('VENCIDO'), gratis: count('GRATIS'), demo: count('DEMO') },
+    companies
+  });
+});
+
+// Company admin: its own plan and payments
+app.get('/api/my-plan', adminOnly, (req, res) => {
+  const company = req.auth.role === 'admin' ? req.auth.record : (db.companies || []).find(c => c.id === req.query.companyId);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const m = monetizationSettings();
+  res.json({
+    tier: effectiveTier(company),
+    status: planStatus(company),
+    proUntil: company.proUntil || null,
+    isDemo: !!company.isDemo,
+    monthlyPrice: m.monthlyPrice,
+    quarterlyPrice: m.quarterlyPrice,
+    semiannualPrice: m.semiannualPrice,
+    yearlyPrice: m.yearlyPrice,
+    contactWhatsApp: m.contactWhatsApp,
+    contactUrl: m.contactUrl,
+    payments: (db.subscriptionPayments || []).filter(p => p.companyId === company.id && !p.voided)
+      .map(p => ({ id: p.id, amount: p.amount, months: p.months, method: p.method, reference: p.reference, paidOn: p.paidOn, periodStart: p.periodStart, periodEnd: p.periodEnd }))
+  });
+});
+
+app.post('/api/monetization/demo-reset', superAdminOnly, (req, res) => {
+  resetDemoAccountData();
+  saveDB();
+  res.json({ message: 'Demo reiniciada con datos de ejemplo.', lastDemoReset: db.lastDemoReset });
 });
 
 // DELETE Company (Cascade deletes all company raffles, tickets, advisors, winners, and cash records)
@@ -1412,6 +2098,7 @@ app.delete('/api/companies/:id', superAdminOnly, (req, res) => {
 
   // Remove cash transactions
   db.cashTransactions = (db.cashTransactions || []).filter(ct => !companyRaffleIds.has(ct.raffleId) && ct.companyId !== id);
+  db.cashDeliveries = (db.cashDeliveries || []).filter(d => d.companyId !== id);
 
   // Remove commission payouts
   db.commissionPayouts = (db.commissionPayouts || []).filter(cp => !companyAdvisorIds.has(cp.advisorId) && !companyRaffleIds.has(cp.raffleId));
@@ -1531,7 +2218,7 @@ app.get('/api/backup/download', superAdminOnly, async (req, res) => {
   res.send(JSON.stringify(payload));
 });
 
-const KNOWN_SECTIONS = ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts'];
+const KNOWN_SECTIONS = ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests'];
 
 /** Decodes an uploaded or stored backup; returns { data } or { error } without touching the database. */
 function decodeBackup(backupData) {
@@ -2195,6 +2882,7 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
   db.winners = (db.winners || []).filter(w => w.raffleId !== id);
   db.cashTransactions = (db.cashTransactions || []).filter(ct => ct.raffleId !== id);
   db.commissionPayouts = (db.commissionPayouts || []).filter(cp => cp.raffleId !== id);
+  db.cashDeliveries = (db.cashDeliveries || []).filter(d => d.raffleId !== id);
 
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({
@@ -2207,6 +2895,192 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
 
   saveDB();
   res.json({ message: `Sorteo "${raffle.title}" y sus boletas asociadas fueron eliminados exitosamente.` });
+});
+
+// ---------------------------------------------------------------------------
+// Closing a raffle: after its draw date the admin closes it (status INACTIVA). It stays 7 days
+// (it can be reopened and its information downloaded) and then everything about it is deleted.
+// A full backup is taken right before deleting.
+// ---------------------------------------------------------------------------
+const RAFFLE_RETENTION_DAYS = 7;
+
+function drawDayOf(raffle) {
+  const raw = String(raffle.mainDrawDate || '');
+  if (/^\d{4}-\d{2}-\d{2}T12:00:00/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw.slice(0, 10);
+  const ms = Date.parse(raw);
+  return isNaN(ms) ? null : colombiaDay(ms);
+}
+
+app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada.' });
+  if (raffle.scheduledDeletionAt) return res.status(400).json({ error: 'La rifa ya está cerrada.' });
+  const day = drawDayOf(raffle);
+  if (day && day >= colombiaDay(Date.now())) {
+    return res.status(400).json({ error: 'La rifa solo se puede cerrar después de la fecha del sorteo principal.' });
+  }
+  const now = Date.now();
+  raffle.statusBeforeClose = raffle.status || 'ACTIVA';
+  raffle.status = 'INACTIVA';
+  raffle.closedAt = new Date(now).toISOString();
+  raffle.closedBy = actorName(req);
+  raffle.scheduledDeletionAt = new Date(now + RAFFLE_RETENTION_DAYS * 86400000).toISOString();
+  saveDB();
+  res.json(raffle);
+});
+
+app.post('/api/raffles/:id/reopen', adminOnly, (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada.' });
+  if (!raffle.scheduledDeletionAt) return res.status(400).json({ error: 'La rifa no está cerrada.' });
+  raffle.status = raffle.statusBeforeClose || 'ACTIVA';
+  delete raffle.closedAt;
+  delete raffle.closedBy;
+  delete raffle.scheduledDeletionAt;
+  delete raffle.statusBeforeClose;
+  saveDB();
+  res.json(raffle);
+});
+
+/** Deletes every record of a raffle (and its Drive folder, sent to the Drive trash). */
+function purgeRaffle(raffle, reason) {
+  const id = raffle.id;
+  const counts = {
+    tickets: (db.tickets || []).filter(t => t.raffleId === id).length,
+    winners: (db.winners || []).filter(w => w.raffleId === id).length,
+    deliveries: (db.cashDeliveries || []).filter(d => d.raffleId === id).length
+  };
+  db.raffles = (db.raffles || []).filter(r => r.id !== id);
+  db.tickets = (db.tickets || []).filter(t => t.raffleId !== id);
+  db.winners = (db.winners || []).filter(w => w.raffleId !== id);
+  db.cashTransactions = (db.cashTransactions || []).filter(ct => ct.raffleId !== id);
+  db.commissionPayouts = (db.commissionPayouts || []).filter(cp => cp.raffleId !== id);
+  db.cashDeliveries = (db.cashDeliveries || []).filter(d => d.raffleId !== id);
+  for (const type of Object.keys(raffle.templates || {})) {
+    deleteTemplate(id, type).catch(err => console.error('⚠️ No se pudo borrar la plantilla:', err.message));
+  }
+  if (raffle.driveFolderId) {
+    driveService.trashDriveFile(raffle.driveFolderId).catch(err => console.error('⚠️ No se pudo enviar a la papelera la carpeta de Drive:', err.message));
+  }
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}-${id}`, type: 'PURGE_RAFFLE', targetId: id, targetName: raffle.title,
+    companyId: raffle.companyId, reason, counts, closedAt: raffle.closedAt, closedBy: raffle.closedBy, date: new Date().toISOString()
+  });
+  console.log(`🗑️ Rifa "${raffle.title}" eliminada (${reason}): ${counts.tickets} boletas, ${counts.winners} sorteos.`);
+}
+
+let purgingRaffles = false;
+async function purgeDueRaffles() {
+  if (!isDbLoaded || purgingRaffles) return;
+  const due = (db.raffles || []).filter(r => r.scheduledDeletionAt && Date.parse(r.scheduledDeletionAt) <= Date.now());
+  if (!due.length) return;
+  purgingRaffles = true;
+  try {
+    // Safety copy of everything right before deleting
+    await createSnapshot('antes_de_eliminar_rifa');
+    for (const r of due) {
+      const current = (db.raffles || []).find(x => x.id === r.id && x.scheduledDeletionAt);
+      if (current && Date.parse(current.scheduledDeletionAt) <= Date.now()) purgeRaffle(current, `Cerrada el ${current.closedAt} por ${current.closedBy}; ${RAFFLE_RETENTION_DAYS} días cumplidos`);
+    }
+    saveDB();
+  } catch (err) {
+    // Without the safety copy nothing is deleted; it is retried later
+    console.error('⚠️ No se eliminaron las rifas vencidas (no se pudo crear la copia de seguridad):', err.message);
+  } finally {
+    purgingRaffles = false;
+  }
+}
+setInterval(() => purgeDueRaffles().catch(() => {}), 60 * 60 * 1000);
+setTimeout(() => purgeDueRaffles().catch(() => {}), 60 * 1000);
+
+// Everything about a raffle in a ZIP: an Excel workbook and the payment / delivery proof images
+app.get('/api/raffles/:id/export', adminOnly, async (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada.' });
+  const ExcelJS = require('exceljs');
+  const archiver = require('archiver');
+  const tickets = (db.tickets || []).filter(t => t.raffleId === raffle.id).sort((a, b) => (a.ticketNumber || 0) - (b.ticketNumber || 0));
+  const winners = (db.winners || []).filter(w => w.raffleId === raffle.id);
+  const deliveries = (db.cashDeliveries || []).filter(d => d.raffleId === raffle.id);
+  const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
+  const nums = t => (t.numbers || []).join('-') || String(t.ticketNumber);
+  const day = v => (v ? (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : colombiaDay(Date.parse(v))) : '');
+  const safe = v => String(v || '').replace(/[^\w\-]+/g, '_').slice(0, 60);
+  const proofs = []; // { name, driveId }
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'RifaMaster';
+  const sheet = (name, columns, rows) => {
+    const ws = wb.addWorksheet(name);
+    ws.columns = columns.map(([header, key, width]) => ({ header, key, width: width || 16 }));
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    rows.forEach(r => ws.addRow(r));
+  };
+  const sold = tickets.filter(t => t.status !== 'DISPONIBLE');
+  sheet('Resumen', [['Dato', 'k', 30], ['Valor', 'v', 50]], [
+    { k: 'Empresa', v: company.name }, { k: 'Rifa', v: raffle.title }, { k: 'Descripción', v: raffle.description },
+    { k: 'Fecha sorteo principal', v: day(raffle.mainDrawDate) }, { k: 'Lotería', v: mainLotteryOf(raffle) },
+    { k: 'Gana con', v: winningRuleText(raffle) }, { k: 'Valor boleta', v: raffle.ticketPrice }, { k: 'Total boletas', v: tickets.length },
+    { k: 'Boletas vendidas', v: sold.length }, { k: 'Total recaudado', v: sold.reduce((s, t) => s + (t.totalPaid || 0), 0) },
+    { k: 'Cerrada', v: raffle.closedAt ? `${day(raffle.closedAt)} por ${raffle.closedBy}` : 'No' },
+    { k: 'Eliminación programada', v: raffle.scheduledDeletionAt ? day(raffle.scheduledDeletionAt) : '' },
+    { k: 'Generado', v: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }) }
+  ]);
+  sheet('Boletas', [['N° boleta', 'n', 18], ['Estado', 'st'], ['Comprador', 'b', 28], ['Teléfono', 'p'], ['Cédula', 'd'], ['Asesor', 'a', 24],
+    ['Medio de venta', 'ch'], ['Valor', 'price'], ['Pagado', 'paid'], ['Saldo', 'bal'], ['Confirmada en caja', 'conf'], ['Fecha venta', 'date'], ['Código verificación', 'code', 18]],
+  tickets.map(t => ({ n: nums(t), st: t.status, b: t.buyerName, p: t.buyerPhone, d: t.buyerDocument, a: t.advisorName, ch: t.saleChannel,
+    price: t.price, paid: t.totalPaid || 0, bal: Math.max(0, (t.price || 0) - (t.totalPaid || 0)), conf: t.confirmedByAdmin ? 'Sí' : 'No',
+    date: day(t.assignedDate), code: ticketVerificationCode(t) || '' })));
+  const abonoRows = [];
+  for (const t of tickets) for (const a of t.abonos || []) {
+    let proof = '';
+    if (a.soporteDriveId) { proof = `soportes/abonos/${safe(nums(t))}_${safe(a.id)}.jpg`; proofs.push({ name: proof, driveId: a.soporteDriveId }); }
+    abonoRows.push({ n: nums(t), b: t.buyerName, date: day(a.date), amount: a.amount, m: a.metodoPago || 'efectivo', by: a.sellerName, note: a.note,
+      td: day(a.transferDate), ob: a.originBank, ap: a.approvalNumber, dest: a.cuentaDestino, state: (a.amount || 0) > 0 ? abonoCashState(a) : '', proof });
+  }
+  sheet('Abonos', [['N° boleta', 'n', 18], ['Comprador', 'b', 26], ['Fecha', 'date'], ['Valor', 'amount'], ['Método', 'm'], ['Registró', 'by', 22], ['Nota', 'note', 26],
+    ['Fecha transferencia', 'td'], ['Banco origen', 'ob'], ['N° aprobación', 'ap'], ['Cuenta destino', 'dest', 30], ['Estado en caja', 'state'], ['Soporte', 'proof', 36]], abonoRows);
+  const voided = [];
+  for (const t of tickets) {
+    for (const a of t.voidedAbonos || []) voided.push({ kind: 'Abono anulado', n: nums(t), b: a.buyerName || t.buyerName, amount: a.amount, date: day(a.voidedAt), by: a.voidedBy, reason: a.voidReason });
+    for (const an of t.annulments || []) voided.push({ kind: 'Venta anulada', n: nums(t), b: (an.previous || {}).buyerName, amount: (an.previous || {}).totalPaid, date: day(an.date), by: an.by, reason: an.reason });
+  }
+  sheet('Anulaciones', [['Tipo', 'kind'], ['N° boleta', 'n', 18], ['Comprador', 'b', 26], ['Valor', 'amount'], ['Fecha', 'date'], ['Anuló', 'by', 22], ['Motivo', 'reason', 40]], voided);
+  sheet('Ganadores', [['Sorteo', 'name', 24], ['Fecha', 'date'], ['Resultado', 'res'], ['Número', 'num'], ['Ganador', 'w', 26], ['Premio', 'prize', 30], ['Valor', 'amount'],
+    ['Sin ganador', 'nw', 30], ['Decisión', 'dec', 26], ['Entregado a', 'to', 26], ['Fecha entrega', 'dd']],
+  winners.map(w => ({ name: w.drawName, date: day(w.drawDate), res: w.lotteryResult, num: w.winningNumber, w: w.isWinner && w.winnerDetails ? w.winnerDetails.buyerName : '',
+    prize: w.prizeDescription || '', amount: w.totalPrizePaid, nw: w.isWinner ? '' : (w.noWinnerReason || (w.accumulated ? 'Acumulado' : '')),
+    dec: w.decision ? `${w.decision.type}${w.decision.newDate ? ' ' + w.decision.newDate : ''} ${w.decision.note || ''}` : '',
+    to: w.prizeDelivery ? `${w.prizeDelivery.receivedBy} ${w.prizeDelivery.receivedDocument || ''}` : '', dd: w.prizeDelivery ? w.prizeDelivery.deliveredOn : '' })));
+  sheet('Entregas caja', [['Asesor', 'a', 24], ['Reportada', 'date'], ['Método', 'm'], ['Total', 'total'], ['Boletas', 'items', 40], ['Estado', 'st'], ['Revisó', 'rev', 22],
+    ['Fecha transferencia', 'td'], ['Banco', 'ob'], ['N° aprobación', 'ap'], ['Soporte', 'proof', 36]],
+  deliveries.map(d => {
+    let proof = '';
+    if (d.soporteDriveId) { proof = `soportes/entregas/${safe(d.advisorName)}_${safe(d.id)}.jpg`; proofs.push({ name: proof, driveId: d.soporteDriveId }); }
+    return { a: d.advisorName, date: day(d.reportedAt), m: d.method, total: d.total, items: d.items.map(i => (i.numbers || []).join('-')).join(', '),
+      st: d.status, rev: d.reviewedBy || '', td: d.transferDate || '', ob: d.originBank || '', ap: d.approvalNumber || '', proof };
+  }));
+
+  const filename = `rifa_${safe(raffle.title)}_${colombiaDay(Date.now())}.zip`;
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const zip = archiver('zip', { zlib: { level: 6 } });
+  zip.on('error', err => { console.error('⚠️ Error creando el ZIP:', err.message); res.destroy(err); });
+  zip.pipe(res);
+  zip.append(await wb.xlsx.writeBuffer(), { name: `${safe(raffle.title)}.xlsx` });
+  const missing = [];
+  for (const p of proofs) {
+    try {
+      const file = await driveService.downloadDriveFile(p.driveId);
+      zip.append(file.buffer, { name: p.name });
+    } catch (err) {
+      missing.push(`${p.name}: ${err.message}`);
+    }
+  }
+  if (missing.length) zip.append(`No se pudieron descargar estos soportes de Google Drive:\n${missing.join('\n')}\n`, { name: 'soportes_faltantes.txt' });
+  await zip.finalize();
 });
 
 // ---------------------------------------------------------------------------
@@ -2912,6 +3786,8 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
   if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
   const index = (ticket.abonos || []).findIndex(a => a.id === req.params.abonoId);
   if (index === -1) return res.status(404).json({ error: 'Abono no encontrado.' });
+  const blocker = abonoVoidBlocker(ticket.abonos[index]);
+  if (blocker) return res.status(409).json({ error: blocker });
 
   const reason = String((req.body || {}).reason || '').trim();
   if (reason.length < 10) {
@@ -2932,6 +3808,7 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
     buyerDocument: ticket.buyerDocument || ''
   });
   recalcTicketTotals(ticket);
+  if (ticket.totalPaid > 0) recalcCashConfirmation(ticket);
 
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({
@@ -3160,6 +4037,10 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (wasRequestApplied(requestId)) {
     return res.json(withVerification(ticket));
   }
+  const ticketRaffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (ticket.status === 'DISPONIBLE' && ticketRaffle && ticketRaffle.scheduledDeletionAt) {
+    return res.status(400).json({ error: 'La rifa está cerrada: ya no se pueden vender boletas.' });
+  }
   // An advisor working with assigned numbers can only sell inside them
   if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record)) {
     return res.status(403).json({ error: 'Esta boleta no está en sus números asignados. Solicite más boletas al administrador.' });
@@ -3230,6 +4111,10 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
       note: note || 'Abono registrado',
       ...paymentDetails
     };
+    // Cash collected by the admin is already in the company's hands
+    if (payMethod === 'efectivo' && (!sellerId || sellerId === 'admin')) {
+      newAbono.received = { by: sellerName || 'Administrador', at: newAbono.date, method: 'efectivo', auto: true };
+    }
     ticket.abonos.push(newAbono);
     ticket.totalPaid += abonoAmount;
   } else if (ticket.abonos.length === 0) {
@@ -3254,6 +4139,8 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   } else {
     ticket.status = 'RESERVADA'; // Apartada / Fiada sin abono ($0)
   }
+  // A new payment not yet in the company's hands un-confirms the ticket until it is settled
+  if (ticket.totalPaid > 0) recalcCashConfirmation(ticket);
 
   saveDB();
   res.json(withVerification(ticket));
@@ -3267,6 +4154,10 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
   const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
   if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
   if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible; no hay venta que anular.' });
+  const locked = (ticket.abonos || []).find(a => abonoVoidBlocker(a));
+  if (locked) {
+    return res.status(409).json({ error: `No se puede anular la venta: ${abonoVoidBlocker(locked).replace(': no se puede anular.', '').toLowerCase()}.` });
+  }
 
   const reason = String((req.body || {}).reason || '').trim();
   if (reason.length < 10) {
@@ -3333,20 +4224,342 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
 });
 
 // POST Admin Confirm Ticket Payment Received
+// ---------------------------------------------------------------------------
+// Cash control. Each payment (abono) is settled when the money is in the company's hands:
+//  - transfer from the buyer: the admin validates it (abono.verification)
+//  - cash collected by the admin: received at once
+//  - cash collected by an advisor: the advisor reports a delivery (db.cashDeliveries: cash or a
+//    transfer with its proof, one or several tickets) and the admin confirms or rejects it.
+// A ticket is confirmed in cash (confirmedByAdmin) when all its payments are settled.
+// ---------------------------------------------------------------------------
+function actorName(req) {
+  if (req.auth.role === 'superadmin') return 'SuperAdministrador';
+  if (req.auth.role === 'admin') return req.auth.record.adminName || 'Administrador';
+  return req.auth.record.name || 'Asesor';
+}
+
+function isTransferAbono(abono) {
+  return abono.metodoPago === 'transferencia';
+}
+
+function isAbonoSettled(abono) {
+  if ((abono.amount || 0) <= 0) return true;
+  if (isTransferAbono(abono)) return !!abono.verification && abono.verification.status === 'VALIDADA';
+  return !!abono.received;
+}
+
+/**
+ * A payment reconciled in cash (transfer validated, advisor delivery confirmed, cash received in
+ * hand or confirmed before this control) can no longer be voided: the cash records depend on it.
+ * Cash the admin collected himself (recorded automatically at sale time) can still be corrected.
+ */
+function isAbonoReconciled(abono) {
+  if ((abono.amount || 0) <= 0) return false;
+  if (isTransferAbono(abono)) return !!abono.verification && abono.verification.status === 'VALIDADA';
+  return !!abono.received && !abono.received.auto;
+}
+
+/** Why a payment cannot be voided, or null. */
+function abonoVoidBlocker(abono) {
+  if (isAbonoReconciled(abono)) {
+    return isTransferAbono(abono)
+      ? 'Esta transferencia ya fue validada en caja: no se puede anular.'
+      : 'Este pago ya fue conciliado en caja: no se puede anular.';
+  }
+  if (abono.deliveryId) return 'Este pago está en una entrega del asesor pendiente: rechace primero la entrega en Caja.';
+  return null;
+}
+
+/** Cash situation of a payment, as shown in Caja. */
+function abonoCashState(abono) {
+  if (isTransferAbono(abono)) {
+    if (!abono.verification) return 'POR_VALIDAR';
+    return abono.verification.status === 'VALIDADA' ? 'VALIDADA' : 'RECHAZADA';
+  }
+  if (abono.received) return 'RECIBIDO';
+  if (abono.deliveryId) return 'EN_ENTREGA';
+  return 'EN_PODER_ASESOR';
+}
+
+/** Recomputes the ticket's "confirmed in cash" flag from its payments. */
+function recalcCashConfirmation(ticket) {
+  const paying = (ticket.abonos || []).filter(a => (a.amount || 0) > 0);
+  const settled = paying.length > 0 && paying.every(isAbonoSettled);
+  if (settled && !ticket.confirmedByAdmin) {
+    ticket.confirmedByAdmin = true;
+    ticket.confirmedDate = new Date().toISOString();
+  } else if (!settled && ticket.confirmedByAdmin) {
+    ticket.confirmedByAdmin = false;
+    ticket.confirmedDate = null;
+  }
+  if (ticket.status === 'PAGADA' && ticket.confirmedByAdmin) ticket.status = 'CONFIRMADA';
+  if (ticket.status === 'CONFIRMADA' && !ticket.confirmedByAdmin) ticket.status = 'PAGADA';
+}
+
+/** Payments confirmed before this cash control existed count as received (once, on first start). */
+function ensureCashMigration(target) {
+  if (!target.settings || typeof target.settings !== 'object') target.settings = {};
+  // Tickets whose payments are all settled are confirmed in cash (and the opposite)
+  if (target.settings.cashMigrated && !target.settings.cashRecalculated) {
+    for (const t of target.tickets || []) if ((t.totalPaid || 0) > 0) recalcCashConfirmation(t);
+    target.settings.cashRecalculated = new Date().toISOString();
+    return true;
+  }
+  if (target.settings.cashMigrated) return false;
+  const at = new Date().toISOString();
+  for (const t of target.tickets || []) {
+    for (const a of t.abonos || []) {
+      if ((a.amount || 0) <= 0 || a.received || a.verification) continue;
+      if (t.confirmedByAdmin) {
+        if (isTransferAbono(a)) a.verification = { status: 'VALIDADA', by: 'Confirmado antes del control de caja', at };
+        else a.received = { by: 'Confirmado antes del control de caja', at, method: 'efectivo', legacy: true };
+      } else if (!isTransferAbono(a) && (!a.sellerId || a.sellerId === 'admin')) {
+        a.received = { by: a.sellerName || 'Administrador', at: a.date || at, method: 'efectivo', auto: true };
+      }
+    }
+  }
+  if (!Array.isArray(target.cashDeliveries)) target.cashDeliveries = [];
+  for (const t of target.tickets || []) if ((t.totalPaid || 0) > 0) recalcCashConfirmation(t);
+  target.settings.cashMigrated = at;
+  target.settings.cashRecalculated = at;
+  return true;
+}
+
+function findTicketAbono(ticketId, abonoId) {
+  const ticket = (db.tickets || []).find(t => t.id === ticketId);
+  const abono = ticket && (ticket.abonos || []).find(a => a.id === abonoId);
+  return { ticket, abono };
+}
+
+// Admin "confirm received" of a whole ticket: cash received in hand and transfers validated
 app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
-  const { id } = req.params;
-  const ticket = db.tickets.find(t => t.id === id);
+  const ticket = db.tickets.find(t => t.id === req.params.id);
   if (!ticket) {
     return res.status(404).json({ error: 'Boleta no encontrada' });
   }
-
-  ticket.confirmedByAdmin = true;
-  ticket.confirmedDate = new Date().toISOString();
-  if (ticket.status === 'PAGADA') {
-    ticket.status = 'CONFIRMADA';
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const at = new Date().toISOString();
+  const by = actorName(req);
+  for (const a of ticket.abonos || []) {
+    if ((a.amount || 0) <= 0 || isAbonoSettled(a)) continue;
+    if (isTransferAbono(a)) a.verification = { status: 'VALIDADA', by, at, note: 'Confirmado desde Caja' };
+    else {
+      a.received = { by, at, method: 'efectivo', note: 'Recibido directamente por el administrador' };
+      delete a.deliveryId;
+    }
   }
+  recalcCashConfirmation(ticket);
   saveDB();
-  res.json(ticket);
+  res.json(withVerification(ticket));
+});
+
+// Admin validates or rejects a buyer's transfer (it reached the company's account or not)
+app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => {
+  const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Pago no encontrado.' });
+  if (!isTransferAbono(abono)) return res.status(400).json({ error: 'Este pago fue en efectivo: se confirma con la entrega del asesor.' });
+  const action = (req.body || {}).action;
+  const note = String((req.body || {}).note || '').trim().slice(0, 300);
+  if (action === 'reset') {
+    delete abono.verification;
+  } else if (action === 'validar' || action === 'rechazar') {
+    if (action === 'rechazar' && note.length < 5) return res.status(400).json({ error: 'Explique por qué rechaza la transferencia.' });
+    abono.verification = { status: action === 'validar' ? 'VALIDADA' : 'RECHAZADA', by: actorName(req), at: new Date().toISOString(), note };
+  } else {
+    return res.status(400).json({ error: 'Acción no válida.' });
+  }
+  recalcCashConfirmation(ticket);
+  saveDB();
+  res.json(withVerification(ticket));
+});
+
+// Admin received a cash payment in hand (without a delivery report from the advisor)
+app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) => {
+  const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Pago no encontrado.' });
+  if (isTransferAbono(abono)) return res.status(400).json({ error: 'Es una transferencia: valídela en lugar de recibirla.' });
+  if (abono.received) return res.status(400).json({ error: 'Este pago ya fue recibido.' });
+  if (abono.deliveryId) return res.status(400).json({ error: 'Este pago está en una entrega del asesor: confírmela o recházela.' });
+  abono.received = { by: actorName(req), at: new Date().toISOString(), method: 'efectivo', note: 'Recibido en mano por el administrador' };
+  recalcCashConfirmation(ticket);
+  saveDB();
+  res.json(withVerification(ticket));
+});
+
+/** Delivery as returned to the app, with each payment's current state. */
+function deliveryView(d) {
+  return {
+    ...d,
+    items: (d.items || []).map(item => {
+      const { ticket, abono } = findTicketAbono(item.ticketId, item.abonoId);
+      return { ...item, buyerName: ticket ? ticket.buyerName : '', state: abono ? abonoCashState(abono) : 'ANULADO' };
+    })
+  };
+}
+
+app.get('/api/cash/deliveries', (req, res) => {
+  const companyId = req.auth.role === 'admin' ? req.auth.record.id : (req.auth.role === 'asesor' ? req.auth.record.companyId : req.query.companyId);
+  let list = (db.cashDeliveries || []).filter(d => !companyId || d.companyId === companyId);
+  if (req.auth.role === 'asesor') list = list.filter(d => d.advisorId === req.auth.record.id);
+  if (req.query.raffleId) list = list.filter(d => d.raffleId === req.query.raffleId);
+  res.json(list.slice().sort((a, b) => String(b.reportedAt).localeCompare(String(a.reportedAt))).map(deliveryView));
+});
+
+/** Delivery proofs uploaded before the per-advisor folders existed are moved there (once each). */
+async function moveDeliveryProofsToAdvisorFolders() {
+  const pending = (db.cashDeliveries || []).filter(d => d.soporteDriveId && !d.soporteInAdvisorFolder);
+  for (const d of pending) {
+    try {
+      const raffle = (db.raffles || []).find(r => r.id === d.raffleId) || {};
+      const company = (db.companies || []).find(c => c.id === d.companyId) || {};
+      const folders = await driveService.getRaffleFolders(company.name || 'Empresa', d.companyId, raffle.title || 'Rifa', raffle.id || 'general', raffle.driveFolderId || null);
+      const target = await driveService.getAdvisorDeliveriesFolder(folders.raffleFolderId, d.advisorName);
+      await driveService.moveDriveFile(d.soporteDriveId, target);
+      const current = (db.cashDeliveries || []).find(x => x.id === d.id);
+      if (current) current.soporteInAdvisorFolder = true;
+    } catch (err) {
+      console.error('⚠️ No se pudo mover el soporte de la entrega', d.id, err.message);
+    }
+  }
+  if (pending.length) saveDB();
+}
+setTimeout(() => { if (isDbLoaded) moveDeliveryProofsToAdvisorFolders().catch(() => {}); }, 15000);
+
+/** Company that owns a Drive file used as a proof (payment, delivery, raffle images), or null. */
+function companyOfDriveFile(fileId) {
+  const raffleCompany = id => ((db.raffles || []).find(r => r.id === id) || {}).companyId;
+  for (const d of db.cashDeliveries || []) if (d.soporteDriveId === fileId) return d.companyId;
+  for (const r of db.raffles || []) if (r.aficheDriveId === fileId || r.fondoBoletaDriveId === fileId) return r.companyId;
+  for (const t of db.tickets || []) {
+    const lists = [t.abonos || [], t.voidedAbonos || [], ...(t.annulments || []).map(a => (a.previous && a.previous.abonos) || [])];
+    if (lists.some(list => list.some(a => a.soporteDriveId === fileId))) return raffleCompany(t.raffleId);
+  }
+  return null;
+}
+
+// Proof image from Google Drive, served by this server (the browser cannot load Drive images directly)
+app.get('/api/files/:fileId', async (req, res) => {
+  const fileId = String(req.params.fileId || '');
+  if (!/^[\w-]{10,}$/.test(fileId)) return res.status(400).json({ error: 'Archivo no válido.' });
+  const companyId = companyOfDriveFile(fileId);
+  const myCompany = req.auth.role === 'admin' ? req.auth.record.id : req.auth.role === 'asesor' ? req.auth.record.companyId : null;
+  if (!companyId || (req.auth.role !== 'superadmin' && companyId !== myCompany)) return res.status(404).json({ error: 'Archivo no encontrado.' });
+  try {
+    const file = await driveService.downloadDriveFile(fileId);
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.send(file.buffer);
+  } catch (err) {
+    console.error('⚠️ No se pudo leer el archivo de Drive:', err.message);
+    res.status(502).json({ error: 'No se pudo traer el archivo de Google Drive.' });
+  }
+});
+
+// The advisor reports that he handed over cash he collected: in cash or by a transfer (with proof)
+app.post('/api/cash/deliveries', requireRole('asesor'), async (req, res) => {
+  const advisor = req.auth.record;
+  const body = req.body || {};
+  const method = body.method === 'transferencia' ? 'transferencia' : 'efectivo';
+  const refs = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+  if (!refs.length) return res.status(400).json({ error: 'Seleccione las boletas que entrega.' });
+
+  let transfer = null;
+  if (method === 'transferencia') {
+    const day = String(body.transferDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > colombiaDay(Date.now())) return res.status(400).json({ error: 'Indique la fecha de la transferencia (no puede ser futura).' });
+    const approvalNumber = String(body.approvalNumber || '').trim().slice(0, 40);
+    if (approvalKey(approvalNumber).length < 3) return res.status(400).json({ error: 'Ingrese el número de aprobación de la transferencia.' });
+    const originBank = String(body.originBank || '').trim().slice(0, 60);
+    if (!originBank) return res.status(400).json({ error: 'Indique el banco desde el que transfirió.' });
+    if (!body.soporteImageBase64) return res.status(400).json({ error: 'Adjunte el soporte de la transferencia.' });
+    transfer = { transferDate: day, approvalNumber, originBank, destination: String(body.destination || '').trim().slice(0, 200) };
+  }
+
+  // Proof goes to Google Drive first; checks and changes below run without waiting
+  let soporte = {};
+  if (transfer) {
+    try {
+      const raffle = (db.raffles || []).find(r => r.id === body.raffleId) || {};
+      const company = (db.companies || []).find(c => c.id === advisor.companyId) || {};
+      const folders = await driveService.getRaffleFolders(company.name || 'Empresa', advisor.companyId, raffle.title || 'Rifa', raffle.id || 'general', raffle.driveFolderId || null);
+      // [Rifa]/Entregas_Asesores/[Asesor]
+      const advisorFolderId = await driveService.getAdvisorDeliveriesFolder(folders.raffleFolderId, advisor.name);
+      const up = await driveService.uploadFileToDrive({
+        buffer: Buffer.from(String(body.soporteImageBase64).replace(/^data:image\/\w+;base64,/, ''), 'base64'),
+        filename: `entrega_${advisor.code || advisor.id}_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+        parentFolderId: advisorFolderId
+      });
+      soporte = { soporteUrl: up.directUrl, soporteDriveId: up.fileId, soporteWebViewUrl: up.webViewUrl };
+    } catch (err) {
+      console.error('⚠️ Error al subir soporte de entrega:', err);
+      return res.status(502).json({ error: 'No se pudo subir el soporte a Google Drive. Intente de nuevo.' });
+    }
+  }
+
+  const me = (db.advisors || []).find(a => a.id === advisor.id) || advisor;
+  const items = [];
+  for (const ref of refs) {
+    const { ticket, abono } = findTicketAbono(ref.ticketId, ref.abonoId);
+    if (!abono) return res.status(400).json({ error: 'Una de las boletas seleccionadas ya no existe o cambió. Actualice la lista.' });
+    if (abono.sellerId !== me.id) return res.status(403).json({ error: `El pago de la boleta ${(ticket.numbers || []).join('-')} no lo cobró usted.` });
+    const state = abonoCashState(abono);
+    if (state !== 'EN_PODER_ASESOR') {
+      return res.status(400).json({ error: `El pago de la boleta ${(ticket.numbers || []).join('-')} ya ${state === 'EN_ENTREGA' ? 'está en otra entrega' : 'fue recibido o es una transferencia'}.` });
+    }
+    items.push({ ticketId: ticket.id, abonoId: abono.id, raffleId: ticket.raffleId, numbers: ticket.numbers || [], amount: abono.amount || 0, paymentDate: abono.date });
+  }
+  const delivery = {
+    id: `ent-${Date.now()}`,
+    companyId: me.companyId,
+    raffleId: body.raffleId || items[0].raffleId,
+    advisorId: me.id,
+    advisorName: me.name,
+    method,
+    total: items.reduce((sum, i) => sum + i.amount, 0),
+    items,
+    ...(transfer || {}),
+    ...soporte,
+    ...(soporte.soporteDriveId ? { soporteInAdvisorFolder: true } : {}),
+    note: String(body.note || '').trim().slice(0, 300),
+    status: 'PENDIENTE',
+    reportedAt: new Date().toISOString()
+  };
+  for (const item of items) findTicketAbono(item.ticketId, item.abonoId).abono.deliveryId = delivery.id;
+  db.cashDeliveries.unshift(delivery);
+  saveDB();
+  res.status(201).json(deliveryView(delivery));
+});
+
+// The admin confirms (money received) or rejects a delivery reported by an advisor
+app.post('/api/cash/deliveries/:id/:action', adminOnly, (req, res) => {
+  const delivery = (db.cashDeliveries || []).find(d => d.id === req.params.id);
+  if (!delivery || (req.auth.role === 'admin' && delivery.companyId !== req.auth.record.id)) return res.status(404).json({ error: 'Entrega no encontrada.' });
+  if (delivery.status !== 'PENDIENTE') return res.status(400).json({ error: 'Esta entrega ya fue revisada.' });
+  const action = req.params.action;
+  if (!['confirmar', 'rechazar'].includes(action)) return res.status(400).json({ error: 'Acción no válida.' });
+  const reason = String((req.body || {}).reason || '').trim().slice(0, 300);
+  if (action === 'rechazar' && reason.length < 5) return res.status(400).json({ error: 'Explique por qué rechaza la entrega.' });
+  const at = new Date().toISOString();
+  const by = actorName(req);
+  for (const item of delivery.items) {
+    const { ticket, abono } = findTicketAbono(item.ticketId, item.abonoId);
+    if (!abono || abono.deliveryId !== delivery.id) continue;
+    if (action === 'confirmar') {
+      abono.received = { by, at, method: delivery.method, deliveryId: delivery.id };
+    }
+    delete abono.deliveryId;
+    recalcCashConfirmation(ticket);
+  }
+  delivery.status = action === 'confirmar' ? 'CONFIRMADA' : 'RECHAZADA';
+  delivery.reviewedBy = by;
+  delivery.reviewedAt = at;
+  if (reason) delivery.reviewNote = reason;
+  saveDB();
+  res.json(deliveryView(delivery));
 });
 
 // ── Assigned number ranges ──
@@ -3468,6 +4681,27 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   const { name, email, username, password, status, phone, code, mode, assignedTicketRanges, companyId } = req.body;
   const policyError = security.validatePasswordPolicy(password);
   if (policyError) return res.status(400).json({ error: `Contraseña del asesor: ${policyError}` });
+  const missing = [];
+  if (!name || String(name).trim().length < 3) missing.push('nombre completo');
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email).trim())) missing.push('correo válido');
+  if (!username || String(username).trim().length < 3) missing.push('usuario');
+  if (!phone || String(phone).replace(/\D/g, '').length !== 10) missing.push('teléfono de 10 dígitos');
+  if (!code || String(code).replace(/\D/g, '').length < 5) missing.push('cédula');
+  if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(', ')}.` });
+  // Login identifiers are unique in the whole platform (any company): a repeat would make login ambiguous
+  const advisorTaken = v => (db.advisors || []).some(a => [a.username, a.code].some(x => x && normalize(x) === normalize(v)));
+  if (isUsernameTaken(username) || advisorTaken(username)) {
+    return res.status(409).json({
+      field: 'username',
+      error: `El usuario "${String(username).trim()}" ya lo usa otra cuenta de la plataforma (puede ser de otra empresa). Elija otro usuario.`
+    });
+  }
+  if (isUsernameTaken(code) || advisorTaken(code)) {
+    return res.status(409).json({
+      field: 'code',
+      error: `La cédula ${String(code).trim()} ya está registrada en otra cuenta de la plataforma (puede ser de otra empresa). Verifique el número.`
+    });
+  }
 
   let targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : companyId;
   if (!targetCompanyId && (db.companies || []).length > 0) {
@@ -3632,6 +4866,92 @@ function normalizeWinningConfig(body, digits) {
   return out;
 }
 
+/** Ticket of a raffle that holds [numStr] (exact or, if allowed, combinado) among those that qualify. */
+function findWinningTicket(raffle, numStr, qualifies) {
+  const raffleTickets = db.tickets.filter(t => t.raffleId === raffle.id);
+  let matchType = 'EXACTO';
+  let ticket = raffleTickets.find(t => (t.numbers || []).includes(numStr));
+  if ((!ticket || !qualifies(ticket)) && raffle.allowCombined) {
+    const combined = raffleTickets.find(t => qualifies(t) && (t.numbers || []).some(n => n !== numStr && sortedDigits(n) === sortedDigits(numStr)));
+    if (combined) { ticket = combined; matchType = 'COMBINADO'; }
+  }
+  return { ticket, matchType };
+}
+
+function winnerDetailsOf(ticket, minRequiredAmount, qualified) {
+  return {
+    ticketId: ticket.id,
+    ticketNumber: ticket.ticketNumber,
+    numbers: ticket.numbers || [],
+    buyerName: ticket.buyerName,
+    buyerPhone: ticket.buyerPhone,
+    buyerDocument: ticket.buyerDocument || '',
+    advisorName: ticket.advisorName,
+    status: ticket.status,
+    totalPaid: ticket.totalPaid || 0,
+    minRequiredAmount,
+    insufficientAbono: !qualified,
+    assignedDate: ticket.assignedDate,
+    abonosSummary: (ticket.abonos || []).map(a => ({ date: a.date, amount: a.amount, sellerName: a.sellerName, note: a.note }))
+  };
+}
+
+/**
+ * Main draw (gran premio): the ticket must be fully paid. Only one per raffle; if nobody wins
+ * (number not sold or not fully paid) the result is kept with the reason.
+ */
+function registerMainDraw(req, res, raffle) {
+  const { winningNumber, drawDate, prizeDescription, prizeAmount, photoUrl } = req.body;
+  // A new main draw is only possible when every previous one was played again on another date
+  const previous = (db.winners || []).filter(w => w.raffleId === raffle.id && w.drawType === 'PRINCIPAL');
+  const open = previous.find(w => !(w.decision && w.decision.type === 'REPROGRAMADO'));
+  if (open) {
+    return res.status(409).json({
+      error: open.isWinner ? 'Esta rifa ya tiene ganador del gran premio.'
+        : open.decision ? 'El gran premio de esta rifa se cerró sin ganador.'
+        : 'El último resultado quedó sin ganador: decida primero si se vuelve a jugar en otra fecha o se cierra.'
+    });
+  }
+  const lotteryResult = String(winningNumber || '').trim();
+  if (!/\d/.test(lotteryResult)) return res.status(400).json({ error: 'Ingrese el número o resultado de la lotería.' });
+  const numStr = deriveWinningNumber(raffle, lotteryResult);
+  const price = Number(raffle.ticketPrice) || 0;
+  const fullyPaid = t => t.status !== 'DISPONIBLE' && (t.totalPaid || 0) >= (t.price || price) && (t.totalPaid || 0) > 0;
+  const { ticket, matchType } = findWinningTicket(raffle, numStr, fullyPaid);
+  const isWinner = !!ticket && fullyPaid(ticket);
+  const noWinnerReason = isWinner ? '' : !ticket ? 'El número no fue vendido.'
+    : ticket.status === 'DISPONIBLE' ? 'El número no fue vendido.'
+    : `La boleta no estaba pagada en su totalidad (abonado $${Math.round(ticket.totalPaid || 0).toLocaleString('es-CO')} de $${Math.round(ticket.price || price).toLocaleString('es-CO')}).`;
+  const amount = parseFloat(prizeAmount) || 0;
+  const record = {
+    id: `win-${Date.now()}`,
+    raffleId: raffle.id,
+    drawType: 'PRINCIPAL',
+    drawName: previous.length ? `Gran premio (intento ${previous.length + 1})` : 'Gran premio',
+    attempt: previous.length + 1,
+    drawDate: drawDate || raffle.mainDrawDate || new Date().toISOString(),
+    lotteryName: mainLotteryOf(raffle),
+    winningNumber: numStr,
+    lotteryResult,
+    matchType: isWinner ? matchType : null,
+    prizeDescription: String(prizeDescription || '').trim().slice(0, 300),
+    basePrizeAmount: amount,
+    previousAccumulatedAmount: 0,
+    totalPrizePaid: amount,
+    prizeAmount: amount,
+    isWinner,
+    accumulated: false,
+    noWinnerReason,
+    winnerDetails: ticket ? winnerDetailsOf(ticket, ticket.price || price, isWinner) : null,
+    photoUrl: photoUrl || '',
+    registeredBy: req.auth.role === 'superadmin' ? 'SuperAdministrador' : (req.auth.record.adminName || 'Administrador'),
+    createdAt: new Date().toISOString()
+  };
+  db.winners.unshift(record);
+  saveDB();
+  res.status(201).json(record);
+}
+
 app.post('/api/winners', adminOnly, (req, res) => {
   const { raffleId, winningNumber, drawName, drawDate, prizeAmount, photoUrl } = req.body;
 
@@ -3639,6 +4959,8 @@ app.post('/api/winners', adminOnly, (req, res) => {
   if (!raffle) {
     return res.status(404).json({ error: 'Sorteo no encontrado.' });
   }
+  if (!canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Sorteo no encontrado.' });
+  if (req.body.drawType === 'PRINCIPAL') return registerMainDraw(req, res, raffle);
   if (raffle.hasWeeklyDraws === false) {
     return res.status(400).json({ error: 'Este sorteo tiene deshabilitados los sorteos semanales. Habilítelos en "Gestionar Sorteo" para registrar ganadores semanales.' });
   }
@@ -3714,6 +5036,7 @@ app.post('/api/winners', adminOnly, (req, res) => {
   const record = {
     id: `win-${Date.now()}`,
     raffleId: raffle ? raffle.id : 'raf-1',
+    drawType: 'SEMANAL',
     drawName: drawName || 'Sorteo Semanal',
     drawDate: drawDate || new Date().toISOString(),
     winningNumber: rawNumStr,
@@ -3743,6 +5066,72 @@ app.post('/api/winners', adminOnly, (req, res) => {
   db.winners.unshift(record);
   saveDB();
   res.status(201).json(record);
+});
+
+// Main draw without winner: play it again on another date (and lottery) or close it without winner
+app.put('/api/winners/:id/main-decision', adminOnly, (req, res) => {
+  const record = (db.winners || []).find(w => w.id === req.params.id && w.drawType === 'PRINCIPAL');
+  const raffle = record && (db.raffles || []).find(r => r.id === record.raffleId);
+  if (!record || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Registro no encontrado.' });
+  if (record.isWinner) return res.status(400).json({ error: 'Este sorteo tuvo ganador.' });
+  if (record.decision) return res.status(400).json({ error: 'Ya se tomó una decisión para este resultado.' });
+  const body = req.body || {};
+  const note = String(body.note || '').trim().slice(0, 300);
+  const by = actorName(req);
+  const at = new Date().toISOString();
+  if (body.decision === 'REPROGRAMAR') {
+    const day = String(body.newDate || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: 'Indique la nueva fecha del sorteo.' });
+    if (day <= todayColombia()) return res.status(400).json({ error: 'La nueva fecha debe ser posterior a hoy.' });
+    let lottery = null;
+    if (body.lotteryName !== undefined && String(body.lotteryName).trim()) {
+      const checked = checkRaffleLottery(body.lotteryName, raffle.mainLotteryName, 'lotería del sorteo principal');
+      if (checked.error) return res.status(400).json({ error: checked.error });
+      lottery = checked.name;
+    }
+    record.decision = {
+      type: 'REPROGRAMADO', previousDate: raffle.mainDrawDate, newDate: day,
+      previousLottery: mainLotteryOf(raffle), newLottery: lottery || mainLotteryOf(raffle), note, by, at
+    };
+    raffle.mainDrawDate = `${day}T12:00:00.000`;
+    if (lottery) raffle.mainLotteryName = lottery;
+  } else if (body.decision === 'CERRAR') {
+    if (note.length < 5) return res.status(400).json({ error: 'Explique por qué se cierra el sorteo sin ganador.' });
+    record.decision = { type: 'CERRADO', note, by, at };
+  } else {
+    return res.status(400).json({ error: 'Decisión no válida.' });
+  }
+  saveDB();
+  res.json({ record, raffle });
+});
+
+// Records who received a prize (main or weekly): name, ID number, date and note
+app.put('/api/winners/:id/delivery', adminOnly, (req, res) => {
+  const winner = (db.winners || []).find(w => w.id === req.params.id);
+  const raffle = winner && (db.raffles || []).find(r => r.id === winner.raffleId);
+  if (!winner || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Registro no encontrado.' });
+  if (!winner.isWinner) return res.status(400).json({ error: 'Este sorteo no tuvo ganador: no hay premio que entregar.' });
+  const body = req.body || {};
+  if (body.cancel === true) {
+    winner.prizeDelivery = null;
+    saveDB();
+    return res.json(winner);
+  }
+  const receivedBy = String(body.receivedBy || '').trim().slice(0, 100);
+  if (receivedBy.length < 3) return res.status(400).json({ error: 'Indique el nombre de quien recibió el premio.' });
+  const deliveredOn = String(body.deliveredOn || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveredOn)) return res.status(400).json({ error: 'Indique la fecha de entrega.' });
+  winner.prizeDelivery = {
+    receivedBy,
+    receivedDocument: String(body.receivedDocument || '').replace(/[^0-9A-Za-z]/g, '').slice(0, 20),
+    deliveredOn,
+    method: String(body.method || '').trim().slice(0, 60),
+    note: String(body.note || '').trim().slice(0, 300),
+    registeredBy: req.auth.role === 'superadmin' ? 'SuperAdministrador' : (req.auth.record.adminName || 'Administrador'),
+    registeredAt: new Date().toISOString()
+  };
+  saveDB();
+  res.json(winner);
 });
 
 // GET Winners (Multi-tenant isolated)

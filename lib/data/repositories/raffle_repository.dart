@@ -1,6 +1,8 @@
+import 'dart:typed_data';
 import '../models/sale_channel.dart';
 import '../models/bank.dart';
 import '../models/lottery.dart';
+import '../models/cash_delivery.dart';
 import '../models/raffle.dart';
 import '../models/ticket.dart';
 import '../models/advisor.dart';
@@ -58,6 +60,11 @@ class RaffleRepository {
 
   Future<WinnerRecord> registerWinner(Map<String, dynamic> data) => _apiService.registerWinner(data);
 
+  Future<Map<String, dynamic>> saveMainDrawDecision(String winnerId, Map<String, dynamic> body) =>
+      _apiService.saveMainDrawDecision(winnerId, body);
+
+  Future<WinnerRecord> savePrizeDelivery(String winnerId, Map<String, dynamic> body) => _apiService.savePrizeDelivery(winnerId, body);
+
   Future<bool> importTickets(String raffleId, List<Map<String, dynamic>> records) => _apiService.importTickets(raffleId, records);
 
   Future<Map<String, dynamic>> fetchCommissions({String? raffleId}) => _apiService.getCommissions(raffleId: raffleId);
@@ -71,6 +78,8 @@ class RaffleRepository {
 
   Future<Map<String, dynamic>> login({required String role, required String username, required String password}) =>
       _apiService.login(role: role, username: username, password: password);
+
+  Future<Map<String, dynamic>> loginDemo() => _apiService.loginDemo();
 
   Future<Map<String, dynamic>> currentUser() => _apiService.currentUser();
 
@@ -86,8 +95,7 @@ class RaffleRepository {
 
   Future<String?> fetchRaffleTemplate(String raffleId, String type) => _apiService.fetchRaffleTemplate(raffleId, type);
 
-  Future<void> saveRaffleTemplate(String raffleId, String type, String dataUri) =>
-      _apiService.saveRaffleTemplate(raffleId, type, dataUri);
+  Future<void> saveRaffleTemplate(String raffleId, String type, String dataUri) => _apiService.saveRaffleTemplate(raffleId, type, dataUri);
 
   Future<void> deleteRaffleTemplate(String raffleId, String type) => _apiService.deleteRaffleTemplate(raffleId, type);
 
@@ -102,6 +110,54 @@ class RaffleRepository {
   Future<List<Bank>> fetchBanks() => _apiService.fetchBanks();
 
   Future<List<Lottery>> fetchLotteries() => _apiService.fetchLotteries();
+
+  Future<Map<String, dynamic>> fetchAppConfig() => _apiService.fetchAppConfig();
+
+  Future<Ticket> verifyTransferPayment(String ticketId, String abonoId, String action, {String note = ''}) =>
+      _apiService.verifyTransferPayment(ticketId, abonoId, action, note: note);
+
+  Future<Ticket> receiveCashPayment(String ticketId, String abonoId) => _apiService.receiveCashPayment(ticketId, abonoId);
+
+  Future<Uint8List> fetchDriveFile(String fileId) => _apiService.fetchDriveFile(fileId);
+
+  Future<String> requestAccountDeletion(String reason) => _apiService.requestAccountDeletion(reason);
+
+  Future<Map<String, dynamic>> fetchLegal() => _apiService.fetchLegal();
+
+  Future<void> saveLegal(Map<String, dynamic> data) => _apiService.saveLegal(data);
+
+  Future<List<Map<String, dynamic>>> fetchDeletionRequests() => _apiService.fetchDeletionRequests();
+
+  Future<void> resolveDeletionRequest(String id, String status, {String note = ''}) =>
+      _apiService.resolveDeletionRequest(id, status, note: note);
+
+  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false}) => _apiService.closeRaffle(raffleId, reopen: reopen);
+
+  Future<Uint8List> exportRaffle(String raffleId) => _apiService.exportRaffle(raffleId);
+
+  Future<List<CashDelivery>> fetchCashDeliveries({String? raffleId}) => _apiService.fetchCashDeliveries(raffleId: raffleId);
+
+  Future<CashDelivery> reportCashDelivery(Map<String, dynamic> body) => _apiService.reportCashDelivery(body);
+
+  Future<CashDelivery> reviewCashDelivery(String id, String action, {String reason = ''}) =>
+      _apiService.reviewCashDelivery(id, action, reason: reason);
+
+  Future<Map<String, dynamic>> fetchMonetization() => _apiService.fetchMonetization();
+
+  Future<Map<String, dynamic>> saveMonetization(Map<String, dynamic> data) => _apiService.saveMonetization(data);
+
+  Future<Map<String, dynamic>> resetDemo() => _apiService.resetDemo();
+
+  Future<Map<String, dynamic>> fetchMonetizationSummary() => _apiService.fetchMonetizationSummary();
+
+  Future<List<Map<String, dynamic>>> fetchSubscriptionPayments({String? companyId}) =>
+      _apiService.fetchSubscriptionPayments(companyId: companyId);
+
+  Future<Map<String, dynamic>> registerSubscriptionPayment(Map<String, dynamic> body) => _apiService.registerSubscriptionPayment(body);
+
+  Future<void> voidSubscriptionPayment(String id, String reason) => _apiService.voidSubscriptionPayment(id, reason);
+
+  Future<Map<String, dynamic>> fetchMyPlan() => _apiService.fetchMyPlan();
 
   Future<Lottery> saveLottery(String? id, Map<String, dynamic> data) => _apiService.saveLottery(id, data);
 

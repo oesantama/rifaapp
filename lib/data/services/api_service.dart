@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import '../models/company.dart';
 import '../models/sale_channel.dart';
 import '../models/bank.dart';
 import '../models/lottery.dart';
+import '../models/cash_delivery.dart';
 
 class ApiService {
   final String baseUrl;
@@ -741,6 +743,28 @@ class ApiService {
     return true;
   }
 
+  /// Main draw without winner: play again on another date or close it. Returns {record, raffle}.
+  Future<Map<String, dynamic>> saveMainDrawDecision(String winnerId, Map<String, dynamic> body) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/winners/$winnerId/main-decision'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Records (or with cancel: true removes) who received a prize.
+  Future<WinnerRecord> savePrizeDelivery(String winnerId, Map<String, dynamic> body) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/winners/$winnerId/delivery'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return WinnerRecord.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   Future<WinnerRecord> registerWinner(Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
@@ -1034,6 +1058,15 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  Future<Map<String, dynamic>> loginDemo() async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/demo-login'),
+      headers: {'Content-Type': 'application/json'},
+    ).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return jsonDecode(response.body) as Map<String, dynamic>;
+    throw ApiException.fromResponse(response);
+  }
+
   /// Returns the current user if the stored session is still valid, or throws.
   Future<Map<String, dynamic>> currentUser() async {
     final response = await authGet(Uri.parse('$baseUrl/auth/me')).timeout(const Duration(seconds: 10));
@@ -1123,6 +1156,177 @@ class ApiService {
     if (response.statusCode == 200 || response.statusCode == 201) {
       return SaleChannel.fromJson(Map<String, dynamic>.from(jsonDecode(response.body)));
     }
+    throw ApiException.fromResponse(response);
+  }
+
+  // Cash control: buyer transfers validated by the admin and advisors' cash deliveries
+  Future<Ticket> verifyTransferPayment(String ticketId, String abonoId, String action, {String note = ''}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/cash/abonos/$ticketId/$abonoId/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'action': action, 'note': note}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Ticket> receiveCashPayment(String ticketId, String abonoId) async {
+    final response = await authPost(Uri.parse('$baseUrl/cash/abonos/$ticketId/$abonoId/receive')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Closes a raffle after its draw (deleted in 7 days) / reopens it. Returns the raffle.
+  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false}) async {
+    final response =
+        await authPost(Uri.parse('$baseUrl/raffles/$raffleId/${reopen ? 'reopen' : 'close'}')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Raffle.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// ZIP with the raffle's Excel workbook and its proof images.
+  Future<Uint8List> exportRaffle(String raffleId) async {
+    final response = await authGet(Uri.parse('$baseUrl/raffles/$raffleId/export')).timeout(const Duration(minutes: 5));
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw ApiException.fromResponse(response);
+  }
+
+  // Legal: account deletion requests and the platform's legal data (SuperAdmin)
+  Future<String> requestAccountDeletion(String reason) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/account/deletion-request'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200 || response.statusCode == 201) return (jsonDecode(response.body)['message'] ?? '').toString();
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchLegal() async {
+    final response = await authGet(Uri.parse('$baseUrl/legal')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> saveLegal(Map<String, dynamic> data) async {
+    final response = await authPut(Uri.parse('$baseUrl/legal'), headers: {'Content-Type': 'application/json'}, body: jsonEncode(data))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDeletionRequests() async {
+    final response = await authGet(Uri.parse('$baseUrl/deletion-requests')).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return [for (final r in jsonDecode(response.body) as List) Map<String, dynamic>.from(r)];
+  }
+
+  Future<void> resolveDeletionRequest(String id, String status, {String note = ''}) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/deletion-requests/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status, 'note': note}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  /// A proof image stored in Google Drive, served by our server (company-checked).
+  Future<Uint8List> fetchDriveFile(String fileId) async {
+    final response = await authGet(Uri.parse('$baseUrl/files/$fileId')).timeout(const Duration(seconds: 40));
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<List<CashDelivery>> fetchCashDeliveries({String? raffleId}) async {
+    final query = raffleId != null ? '?raffleId=$raffleId' : '';
+    final response = await authGet(Uri.parse('$baseUrl/cash/deliveries$query')).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return [for (final d in jsonDecode(response.body) as List) CashDelivery.fromJson(Map<String, dynamic>.from(d))];
+  }
+
+  Future<CashDelivery> reportCashDelivery(Map<String, dynamic> body) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/cash/deliveries'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 201) return CashDelivery.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<CashDelivery> reviewCashDelivery(String id, String action, {String reason = ''}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/cash/deliveries/$id/$action'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return CashDelivery.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  // Monetization: public app config (login screen, ads banner) and the SuperAdmin's settings
+  Future<Map<String, dynamic>> fetchAppConfig() async {
+    final response = await http.get(Uri.parse('$baseUrl/public/app-config')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchMonetization() async {
+    final response = await authGet(Uri.parse('$baseUrl/monetization')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> saveMonetization(Map<String, dynamic> data) async {
+    final response = await authPut(
+      Uri.parse('$baseUrl/monetization'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(data),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchMonetizationSummary() async {
+    final response = await authGet(Uri.parse('$baseUrl/monetization/summary')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<List<Map<String, dynamic>>> fetchSubscriptionPayments({String? companyId}) async {
+    final query = companyId != null ? '?companyId=$companyId' : '';
+    final response = await authGet(Uri.parse('$baseUrl/monetization/payments$query')).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return [for (final p in jsonDecode(response.body) as List) Map<String, dynamic>.from(p)];
+  }
+
+  Future<Map<String, dynamic>> registerSubscriptionPayment(Map<String, dynamic> body) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/monetization/payments'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 201) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> voidSubscriptionPayment(String id, String reason) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/monetization/payments/$id/void'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'reason': reason}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> fetchMyPlan() async {
+    final response = await authGet(Uri.parse('$baseUrl/my-plan')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> resetDemo() async {
+    final response = await authPost(Uri.parse('$baseUrl/monetization/demo-reset')).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
     throw ApiException.fromResponse(response);
   }
 
@@ -1221,8 +1425,8 @@ class ApiService {
 
   /// Message for a saved ticket: kind 'receipt' (by its status) or 'reminder'. Returns {type, phone, message}.
   Future<Map<String, dynamic>> fetchTicketWhatsAppMessage(String ticketId, {String kind = 'receipt'}) async {
-    final response = await authGet(Uri.parse('$baseUrl/tickets/$ticketId/whatsapp-message?kind=$kind'))
-        .timeout(const Duration(seconds: 15));
+    final response =
+        await authGet(Uri.parse('$baseUrl/tickets/$ticketId/whatsapp-message?kind=$kind')).timeout(const Duration(seconds: 15));
     if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
     throw ApiException.fromResponse(response);
   }

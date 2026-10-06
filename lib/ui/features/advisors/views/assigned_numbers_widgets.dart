@@ -118,10 +118,8 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
     }
     final clash = _takenByOthers.where((r) => from <= r.$2 && r.$1 <= to).firstOrNull;
     if (clash != null) {
-      final owner = context
-          .read<AdvisorViewModel>()
-          .advisors
-          .firstWhere((a) => a.id != widget.advisor.id && a.parsedRanges.contains(clash));
+      final owner =
+          context.read<AdvisorViewModel>().advisors.firstWhere((a) => a.id != widget.advisor.id && a.parsedRanges.contains(clash));
       setState(() => _error = 'Los números ${_rangeLabel(clash)} ya son de ${owner.name}.');
       return;
     }
@@ -299,9 +297,7 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ElevatedButton(
           onPressed: _saving ? null : _save,
-          child: _saving
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Guardar'),
+          child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Guardar'),
         ),
       ],
     );
@@ -332,16 +328,15 @@ class RangeRequestsBanner extends StatelessWidget {
               children: [
                 Icon(Icons.notifications_active, color: Colors.orange.shade800, size: 20),
                 const SizedBox(width: 8),
-                Text('Solicitudes de más boletas',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                Text('Solicitudes de más boletas', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
               ],
             ),
             for (final adv in pending)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                title: Text('${adv.name} pide ${adv.rangeRequest!.quantity} boletas más',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                title:
+                    Text('${adv.name} pide ${adv.rangeRequest!.quantity} boletas más', style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: adv.rangeRequest!.note.isNotEmpty ? Text(adv.rangeRequest!.note) : null,
                 trailing: FilledButton(
                   onPressed: () => AssignNumbersDialog.show(context, adv),
@@ -469,8 +464,7 @@ class AdvisorNumbersBar extends StatelessWidget {
     final authVM = context.watch<AuthViewModel>();
     final adv = authVM.activeAdvisor;
     if (!authVM.isAsesor || adv == null || adv.mode != 'ASSIGNED') return const SizedBox.shrink();
-    final available =
-        context.watch<TicketViewModel>().tickets.where((t) => t.status == 'DISPONIBLE' && adv.coversTicket(t)).length;
+    final available = context.watch<TicketViewModel>().tickets.where((t) => t.status == 'DISPONIBLE' && adv.coversTicket(t)).length;
     final request = adv.rangeRequest;
 
     return Container(

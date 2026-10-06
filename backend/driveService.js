@@ -134,6 +134,50 @@ async function getRaffleFolders(companyName, companyId, raffleTitle, raffleId, e
 }
 
 /**
+ * Carpeta de las entregas de dinero de un asesor dentro de la rifa:
+ * [Rifa]/Entregas_Asesores/[Nombre del asesor]
+ */
+async function getAdvisorDeliveriesFolder(raffleFolderId, advisorName) {
+  const deliveriesFolderId = await findOrCreateSubfolder('Entregas_Asesores', raffleFolderId);
+  const cleanName = (advisorName || 'Asesor').replace(/[/\\?%*:|"<>]/g, '_').trim() || 'Asesor';
+  return await findOrCreateSubfolder(cleanName, deliveriesFolderId);
+}
+
+/**
+ * Descarga un archivo (imagen de soporte) de Google Drive: { buffer, mimeType }.
+ */
+async function downloadDriveFile(fileId) {
+  const drive = getDriveClient();
+  const meta = await drive.files.get({ fileId, fields: 'mimeType' });
+  const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' });
+  return { buffer: Buffer.from(res.data), mimeType: meta.data.mimeType || 'image/jpeg' };
+}
+
+/**
+ * Envía un archivo o carpeta a la papelera de Google Drive (se puede recuperar durante 30 días).
+ */
+async function trashDriveFile(fileId) {
+  if (!fileId) return false;
+  const drive = getDriveClient();
+  await drive.files.update({ fileId, requestBody: { trashed: true } });
+  return true;
+}
+
+/**
+ * Mueve un archivo a otra carpeta de Google Drive.
+ */
+async function moveDriveFile(fileId, newParentId) {
+  const drive = getDriveClient();
+  const file = await drive.files.get({ fileId, fields: 'parents' });
+  await drive.files.update({
+    fileId,
+    addParents: newParentId,
+    removeParents: (file.data.parents || []).join(','),
+    fields: 'id, parents',
+  });
+}
+
+/**
  * Sube un buffer de imagen o JSON a Google Drive y le asigna permiso de lectura público.
  */
 async function uploadFileToDrive({ buffer, filename, mimeType = 'image/jpeg', parentFolderId }) {
@@ -269,4 +313,8 @@ module.exports = {
   listDriveBackups,
   downloadDriveBackup,
   testDriveConnection,
+  getAdvisorDeliveriesFolder,
+  downloadDriveFile,
+  moveDriveFile,
+  trashDriveFile,
 };

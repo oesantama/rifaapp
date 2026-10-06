@@ -76,6 +76,15 @@ class WinnerRecord {
   final WinnerDetails? winnerDetails;
   final String photoUrl;
   final String createdAt;
+  final String drawType; // PRINCIPAL (gran premio) or SEMANAL
+  final String prizeDescription;
+  final String noWinnerReason;
+  final Map<String, dynamic>? prizeDelivery; // who received the prize, when and how
+  final Map<String, dynamic>? decision; // main draw without winner: REPROGRAMADO or CERRADO
+
+  String? get decisionType => decision?['type'] as String?;
+
+  bool get isMainDraw => drawType == 'PRINCIPAL';
 
   WinnerRecord({
     required this.id,
@@ -96,6 +105,11 @@ class WinnerRecord {
     this.winnerDetails,
     required this.photoUrl,
     required this.createdAt,
+    this.drawType = 'SEMANAL',
+    this.prizeDescription = '',
+    this.noWinnerReason = '',
+    this.prizeDelivery,
+    this.decision,
   });
 
   double get prizeAmount => totalPrizePaid;
@@ -124,6 +138,11 @@ class WinnerRecord {
       winnerDetails: json['winnerDetails'] != null ? WinnerDetails.fromJson(json['winnerDetails']) : null,
       photoUrl: json['photoUrl'] ?? '',
       createdAt: json['createdAt'] ?? '',
+      drawType: json['drawType'] ?? 'SEMANAL',
+      prizeDescription: json['prizeDescription'] ?? '',
+      noWinnerReason: json['noWinnerReason'] ?? '',
+      prizeDelivery: json['prizeDelivery'] is Map ? Map<String, dynamic>.from(json['prizeDelivery']) : null,
+      decision: json['decision'] is Map ? Map<String, dynamic>.from(json['decision']) : null,
     );
   }
 

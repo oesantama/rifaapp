@@ -116,7 +116,17 @@ class CurrentRaffleBanner extends StatelessWidget {
                       'RIFA ACTUAL',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: color),
                     ),
-                    if (isInactive && isAdmin) ...[
+                    if (raffle.isClosed) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(color: Colors.red.shade700, borderRadius: BorderRadius.circular(6)),
+                        child: Text(
+                          'CERRADA • SE ELIMINA EN ${raffle.daysUntilDeletion} DÍA(S)',
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ] else if (isInactive && isAdmin) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
