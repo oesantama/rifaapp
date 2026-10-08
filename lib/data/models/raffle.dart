@@ -118,6 +118,9 @@ class Raffle {
   final String? closedBy;
   final String? scheduledDeletionAt;
 
+  /// Advisors only: why they cannot sell new tickets of this raffle now (locked by the admin), or null.
+  final String? advisorSalesBlock;
+
   /// Drive URLs and Folder metadata
   final String? aficheUrl;
   final String? aficheDriveId;
@@ -160,6 +163,7 @@ class Raffle {
     this.closedAt,
     this.closedBy,
     this.scheduledDeletionAt,
+    this.advisorSalesBlock,
     this.aficheUrl,
     this.aficheDriveId,
     this.fondoBoletaUrl,
@@ -210,6 +214,7 @@ class Raffle {
       closedAt: json['closedAt'],
       closedBy: json['closedBy'],
       scheduledDeletionAt: json['scheduledDeletionAt'],
+      advisorSalesBlock: json['advisorSalesBlock'] as String?,
       aficheUrl: json['aficheUrl'],
       aficheDriveId: json['aficheDriveId'],
       fondoBoletaUrl: json['fondoBoletaUrl'],

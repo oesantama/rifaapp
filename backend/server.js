@@ -2473,20 +2473,24 @@ app.get('/api/raffles', (req, res) => {
   let raffles = db.raffles || [];
 
   // Multi-tenant company filtering from session auth context
+  // Admins and advisors only ever see their own company; the SuperAdmin may pick one with ?companyId=
   let targetCompanyId = companyId;
-  if (!targetCompanyId && req.auth) {
-    if (req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
-    if (req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
-  }
+  if (req.auth && req.auth.role === 'admin') targetCompanyId = req.auth.record.id;
+  if (req.auth && req.auth.role === 'asesor') targetCompanyId = req.auth.record.companyId;
 
   if (targetCompanyId) {
     raffles = raffles.filter(r => !r.companyId || r.companyId === targetCompanyId);
   }
 
   if ((role === 'asesor' || (req.auth && req.auth.role === 'asesor'))) {
-    const advId = advisorId || (req.auth && req.auth.record ? req.auth.record.id : null);
+    const advId = req.auth && req.auth.role === 'asesor' ? req.auth.record.id : advisorId;
     if (advId) {
       raffles = raffles.filter(r => r.status === 'ACTIVA' && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(advId)));
+      // The advisor sees whether they can sell, not the admin's lock settings
+      raffles = raffles.map(r => {
+        const { salesLock, ...rest } = r;
+        return { ...rest, advisorSalesBlock: advisorSaleBlock(r, advId) };
+      });
     }
   }
   res.json(raffles);
@@ -3049,6 +3053,162 @@ function drawDayOf(raffle) {
   const ms = Date.parse(raw);
   return isNaN(ms) ? null : colombiaDay(ms);
 }
+
+// ---------------------------------------------------------------------------
+// Advisor sales lock: the admin stops advisors from selling new tickets of a raffle, for all of them or
+// advisor by advisor, right away or automatically from a time on the main draw day. Admins keep selling,
+// and advisors can still register payments of tickets they already sold.
+// ---------------------------------------------------------------------------
+function salesLockOf(raffle) {
+  const l = (raffle && raffle.salesLock) || {};
+  return {
+    locked: l.locked === true,
+    reason: String(l.reason || ''),
+    lockedBy: l.lockedBy || null,
+    lockedAt: l.lockedAt || null,
+    autoLockTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(l.autoLockTime || '') ? l.autoLockTime : '',
+    advisors: l.advisors && typeof l.advisors === 'object' ? l.advisors : {}
+  };
+}
+
+/** Moment the automatic lock starts (main draw day at autoLockTime, Colombian time), or null when off. */
+function autoLockAtMs(raffle, lock) {
+  const day = drawDayOf(raffle);
+  if (!lock.autoLockTime || !day) return null;
+  return Date.parse(`${day}T${lock.autoLockTime}:00Z`) + COLOMBIA_OFFSET_MS;
+}
+
+function hour12(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+}
+
+/** Why this advisor cannot sell new tickets of the raffle right now, or null. */
+function advisorSaleBlock(raffle, advisorId, now = Date.now()) {
+  if (!raffle) return null;
+  const lock = salesLockOf(raffle);
+  const withReason = reason => (reason ? `: ${reason.replace(/[.\s]+$/, '')}.` : '.');
+  const own = lock.advisors[advisorId];
+  if (own) return `El administrador bloqueó sus ventas en esta rifa${withReason(own.reason)}`;
+  if (lock.locked) return `El administrador cerró las ventas de asesores en esta rifa${withReason(lock.reason)}`;
+  const at = autoLockAtMs(raffle, lock);
+  if (at !== null && now >= at) {
+    return `Las ventas de asesores se cerraron el día del sorteo a las ${hour12(lock.autoLockTime)}`;
+  }
+  return null;
+}
+
+/** Lock settings plus, per advisor, whether they can sell and how many of their numbers are still unsold. */
+function salesLockView(raffle) {
+  const lock = salesLockOf(raffle);
+  const tickets = (db.tickets || []).filter(t => t.raffleId === raffle.id);
+  const available = tickets.filter(t => t.status === 'DISPONIBLE');
+  const at = autoLockAtMs(raffle, lock);
+  const advisors = (db.advisors || [])
+    .filter(a => a.companyId === raffle.companyId && a.status !== 'INHABILITADO')
+    .filter(a => !raffle.assignedAdvisorIds || raffle.assignedAdvisorIds.length === 0 || raffle.assignedAdvisorIds.includes(a.id))
+    .map(a => {
+      const assigned = a.mode === 'ASSIGNED' && (a.assignedTicketRanges || []).length > 0;
+      const own = lock.advisors[a.id] || null;
+      return {
+        advisorId: a.id,
+        name: a.name,
+        code: a.code,
+        assignedRanges: assigned ? a.assignedTicketRanges : [],
+        availableInRanges: assigned ? available.filter(t => ticketInAdvisorRanges(t, a)).length : null,
+        sold: tickets.filter(t => t.advisorId === a.id && t.status !== 'DISPONIBLE').length,
+        locked: !!own,
+        reason: own ? own.reason || '' : '',
+        lockedBy: own ? own.by || null : null,
+        lockedAt: own ? own.at || null : null,
+        blockedNow: advisorSaleBlock(raffle, a.id)
+      };
+    });
+  return {
+    raffleId: raffle.id,
+    locked: lock.locked,
+    reason: lock.reason,
+    lockedBy: lock.lockedBy,
+    lockedAt: lock.lockedAt,
+    autoLockTime: lock.autoLockTime,
+    autoLockAt: at !== null ? new Date(at).toISOString() : null,
+    autoLockActive: at !== null && Date.now() >= at,
+    drawDay: drawDayOf(raffle),
+    totalAvailable: available.length,
+    totalTickets: tickets.length,
+    advisors
+  };
+}
+
+function lockedRaffle(req, res) {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) {
+    res.status(404).json({ error: 'Rifa no encontrada.' });
+    return null;
+  }
+  return raffle;
+}
+
+app.get('/api/raffles/:id/sales-lock', adminOnly, (req, res) => {
+  const raffle = lockedRaffle(req, res);
+  if (raffle) res.json(salesLockView(raffle));
+});
+
+// General lock (all advisors) and the automatic time on the draw day
+app.put('/api/raffles/:id/sales-lock', adminOnly, (req, res) => {
+  const raffle = lockedRaffle(req, res);
+  if (!raffle) return;
+  const lock = salesLockOf(raffle);
+  if (req.body.autoLockTime !== undefined) {
+    const time = String(req.body.autoLockTime || '').trim();
+    if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return res.status(400).json({ error: 'Hora inválida. Use el formato HH:MM (24 horas).' });
+    lock.autoLockTime = time;
+  }
+  if (req.body.locked !== undefined) {
+    const locked = req.body.locked === true;
+    if (locked !== lock.locked) {
+      lock.locked = locked;
+      lock.reason = locked ? String(req.body.reason || '').trim().slice(0, 200) : '';
+      lock.lockedBy = locked ? actorName(req) : null;
+      lock.lockedAt = locked ? new Date().toISOString() : null;
+    } else if (locked && req.body.reason !== undefined) {
+      lock.reason = String(req.body.reason || '').trim().slice(0, 200);
+    }
+  }
+  raffle.salesLock = lock;
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`, type: 'SALES_LOCK', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title,
+    detail: `Ventas de asesores ${lock.locked ? 'bloqueadas' : 'abiertas'}${lock.autoLockTime ? `; cierre automático ${lock.autoLockTime}` : ''}`,
+    by: actorName(req), date: new Date().toISOString()
+  });
+  saveDB();
+  res.json(salesLockView(raffle));
+});
+
+// One advisor: lock or unlock their sales in this raffle
+app.put('/api/raffles/:id/sales-lock/advisors/:advisorId', adminOnly, (req, res) => {
+  const raffle = lockedRaffle(req, res);
+  if (!raffle) return;
+  const advisor = (db.advisors || []).find(a => a.id === req.params.advisorId && a.companyId === raffle.companyId);
+  if (!advisor) return res.status(404).json({ error: 'Asesor no encontrado.' });
+  const lock = salesLockOf(raffle);
+  const advisors = { ...lock.advisors };
+  if (req.body.locked === true) {
+    advisors[advisor.id] = { reason: String(req.body.reason || '').trim().slice(0, 200), by: actorName(req), at: new Date().toISOString() };
+  } else {
+    delete advisors[advisor.id];
+  }
+  raffle.salesLock = { ...lock, advisors };
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`, type: 'SALES_LOCK', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title,
+    detail: `Ventas de ${advisor.name} ${req.body.locked === true ? 'bloqueadas' : 'desbloqueadas'}`,
+    by: actorName(req), date: new Date().toISOString()
+  });
+  saveDB();
+  res.json(salesLockView(raffle));
+});
 
 app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
   const raffle = (db.raffles || []).find(r => r.id === req.params.id);
@@ -4180,6 +4340,11 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (ticket.status === 'DISPONIBLE' && ticketRaffle && ticketRaffle.scheduledDeletionAt) {
     return res.status(400).json({ error: 'La rifa está cerrada: ya no se pueden vender boletas.' });
   }
+  // The admin may have stopped advisors from selling new tickets (payments of sold tickets are still allowed)
+  if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE') {
+    const block = advisorSaleBlock(ticketRaffle, req.auth.record.id);
+    if (block) return res.status(403).json({ error: `${block} Comuníquese con el administrador.`, code: 'SALES_LOCKED' });
+  }
   // An advisor working with assigned numbers can only sell inside them
   if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record)) {
     return res.status(403).json({ error: 'Esta boleta no está en sus números asignados. Solicite más boletas al administrador.' });
@@ -4873,7 +5038,7 @@ app.post('/api/advisors', adminOnly, (req, res) => {
 // PUT Update Advisor
 app.put('/api/advisors/:id', adminOnly, (req, res) => {
   const { id } = req.params;
-  const advisor = db.advisors.find(a => a.id === id);
+  const advisor = db.advisors.find(a => a.id === id && (req.auth.role === 'superadmin' || a.companyId === req.auth.record.id));
   if (!advisor) {
     return res.status(404).json({ error: 'Asesor no encontrado' });
   }
@@ -4886,7 +5051,7 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
     newRanges = checked.ranges;
   }
 
-  if (req.body.companyId !== undefined) advisor.companyId = req.body.companyId;
+  if (req.body.companyId !== undefined && req.auth.role === 'superadmin') advisor.companyId = req.body.companyId;
   if (req.body.name !== undefined) advisor.name = req.body.name;
   if (req.body.email !== undefined) advisor.email = req.body.email;
   if (req.body.username !== undefined) advisor.username = req.body.username;

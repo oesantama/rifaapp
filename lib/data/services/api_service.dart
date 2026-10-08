@@ -1184,6 +1184,24 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Advisor sales lock of a raffle: general lock, automatic time on the draw day and per-advisor locks.
+  Future<Map<String, dynamic>> fetchSalesLock(String raffleId) async {
+    final response = await authGet(Uri.parse('$baseUrl/raffles/$raffleId/sales-lock')).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> updateSalesLock(String raffleId, Map<String, dynamic> changes, {String? advisorId}) async {
+    final path = advisorId == null ? 'sales-lock' : 'sales-lock/advisors/$advisorId';
+    final response = await authPut(
+      Uri.parse('$baseUrl/raffles/$raffleId/$path'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(changes),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   /// ZIP with the raffle's Excel workbook and its proof images.
   Future<Uint8List> exportRaffle(String raffleId) async {
     final response = await authGet(Uri.parse('$baseUrl/raffles/$raffleId/export')).timeout(const Duration(minutes: 5));

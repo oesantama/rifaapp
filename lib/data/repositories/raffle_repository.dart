@@ -135,6 +135,11 @@ class RaffleRepository {
 
   Future<Uint8List> exportRaffle(String raffleId) => _apiService.exportRaffle(raffleId);
 
+  Future<Map<String, dynamic>> fetchSalesLock(String raffleId) => _apiService.fetchSalesLock(raffleId);
+
+  Future<Map<String, dynamic>> updateSalesLock(String raffleId, Map<String, dynamic> changes, {String? advisorId}) =>
+      _apiService.updateSalesLock(raffleId, changes, advisorId: advisorId);
+
   Future<List<CashDelivery>> fetchCashDeliveries({String? raffleId}) => _apiService.fetchCashDeliveries(raffleId: raffleId);
 
   Future<CashDelivery> reportCashDelivery(Map<String, dynamic> body) => _apiService.reportCashDelivery(body);

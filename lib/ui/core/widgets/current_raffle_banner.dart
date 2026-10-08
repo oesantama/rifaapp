@@ -91,7 +91,7 @@ class CurrentRaffleBanner extends StatelessWidget {
       'Gana con ${raffle.winningRuleText}',
     ].join('  •  ');
 
-    return Container(
+    final banner = Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
       decoration: BoxDecoration(
@@ -171,6 +171,33 @@ class CurrentRaffleBanner extends StatelessWidget {
           ],
         ],
       ),
+    );
+
+    // Advisors: the admin stopped their sales in this raffle
+    final block = isAdmin ? null : raffle.advisorSalesBlock;
+    if (block == null) return banner;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        banner,
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          color: Colors.red.shade700,
+          child: Row(
+            children: [
+              const Icon(Icons.lock, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'VENTAS CERRADAS: $block No puede vender ni apartar boletas nuevas; sí puede registrar abonos de las que ya vendió.',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12.5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

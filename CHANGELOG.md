@@ -8,6 +8,19 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.1.0] - 2026-10-07
+
+### Nuevo
+- **Bloqueo de ventas de asesores** (Dashboard → tarjeta "Ventas de asesores"):
+  - Bloquear a **todos** los asesores de inmediato, con motivo.
+  - **Cierre automático** el día del sorteo a la hora que elija el administrador (hora de Colombia).
+  - Bloquear **asesor por asesor**, viendo cuántas boletas le quedan sin vender en sus números y cuántas vendió.
+  - El asesor bloqueado ve el aviso "VENTAS CERRADAS" con el motivo; no puede vender ni apartar boletas nuevas, pero sí registrar abonos de las que ya vendió. El administrador sigue vendiendo.
+  - Cada bloqueo y desbloqueo queda en la auditoría.
+
+### Corregido
+- **Seguridad**: un administrador ya no puede ver rifas ni editar asesores de otra empresa enviando otro `companyId`.
+
 ## [3.0.3] - 2026-10-06
 
 ### Corregido

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:rifaapp/ui/features/raffles/views/raffle_close_card.dart';
+import 'package:rifaapp/ui/features/raffles/views/sales_lock_card.dart';
 import 'package:rifaapp/ui/features/monetization/my_plan_card.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -78,6 +79,8 @@ class DashboardScreen extends StatelessWidget {
                 if (authVM.isAdmin && !authVM.isSuperAdmin) const MyPlanCard(),
                 // After the draw: close the raffle (deleted 7 days later) and download its information
                 if (authVM.isAdmin && currentRaffle != null) RaffleCloseCard(raffle: currentRaffle),
+                // Stop advisors from selling (all or one by one, now or at a time on the draw day)
+                if (authVM.isAdmin && currentRaffle != null) SalesLockCard(raffle: currentRaffle),
                 if (currentRaffle != null)
                   Container(
                     width: double.infinity,
