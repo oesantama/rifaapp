@@ -8,6 +8,21 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.2.0] - 2026-10-21
+
+### Nuevo
+- **Vendedores Independientes**:
+  - Modalidad de cuenta tipo `INDEPENDIENTE` con talonarios propios y números personalizados.
+  - Registro y liquidación de entregas de dinero a la administración.
+  - Resumen de caja simplificada y balance en tiempo real para vendedores independientes.
+  - Asignación automática de vendedor en boletas al iniciar sesión como independiente.
+- **Control de Cupo de Rifas Contratadas**:
+  - Control de cupo máximo de rifas (`maxActiveRaffles`) por empresa para planes en modalidad de pago por rifa.
+  - Validación en backend para impedir la creación de rifas excedentes sin recarga previa de cupo por el SuperAdmin.
+- **Backend y Auditoría**:
+  - Rutas de entregas y conciliación (`/api/independent/deliveries`, `/api/independent/summary`).
+  - Flexibilización de validación de unicidad de usuario y cédula a nivel de empresa.
+
 ## [3.1.0] - 2026-10-07
 
 ### Nuevo
