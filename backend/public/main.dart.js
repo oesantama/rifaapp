@@ -142420,10 +142420,10 @@ return A.l(j.MI(),$async$BK)
 case 7:m=b
 j=J.o(m,"version")
 l=A.i(j==null?"":j)
-if(n.c==null||J.bg(l)===0||!A.bPA(l,"3.1.0")){s=1
+if(n.c==null||J.bg(l)===0||!A.bPA(l,"3.2.0")){s=1
 break}n.e=!0
 j=n.c.R(t.q).f
-i=A.j("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.1.0.",null,null,null,null,B.bs1,null,null,null)
+i=A.j("Hay una nueva versi\xf3n de Rifa Master (v"+A.i(l)+"). Recargue para usarla; usted tiene la v3.2.0.",null,null,null,null,B.bs1,null,null,null)
 k=A.b([A.cf(B.bvd,null,null,new A.b3L(n),null,null)],t.p)
 J.fj(k,A.dK(B.bwm,A.bWd(),null))
 j.amB(A.bvX(k,null,B.a3l,i,null,null,null,!1,null,B.afl,null,null,52,null,B.yg,null,null,null))
@@ -142520,7 +142520,7 @@ m=q==null?f:q.d.b
 l=m==null?0:m
 k=A.b([],o)
 if(A.a8(a,f,s).w.a.a>=700){j=g.f
-i=A.aA(new A.de(B.fQ,f,f,new A.av(B.jN,A.j("v3.1.0",f,f,f,f,A.au(f,f,B.lt,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
+i=A.aA(new A.de(B.fQ,f,f,new A.av(B.jN,A.j("v3.2.0",f,f,f,f,A.au(f,f,B.lt,f,f,f,f,f,f,f,f,11,f,f,f,f,f,!0,f,f,f,f,f,f,f,f),f,f,f),f),f),1)
 h=d.d
 if(h===B.bi)h=B.bbG
 else if(h===B.bk)h=d.ch?B.b6F:B.bbW
@@ -170005,7 +170005,7 @@ B.bxe=new A.y("Sorteo Activo",null,B.bJ,null,null,null,null,null,null,null,null)
 B.bpn=new A.z(!0,B.b_,null,null,null,null,12,B.aD,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
 B.bxf=new A.y("Sistema Profesional de Control de Rifas, Juegos y Espect\xe1culos",null,B.bpn,B.cA,null,null,null,null,null,null,null)
 B.bpF=new A.z(!0,B.BV,null,null,null,null,11,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null)
-B.bxg=new A.y("Versi\xf3n 3.1.0",null,B.bpF,B.cA,null,null,null,null,null,null,null)
+B.bxg=new A.y("Versi\xf3n 3.2.0",null,B.bpF,B.cA,null,null,null,null,null,null,null)
 B.bxi=new A.y("\ud83d\udcc5 Fechas y Registro de Pagos/Abonos:",null,B.fL,null,null,null,null,null,null,null,null)
 B.bxk=new A.y("Contrase\xf1a / Clave de Acceso:",null,B.X7,null,null,null,null,null,null,null,null)
 B.Xw=new A.y("Porcentaje (%)",null,B.dd,null,null,null,null,null,null,null,null)
