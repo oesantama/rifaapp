@@ -24,4 +24,6 @@ services:
       - ./backend/backups:/app/backups:z
       # Raffle templates (poster and printed ticket images)
       - ./backend/assets:/app/assets:z
+      # Web Client build
+      - ./backend/public:/app/public:z
     restart: always

@@ -680,6 +680,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     if (authVM.isAsesor && authVM.activeAdvisor != null) {
       _selectedSellerId ??= authVM.activeAdvisor!.id;
       _selectedSellerName ??= authVM.activeAdvisor!.name;
+    } else if (authVM.isIndependent) {
+      _selectedSellerId ??= authVM.activeAdvisor?.id ?? 'ind_${authVM.currentUserName}';
+      _selectedSellerName ??= authVM.currentUserName;
     }
 
     double amt = double.tryParse(_amountController.text) ?? 0;
@@ -732,7 +735,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     /// Validates and registers the sale / payment. Returns true when it was saved.
     Future<bool> saveSale() async {
       if (!_formKey.currentState!.validate()) return false;
-      final newSellerId = authVM.isAsesor ? authVM.activeAdvisor?.id : (_selectedSellerId ?? 'admin');
+      final newSellerId = authVM.isAsesor
+          ? authVM.activeAdvisor?.id
+          : (authVM.isIndependent
+              ? (authVM.activeAdvisor?.id ?? 'ind_${authVM.currentUserName}')
+              : (_selectedSellerId ?? 'admin'));
       final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
 
       if (isChangingSeller && _noteController.text.trim().isEmpty) {
@@ -762,7 +769,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
           'buyerDocument': _buyerDocumentController.text.trim(),
           if (_saleChannel != null) 'saleChannel': _saleChannel,
           'sellerId': newSellerId,
-          'sellerName': authVM.isAsesor ? authVM.activeAdvisor?.name : (_selectedSellerName ?? 'Administrador'),
+          'sellerName': authVM.isAsesor
+              ? authVM.activeAdvisor?.name
+              : (authVM.isIndependent ? authVM.currentUserName : (_selectedSellerName ?? 'Administrador')),
           'note': _noteController.text.trim().isNotEmpty
               ? _noteController.text.trim()
               : (widget.ticket.balancePending == 0 ? 'Actualización de datos del comprador' : defaultNoteText),
@@ -934,9 +943,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           : null,
                     ),
                     const SizedBox(height: 10),
-                    if (authVM.isAsesor)
+                    if (authVM.isAsesor || authVM.isIndependent)
                       TextFormField(
-                        initialValue: '${authVM.currentUserName} (${authVM.currentUserCode})',
+                        initialValue: authVM.isIndependent
+                            ? '${authVM.currentUserName} (Vendedor Independiente)'
+                            : '${authVM.currentUserName} (${authVM.currentUserCode})',
                         readOnly: true,
                         decoration: const InputDecoration(
                           labelText: 'Asesor / Vendedor (Asignado Automáticamente)',

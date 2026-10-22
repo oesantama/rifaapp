@@ -1561,4 +1561,44 @@ class ApiService {
     }
     throw ApiException.fromResponse(response);
   }
+
+  // ---------------------------------------------------------------------------
+  // VENDEDORES INDEPENDIENTES: Entregas y Conciliación
+  // ---------------------------------------------------------------------------
+  Future<List<Map<String, dynamic>>> getIndependentDeliveries() async {
+    final response = await authGet(Uri.parse('$baseUrl/independent/deliveries'));
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List;
+      return list.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> createIndependentDelivery(Map<String, dynamic> data) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/independent/deliveries'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(data),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> deleteIndependentDelivery(String id) async {
+    final response = await authDelete(Uri.parse('$baseUrl/independent/deliveries/$id'));
+    if (response.statusCode != 200) {
+      throw ApiException.fromResponse(response);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getIndependentSummary() async {
+    final response = await authGet(Uri.parse('$baseUrl/independent/summary'));
+    if (response.statusCode == 200) {
+      final list = jsonDecode(response.body) as List;
+      return list.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    throw ApiException.fromResponse(response);
+  }
 }

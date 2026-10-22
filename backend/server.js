@@ -987,7 +987,7 @@ setInterval(maybeDailySnapshot, 15 * 60 * 1000);
 
 /** Every known collection exists; unknown sections from backups are kept untouched. */
 function ensureDbShape(target) {
-  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests']) {
+  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests', 'independentDeliveries']) {
     if (!Array.isArray(target[key])) target[key] = [];
   }
   return target;
@@ -1001,7 +1001,8 @@ function emptyDb() {
     advisors: [],
     winners: [],
     cashTransactions: [],
-    logs: []
+    logs: [],
+    independentDeliveries: []
   };
 }
 
@@ -1257,6 +1258,10 @@ function planFields(body) {
     out.proUntil = v || null;
   }
   if (out.tier === 'FREE') out.proUntil = null;
+  if (body.maxActiveRaffles !== undefined) {
+    const n = parseInt(body.maxActiveRaffles, 10);
+    out.maxActiveRaffles = isNaN(n) || n < 0 ? 0 : n;
+  }
   return { fields: out };
 }
 
@@ -1481,10 +1486,11 @@ function sessionUser(kind, record) {
   if (kind === 'admin') {
     const tier = effectiveTier(record);
     const isDemo = !!record.isDemo;
+    const isIndependent = !!record.isIndependent;
     return {
       role: 'admin',
       id: record.id,
-      name: record.adminName || 'Administrador',
+      name: record.adminName || (isIndependent ? record.name : 'Administrador'),
       email: record.adminEmail || '',
       username: record.adminUsername,
       companyId: record.id,
@@ -1492,6 +1498,9 @@ function sessionUser(kind, record) {
       tier,
       proUntil: record.proUntil || null,
       isDemo,
+      isIndependent,
+      accountType: record.accountType || (isIndependent ? 'INDEPENDENT' : 'COMPANY'),
+      phone: record.phone || '',
       showAds: tier !== 'PRO',
       mustChangePassword: !!record.adminMustChangePassword
     };
@@ -1671,7 +1680,7 @@ app.post('/api/auth/reset-password', (req, res) => {
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const { role, username, password } = req.body || {};
+  const { role, username, password, selectedAdvisorId } = req.body || {};
   const identifier = normalize(username);
   const pass = typeof password === 'string' ? password : '';
   if (!identifier || !pass) {
@@ -1687,15 +1696,72 @@ app.post('/api/auth/login', (req, res) => {
   let kind = null;
   let record = null;
   if (role === 'asesor') {
-    record = (db.advisors || []).find(a => [a.code, a.username, a.email, a.phone].some(v => v && normalize(v) === identifier));
-    kind = record ? 'asesor' : null;
+    const matchingAdvisors = (db.advisors || []).filter(a => [a.code, a.username, a.email, a.phone].some(v => v && normalize(v) === identifier));
+    const matchingIndependents = (db.companies || []).filter(c => (c.isIndependent || c.accountType === 'INDEPENDENT') && [c.adminUsername, c.code, c.adminEmail, c.phone].some(v => v && normalize(v) === identifier));
+
+    if (selectedAdvisorId) {
+      if (selectedAdvisorId.startsWith('ind:')) {
+        const compId = selectedAdvisorId.replace('ind:', '');
+        record = matchingIndependents.find(c => c.id === compId);
+        kind = record ? 'admin' : null;
+      } else {
+        record = matchingAdvisors.find(a => a.id === selectedAdvisorId);
+        kind = record ? 'asesor' : null;
+      }
+    } else {
+      const validAdvisors = matchingAdvisors.filter(a => security.verifyPassword(pass, passwordHashOf('asesor', a)));
+      const validIndependents = matchingIndependents.filter(c => security.verifyPassword(pass, passwordHashOf('admin', c)));
+
+      const totalValid = validAdvisors.length + validIndependents.length;
+      if (totalValid > 1) {
+        security.clearFailures(ip, identifier);
+        const options = [
+          ...validAdvisors.map(a => {
+            const comp = (db.companies || []).find(c => c.id === a.companyId);
+            const compRaffles = (db.raffles || []).filter(r => (!r.companyId || r.companyId === a.companyId) && r.status !== 'INACTIVA');
+            return {
+              advisorId: a.id,
+              companyId: a.companyId,
+              companyName: comp ? comp.name : 'Empresa sin nombre',
+              advisorName: a.name,
+              code: a.code,
+              raffles: compRaffles.map(r => ({ id: r.id, title: r.title, drawDate: r.drawDate }))
+            };
+          }),
+          ...validIndependents.map(c => {
+            const indRaffles = (db.raffles || []).filter(r => r.companyId === c.id && r.status !== 'INACTIVA');
+            return {
+              advisorId: `ind:${c.id}`,
+              companyId: c.id,
+              companyName: `👤 Vendedor Independiente (${c.name})`,
+              advisorName: c.adminName || c.name,
+              code: c.code,
+              raffles: indRaffles.map(r => ({ id: r.id, title: r.title, drawDate: r.drawDate }))
+            };
+          })
+        ];
+        return res.json({
+          requireSelection: true,
+          message: 'Su cuenta está asociada a múltiples empresas o roles. Seleccione a cuál desea ingresar:',
+          options
+        });
+      } else if (validIndependents.length === 1) {
+        record = validIndependents[0];
+        kind = 'admin';
+      } else if (validAdvisors.length === 1) {
+        record = validAdvisors[0];
+        kind = 'asesor';
+      } else {
+        kind = (matchingAdvisors.length > 0 || matchingIndependents.length > 0) ? 'asesor' : null;
+      }
+    }
   } else {
     const sa = db.superAdmin;
     if (sa && (normalize(sa.username) === identifier || normalize(sa.email) === identifier)) {
       kind = 'superadmin';
       record = sa;
     } else {
-      record = (db.companies || []).find(c => [c.adminUsername, c.adminEmail].some(v => v && normalize(v) === identifier));
+      record = (db.companies || []).find(c => [c.adminUsername, c.adminEmail, c.code, c.phone].some(v => v && normalize(v) === identifier));
       kind = record ? 'admin' : null;
     }
   }
@@ -1909,28 +1975,33 @@ app.get('/api/companies', (req, res) => {
 
 // POST Create Company
 app.post('/api/companies', superAdminOnly, (req, res) => {
-  const { name, code, adminUsername, adminPassword, adminName, adminEmail } = req.body;
+  const { name, code, adminUsername, adminPassword, adminName, adminEmail, accountType, isIndependent, phone } = req.body;
   if (!name) {
-    return res.status(400).json({ error: 'El nombre de la empresa es obligatorio' });
+    return res.status(400).json({ error: 'El nombre es obligatorio' });
   }
   const policyError = security.validatePasswordPolicy(adminPassword);
-  if (policyError) return res.status(400).json({ error: `Contraseña del administrador: ${policyError}` });
+  if (policyError) return res.status(400).json({ error: `Contraseña: ${policyError}` });
   if (adminUsername && isUsernameTaken(adminUsername)) {
-    return res.status(409).json({ error: 'Ese usuario administrador ya existe.' });
+    return res.status(409).json({ error: 'Ese usuario ya existe.' });
   }
 
+  const isInd = isIndependent === true || accountType === 'INDEPENDENT';
   const newCompany = {
     id: `comp-${Date.now()}`,
     name: name.trim(),
-    code: code ? code.trim().toUpperCase() : `EMP${(db.companies || []).length + 1}`,
+    code: code ? code.trim().toUpperCase() : (isInd ? `IND${(db.companies || []).length + 1}` : `EMP${(db.companies || []).length + 1}`),
     status: 'ACTIVA',
-    adminUsername: adminUsername ? adminUsername.trim() : `admin_${Date.now().toString().slice(-4)}`,
+    accountType: isInd ? 'INDEPENDENT' : 'COMPANY',
+    isIndependent: isInd,
+    phone: phone ? String(phone).trim() : '',
+    adminUsername: adminUsername ? adminUsername.trim() : `user_${Date.now().toString().slice(-4)}`,
     adminPassword: security.hashPassword(adminPassword),
     adminMustChangePassword: true,
-    adminName: adminName || 'Admin Empresa',
+    adminName: adminName || (isInd ? name.trim() : 'Admin Empresa'),
     adminEmail: adminEmail || '',
-    tier: 'FREE',
+    tier: req.body.tier || 'FREE',
     proUntil: null,
+    maxActiveRaffles: 0,
     createdAt: new Date().toISOString()
   };
   const plan = planFields(req.body);
@@ -1957,23 +2028,136 @@ app.put('/api/companies/:id', superAdminOnly, (req, res) => {
   if (req.body.name !== undefined) company.name = req.body.name;
   if (req.body.code !== undefined) company.code = req.body.code;
   if (req.body.status !== undefined) company.status = req.body.status;
+  if (req.body.accountType !== undefined) company.accountType = req.body.accountType;
+  if (req.body.isIndependent !== undefined) company.isIndependent = !!req.body.isIndependent;
+  if (req.body.phone !== undefined) company.phone = String(req.body.phone).trim();
   Object.assign(company, plan.fields);
   if (req.body.adminUsername !== undefined) {
     if (normalize(req.body.adminUsername) !== normalize(company.adminUsername) && isUsernameTaken(req.body.adminUsername)) {
-      return res.status(409).json({ error: 'Ese usuario administrador ya existe.' });
+      return res.status(409).json({ error: 'Ese usuario ya existe.' });
     }
     company.adminUsername = req.body.adminUsername;
   }
   // Password only changes when a new one is sent (it is never read back)
   if (typeof req.body.adminPassword === 'string' && req.body.adminPassword.trim() !== '') {
     const policyError = security.validatePasswordPolicy(req.body.adminPassword);
-    if (policyError) return res.status(400).json({ error: `Contraseña del administrador: ${policyError}` });
+    if (policyError) return res.status(400).json({ error: `Contraseña: ${policyError}` });
     company.adminPassword = security.hashPassword(req.body.adminPassword);
     company.adminMustChangePassword = true;
   }
   if (req.body.adminName !== undefined) company.adminName = req.body.adminName;
+  if (req.body.adminEmail !== undefined) company.adminEmail = req.body.adminEmail;
   saveDB();
   res.json(company);
+});
+
+// ---------------------------------------------------------------------------
+// VENDEDORES INDEPENDIENTES: Auto-Conciliación de Entregas y Liquidación
+// ---------------------------------------------------------------------------
+
+// GET Entregas registradas por el vendedor independiente
+app.get('/api/independent/deliveries', (req, res) => {
+  const targetCompanyId = req.auth.role === 'admin' ? req.auth.record.id : (req.auth.role === 'superadmin' ? req.query.companyId : null);
+  if (!targetCompanyId) return res.status(400).json({ error: 'Identificador de cuenta requerido.' });
+  const deliveries = (db.independentDeliveries || []).filter(d => d.companyId === targetCompanyId);
+  res.json(deliveries);
+});
+
+// POST Registrar nueva entrega/consignación a dueño de rifa
+app.post('/api/independent/deliveries', (req, res) => {
+  if (req.auth.role !== 'admin' && req.auth.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Solo administradores o vendedores independientes pueden registrar entregas.' });
+  }
+  const companyId = req.auth.role === 'admin' ? req.auth.record.id : (req.body.companyId || 'comp-1');
+  const { raffleId, raffleTitle, ownerName, amount, paymentMethod, reference, notes, date } = req.body || {};
+  const numAmount = parseFloat(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return res.status(400).json({ error: 'El monto entregado debe ser mayor a 0.' });
+  }
+
+  const newDelivery = {
+    id: `deliv-${Date.now()}`,
+    companyId,
+    raffleId: raffleId || '',
+    raffleTitle: raffleTitle || 'Sorteo',
+    ownerName: ownerName ? String(ownerName).trim() : 'Dueño de Rifa',
+    amount: numAmount,
+    paymentMethod: paymentMethod || 'EFECTIVO',
+    reference: reference ? String(reference).trim() : '',
+    notes: notes ? String(notes).trim() : '',
+    date: date || new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  };
+
+  if (!db.independentDeliveries) db.independentDeliveries = [];
+  db.independentDeliveries.unshift(newDelivery);
+  saveDB();
+  res.status(201).json(newDelivery);
+});
+
+// DELETE Eliminar registro de entrega
+app.delete('/api/independent/deliveries/:id', (req, res) => {
+  const { id } = req.params;
+  const targetCompanyId = req.auth.role === 'admin' ? req.auth.record.id : null;
+  const idx = (db.independentDeliveries || []).findIndex(d => d.id === id && (req.auth.role === 'superadmin' || d.companyId === targetCompanyId));
+  if (idx === -1) return res.status(404).json({ error: 'Registro de entrega no encontrado.' });
+  const removed = db.independentDeliveries.splice(idx, 1)[0];
+  saveDB();
+  res.json({ message: 'Entrega eliminada correctamente.', delivery: removed });
+});
+
+// GET Resumen de Liquidación / Auto-Conciliación para Vendedor Independiente
+app.get('/api/independent/summary', (req, res) => {
+  const companyId = req.auth.role === 'admin' ? req.auth.record.id : (req.query.companyId || (db.companies || [])[0]?.id);
+  if (!companyId) return res.status(400).json({ error: 'Cuenta no identificada.' });
+
+  const company = (db.companies || []).find(c => c.id === companyId);
+  const compRaffles = (db.raffles || []).filter(r => !r.companyId || r.companyId === companyId);
+  const compDeliveries = (db.independentDeliveries || []).filter(d => d.companyId === companyId);
+
+  const summary = compRaffles.map(r => {
+    const rTickets = (db.tickets || []).filter(t => t.raffleId === r.id);
+    const soldTickets = rTickets.filter(t => t.status === 'PAGADA');
+    const partialTickets = rTickets.filter(t => t.status === 'ABONO_PARCIAL');
+    const totalCollected = rTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+    const raffleDeliveries = compDeliveries.filter(d => d.raffleId === r.id || (d.ownerName && r.ownerName && normalize(d.ownerName) === normalize(r.ownerName)));
+    const totalDelivered = raffleDeliveries.reduce((sum, d) => sum + (d.amount || 0), 0);
+    const commissionPercent = parseFloat(r.commissionPercent || (r.commissionType === 'PORCENTAJE' ? r.commissionValue : 0)) || 0;
+    const commissionEarned = commissionPercent > 0 ? (totalCollected * (commissionPercent / 100)) : 0;
+    const dueToOwner = Math.max(0, totalCollected - commissionEarned - totalDelivered);
+
+    return {
+      raffleId: r.id,
+      raffleTitle: r.title,
+      ownerName: r.ownerName || r.description || 'Organizador',
+      mainDrawDate: r.mainDrawDate,
+      ticketPrice: r.ticketPrice || 0,
+      totalTickets: rTickets.length,
+      soldCount: soldTickets.length,
+      partialCount: partialTickets.length,
+      availableCount: Math.max(0, rTickets.length - soldTickets.length - partialTickets.length),
+      totalCollected,
+      commissionPercent,
+      commissionEarned,
+      totalDelivered,
+      dueToOwner,
+      deliveries: raffleDeliveries
+    };
+  });
+
+  const totals = summary.reduce((acc, curr) => ({
+    totalCollected: acc.totalCollected + curr.totalCollected,
+    totalDelivered: acc.totalDelivered + curr.totalDelivered,
+    commissionEarned: acc.commissionEarned + curr.commissionEarned,
+    dueToOwner: acc.dueToOwner + curr.dueToOwner
+  }), { totalCollected: 0, totalDelivered: 0, commissionEarned: 0, dueToOwner: 0 });
+
+  res.json({
+    companyId,
+    sellerName: company ? company.name : 'Vendedor',
+    totals,
+    raffles: summary
+  });
 });
 
 // Account deletion requested from inside the app
@@ -2185,6 +2369,8 @@ app.get('/api/my-plan', adminOnly, (req, res) => {
     tier: effectiveTier(company),
     status: planStatus(company),
     proUntil: company.proUntil || null,
+    maxActiveRaffles: typeof company.maxActiveRaffles === 'number' ? company.maxActiveRaffles : 0,
+    activeRafflesCount: (db.raffles || []).filter(r => r.companyId === company.id && r.status === 'ACTIVA' && !r.scheduledDeletionAt).length,
     isDemo: !!company.isDemo,
     monthlyPrice: m.monthlyPrice,
     quarterlyPrice: m.quarterlyPrice,
@@ -3041,11 +3227,14 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Closing a raffle: after its draw date the admin closes it (status INACTIVA). It stays 7 days
-// (it can be reopened and its information downloaded) and then everything about it is deleted.
-// A full backup is taken right before deleting.
+// Ciclo de vida de rifas:
+// 1) A los 30 días del sorteo: se inhabilita la rifa (status INACTIVA) y se eliminan
+//    los soportes de Google Drive para liberar espacio en la nube (la rifa queda en base de datos).
+// 2) A los 6 meses (180 días) del sorteo: se elimina por completo de la base de datos
+//    (con copia de seguridad de respaldo previa).
 // ---------------------------------------------------------------------------
-const RAFFLE_RETENTION_DAYS = 7;
+const DRIVE_CLEANUP_DAYS = 30; // 30 días después del sorteo -> Borrar soportes en Drive e inhabilitar
+const DB_PURGE_DAYS = 180;     // 6 meses (180 días) después del sorteo -> Eliminar de la base de datos
 
 function drawDayOf(raffle) {
   const raw = String(raffle.mainDrawDate || '');
@@ -3219,11 +3408,13 @@ app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
     return res.status(400).json({ error: 'La rifa solo se puede cerrar después de la fecha del sorteo principal.' });
   }
   const now = Date.now();
+  const drawMs = day ? Date.parse(day) : now;
   raffle.statusBeforeClose = raffle.status || 'ACTIVA';
   raffle.status = 'INACTIVA';
   raffle.closedAt = new Date(now).toISOString();
   raffle.closedBy = actorName(req);
-  raffle.scheduledDeletionAt = new Date(now + RAFFLE_RETENTION_DAYS * 86400000).toISOString();
+  // Eliminación definitiva de la base de datos a los 180 días (6 meses) del sorteo
+  raffle.scheduledDeletionAt = new Date(drawMs + DB_PURGE_DAYS * 86400000).toISOString();
   saveDB();
   res.json(raffle);
 });
@@ -3232,6 +3423,29 @@ app.post('/api/raffles/:id/reopen', adminOnly, (req, res) => {
   const raffle = (db.raffles || []).find(r => r.id === req.params.id);
   if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada.' });
   if (!raffle.scheduledDeletionAt) return res.status(400).json({ error: 'La rifa no está cerrada.' });
+
+  if (raffle.driveCleanedAt) {
+    return res.status(400).json({ 
+      error: 'No se puede reabrir esta rifa: ya pasaron más de 30 días desde el sorteo y sus soportes en Google Drive fueron eliminados.' 
+    });
+  }
+
+  const targetCompany = (db.companies || []).find(c => c.id === raffle.companyId);
+  const maxActive = targetCompany && typeof targetCompany.maxActiveRaffles === 'number' ? targetCompany.maxActiveRaffles : 0;
+  if (maxActive > 0) {
+    const activeCount = (db.raffles || []).filter(r => 
+      r.companyId === raffle.companyId && 
+      r.id !== raffle.id &&
+      r.status === 'ACTIVA' && 
+      !r.scheduledDeletionAt
+    ).length;
+    if (activeCount >= maxActive) {
+      return res.status(403).json({ 
+        error: `No se puede reabrir la rifa: ya tiene ${activeCount} rifa(s) activa(s), que es el límite asignado (${maxActive}).` 
+      });
+    }
+  }
+
   raffle.status = raffle.statusBeforeClose || 'ACTIVA';
   delete raffle.closedAt;
   delete raffle.closedBy;
@@ -3266,32 +3480,112 @@ function purgeRaffle(raffle, reason) {
     id: `audit-${Date.now()}-${id}`, type: 'PURGE_RAFFLE', targetId: id, targetName: raffle.title,
     companyId: raffle.companyId, reason, counts, closedAt: raffle.closedAt, closedBy: raffle.closedBy, date: new Date().toISOString()
   });
-  console.log(`🗑️ Rifa "${raffle.title}" eliminada (${reason}): ${counts.tickets} boletas, ${counts.winners} sorteos.`);
+  console.log(`🗑️ Rifa "${raffle.title}" eliminada de la base de datos (${reason}): ${counts.tickets} boletas, ${counts.winners} sorteos.`);
 }
 
-let purgingRaffles = false;
-async function purgeDueRaffles() {
-  if (!isDbLoaded || purgingRaffles) return;
-  const due = (db.raffles || []).filter(r => r.scheduledDeletionAt && Date.parse(r.scheduledDeletionAt) <= Date.now());
-  if (!due.length) return;
-  purgingRaffles = true;
+let runningLifecycle = false;
+async function checkRaffleLifecycle() {
+  if (!isDbLoaded || runningLifecycle) return;
+  runningLifecycle = true;
+  const now = Date.now();
+  let dbChanged = false;
+
   try {
-    // Safety copy of everything right before deleting
-    await createSnapshot('antes_de_eliminar_rifa');
-    for (const r of due) {
-      const current = (db.raffles || []).find(x => x.id === r.id && x.scheduledDeletionAt);
-      if (current && Date.parse(current.scheduledDeletionAt) <= Date.now()) purgeRaffle(current, `Cerrada el ${current.closedAt} por ${current.closedBy}; ${RAFFLE_RETENTION_DAYS} días cumplidos`);
+    for (const raffle of (db.raffles || [])) {
+      const day = drawDayOf(raffle);
+      if (!day) continue;
+      const drawMs = Date.parse(day);
+      if (isNaN(drawMs)) continue;
+      const daysSinceDraw = Math.floor((now - drawMs) / 86400000);
+
+      // ETAPA 1: Pasados 30 días del sorteo -> Inhabilitar y eliminar soportes de Drive
+      if (daysSinceDraw >= DRIVE_CLEANUP_DAYS) {
+        if (raffle.status !== 'INACTIVA') {
+          raffle.statusBeforeClose = raffle.status || 'ACTIVA';
+          raffle.status = 'INACTIVA';
+          raffle.closedAt = raffle.closedAt || new Date(now).toISOString();
+          raffle.closedBy = raffle.closedBy || 'Sistema (30 días cumplidos del sorteo)';
+          dbChanged = true;
+        }
+
+        if (!raffle.driveCleanedAt) {
+          if (raffle.driveFolderId) {
+            try {
+              await driveService.trashDriveFile(raffle.driveFolderId);
+              console.log(`🧹 Carpeta de Drive enviada a papelera para rifa "${raffle.title}" tras 30 días del sorteo.`);
+            } catch (err) {
+              console.error(`⚠️ No se pudo enviar a la papelera la carpeta de Drive (${raffle.id}):`, err.message);
+            }
+            raffle.driveFolderId = null;
+          }
+
+          // Marcar tickets para liberar referencias a Drive
+          const tickets = (db.tickets || []).filter(t => t.raffleId === raffle.id);
+          for (const t of tickets) {
+            if (t.paymentProofDriveId) {
+              delete t.paymentProofDriveId;
+              t.paymentProofArchived = true;
+            }
+            if (t.payments && Array.isArray(t.payments)) {
+              for (const p of t.payments) {
+                if (p.driveFileId) {
+                  delete p.driveFileId;
+                  p.archivedFromDrive = true;
+                }
+              }
+            }
+          }
+
+          raffle.driveCleanedAt = new Date(now).toISOString();
+          if (!raffle.scheduledDeletionAt) {
+            raffle.scheduledDeletionAt = new Date(drawMs + DB_PURGE_DAYS * 86400000).toISOString();
+          }
+          dbChanged = true;
+
+          if (!db.auditLogs) db.auditLogs = [];
+          db.auditLogs.push({
+            id: `audit-${now}-${raffle.id}`,
+            type: 'DRIVE_CLEANUP_30_DAYS',
+            companyId: raffle.companyId,
+            targetId: raffle.id,
+            targetName: raffle.title,
+            detail: 'Rifa inhabilitada y soportes en Google Drive eliminados cumplidos 30 días del sorteo.',
+            by: 'Sistema',
+            date: new Date(now).toISOString()
+          });
+        }
+      }
     }
-    saveDB();
+
+    // ETAPA 2: Pasados 6 meses (180 días) del sorteo -> Eliminar de la base de datos
+    const duePurge = (db.raffles || []).filter(r => {
+      if (r.scheduledDeletionAt && Date.parse(r.scheduledDeletionAt) <= now) return true;
+      const day = drawDayOf(r);
+      if (!day) return false;
+      const drawMs = Date.parse(day);
+      return !isNaN(drawMs) && Math.floor((now - drawMs) / 86400000) >= DB_PURGE_DAYS;
+    });
+
+    if (duePurge.length > 0) {
+      await createSnapshot('antes_de_eliminar_rifas_6_meses');
+      for (const r of duePurge) {
+        const current = (db.raffles || []).find(x => x.id === r.id);
+        if (current) {
+          purgeRaffle(current, 'Cumplidos 6 meses (180 días) desde la fecha del sorteo');
+          dbChanged = true;
+        }
+      }
+    }
+
+    if (dbChanged) saveDB();
   } catch (err) {
-    // Without the safety copy nothing is deleted; it is retried later
-    console.error('⚠️ No se eliminaron las rifas vencidas (no se pudo crear la copia de seguridad):', err.message);
+    console.error('⚠️ Error en checkRaffleLifecycle:', err.message);
   } finally {
-    purgingRaffles = false;
+    runningLifecycle = false;
   }
 }
-setInterval(() => purgeDueRaffles().catch(() => {}), 60 * 60 * 1000);
-setTimeout(() => purgeDueRaffles().catch(() => {}), 60 * 1000);
+setInterval(() => checkRaffleLifecycle().catch(() => {}), 60 * 60 * 1000);
+setTimeout(() => checkRaffleLifecycle().catch(() => {}), 60 * 1000);
 
 // Everything about a raffle in a ZIP: an Excel workbook and the payment / delivery proof images
 app.get('/api/raffles/:id/export', adminOnly, async (req, res) => {
@@ -3564,6 +3858,19 @@ app.post('/api/raffles', adminOnly, (req, res) => {
 
   const targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : (companyId || 'comp-1');
 
+  // Validar cupo de rifas contratadas (0 = ilimitadas / suscripción mensual; > 0 = cupo total contratado)
+  const targetCompany = (db.companies || []).find(c => c.id === targetCompanyId);
+  const maxAllowed = targetCompany && typeof targetCompany.maxActiveRaffles === 'number' ? targetCompany.maxActiveRaffles : 0;
+  if (maxAllowed > 0) {
+    const existingCount = (db.raffles || []).filter(r => r.companyId === targetCompanyId).length;
+    const currentUsed = Math.max(targetCompany.rafflesCreatedCount || 0, existingCount);
+    if (currentUsed >= maxAllowed) {
+      return res.status(403).json({ 
+        error: `Ha alcanzado el cupo total de ${maxAllowed} rifa(s) contratadas. En la modalidad de pago por rifa, así la rifa anterior se haya cerrado o eliminado, para crear una nueva rifa debe solicitar una recarga de cupo al SuperAdmin o cambiar a suscripción mensual.` 
+      });
+    }
+  }
+
   const newRaffle = {
     id: `raf-${Date.now()}`,
     companyId: targetCompanyId,
@@ -3585,6 +3892,8 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     ...normalizeWinningConfig(req.body, numDigits),
     // Accounts where buyers pay by bank transfer
     transferAccounts: [],
+    ownerName: req.body.ownerName ? String(req.body.ownerName).trim() : '',
+    isIndependentBook: !!req.body.isIndependentBook || (targetCompany && !!targetCompany.isIndependent),
     status: 'ACTIVA',
     createdAt: new Date().toISOString()
   };
@@ -3602,12 +3911,28 @@ app.post('/api/raffles', adminOnly, (req, res) => {
   }
 
   db.raffles.unshift(newRaffle);
+  if (targetCompany) {
+    const existingCount = (db.raffles || []).filter(r => r.companyId === targetCompanyId).length;
+    targetCompany.rafflesCreatedCount = Math.max((targetCompany.rafflesCreatedCount || 0) + 1, existingCount);
+  }
 
-  // Prepare series numbers based on generationMode
+  const isInd = !!req.body.isIndependentBook || (targetCompany && !!targetCompany.isIndependent);
+  const customTicketsList = Array.isArray(req.body.customTicketsList) ? req.body.customTicketsList : null;
+  let effectiveNumTickets = numTickets;
+
+  // Prepare series numbers based on generationMode or independent ticket list
   let allSeries = [];
   const mode = generationMode || 'SECUENCIAL';
 
-  if (mode === 'ALEATORIO') {
+  if (isInd && customTicketsList && customTicketsList.length > 0) {
+    effectiveNumTickets = customTicketsList.length;
+    newRaffle.totalTickets = effectiveNumTickets;
+    newRaffle.isIndependentBook = true;
+    allSeries = customTicketsList.map(item => Array.isArray(item) ? item.map(n => String(n).trim()) : [String(item).trim()]);
+    const firstTicketSeries = allSeries[0] || [];
+    newRaffle.opportunitiesPerTicket = parseInt(req.body.opportunitiesPerTicket) || firstTicketSeries.length || 1;
+    newRaffle.totalNumbers = allSeries.reduce((acc, curr) => acc + curr.length, 0);
+  } else if (mode === 'ALEATORIO') {
     // Generate pool 0..totalNumbers-1, shuffle and chunk
     const pool = Array.from({ length: totalNumbers }, (_, i) => i);
     for (let i = pool.length - 1; i > 0; i--) {
@@ -3615,7 +3940,7 @@ app.post('/api/raffles', adminOnly, (req, res) => {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
 
-    for (let i = 0; i < numTickets; i++) {
+    for (let i = 0; i < effectiveNumTickets; i++) {
       const tktNumbers = [];
       for (let k = 0; k < opps; k++) {
         const idx = i * opps + k;
@@ -3626,13 +3951,13 @@ app.post('/api/raffles', adminOnly, (req, res) => {
       allSeries.push(tktNumbers);
     }
   } else if (mode === 'EXCEL' && customNumbers && typeof customNumbers === 'object') {
-    for (let i = 1; i <= numTickets; i++) {
+    for (let i = 1; i <= effectiveNumTickets; i++) {
       if (customNumbers[i] && Array.isArray(customNumbers[i])) {
         allSeries.push(customNumbers[i].map(n => n.toString().padStart(numDigits, '0')));
       } else {
         const series = [];
         for (let k = 0; k < opps; k++) {
-          const numVal = (i - 1) + (k * numTickets);
+          const numVal = (i - 1) + (k * effectiveNumTickets);
           series.push(numVal.toString().padStart(numDigits, '0'));
         }
         allSeries.push(series);
@@ -3640,10 +3965,10 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     }
   } else {
     // SECUENCIAL
-    for (let i = 1; i <= numTickets; i++) {
+    for (let i = 1; i <= effectiveNumTickets; i++) {
       const series = [];
       for (let k = 0; k < opps; k++) {
-        const numVal = (i - 1) + (k * numTickets);
+        const numVal = (i - 1) + (k * effectiveNumTickets);
         series.push(numVal.toString().padStart(numDigits, '0'));
       }
       allSeries.push(series);
@@ -3661,7 +3986,7 @@ app.post('/api/raffles', adminOnly, (req, res) => {
   }
 
   // Generate Tickets for this raffle
-  for (let i = 1; i <= numTickets; i++) {
+  for (let i = 1; i <= effectiveNumTickets; i++) {
     const series = allSeries[i - 1] || [];
     let status = 'DISPONIBLE';
     let buyerName = '';
@@ -4990,26 +5315,26 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   if (!phone || String(phone).replace(/\D/g, '').length !== 10) missing.push('teléfono de 10 dígitos');
   if (!code || String(code).replace(/\D/g, '').length < 5) missing.push('cédula');
   if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(', ')}.` });
-  // Login identifiers are unique in the whole platform (any company): a repeat would make login ambiguous
-  const advisorTaken = v => (db.advisors || []).some(a => [a.username, a.code].some(x => x && normalize(x) === normalize(v)));
-  if (isUsernameTaken(username) || advisorTaken(username)) {
-    return res.status(409).json({
-      field: 'username',
-      error: `El usuario "${String(username).trim()}" ya lo usa otra cuenta de la plataforma (puede ser de otra empresa). Elija otro usuario.`
-    });
-  }
-  if (isUsernameTaken(code) || advisorTaken(code)) {
-    return res.status(409).json({
-      field: 'code',
-      error: `La cédula ${String(code).trim()} ya está registrada en otra cuenta de la plataforma (puede ser de otra empresa). Verifique el número.`
-    });
-  }
-
   let targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : companyId;
   if (!targetCompanyId && (db.companies || []).length > 0) {
     targetCompanyId = db.companies[0].id;
   }
   if (!targetCompanyId) targetCompanyId = 'comp-1';
+
+  // Check if username/cédula is already taken within this specific company, or globally by superadmin/admin
+  const advisorInCompanyTaken = v => (db.advisors || []).some(a => a.companyId === targetCompanyId && [a.username, a.code].some(x => x && normalize(x) === normalize(v)));
+  if (isUsernameTaken(username) || advisorInCompanyTaken(username)) {
+    return res.status(409).json({
+      field: 'username',
+      error: `El usuario "${String(username).trim()}" ya está registrado en esta empresa o en el sistema. Elija otro usuario.`
+    });
+  }
+  if (advisorInCompanyTaken(code)) {
+    return res.status(409).json({
+      field: 'code',
+      error: `La cédula ${String(code).trim()} ya está registrada para un asesor en esta empresa. Verifique el número.`
+    });
+  }
 
   const newAdvisor = {
     id: `adv-${Date.now()}`,

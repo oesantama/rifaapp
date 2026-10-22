@@ -8,13 +8,20 @@ String formatPlanDate(String? day) {
   return parsed == null ? '' : DateFormat('dd/MM/yyyy').format(parsed);
 }
 
-/// Plan selector for the company dialogs: FREE (with ads) or PRO (no ads) with an optional end date.
+/// Plan selector for the company dialogs: FREE (with ads) or PRO (no ads) with an optional end date and active raffles limit.
 class PlanFields extends StatelessWidget {
   final String tier;
   final String? proUntil;
-  final void Function(String tier, String? proUntil) onChanged;
+  final int maxActiveRaffles;
+  final void Function(String tier, String? proUntil, int maxActiveRaffles) onChanged;
 
-  const PlanFields({super.key, required this.tier, required this.proUntil, required this.onChanged});
+  const PlanFields({
+    super.key,
+    required this.tier,
+    required this.proUntil,
+    this.maxActiveRaffles = 0,
+    required this.onChanged,
+  });
 
   Future<void> _pickDate(BuildContext context) async {
     final now = DateTime.now();
@@ -26,7 +33,7 @@ class PlanFields extends StatelessWidget {
       lastDate: DateTime(now.year + 5),
       helpText: 'Último día del plan PRO',
     );
-    if (picked != null) onChanged('PRO', DateFormat('yyyy-MM-dd').format(picked));
+    if (picked != null) onChanged('PRO', DateFormat('yyyy-MM-dd').format(picked), maxActiveRaffles);
   }
 
   @override
@@ -46,7 +53,7 @@ class PlanFields extends StatelessWidget {
             ButtonSegment(value: 'PRO', label: Text('PRO'), icon: Icon(Icons.workspace_premium_outlined)),
           ],
           selected: {tier},
-          onSelectionChanged: (v) => onChanged(v.first, v.first == 'PRO' ? proUntil : null),
+          onSelectionChanged: (v) => onChanged(v.first, v.first == 'PRO' ? proUntil : null, maxActiveRaffles),
         ),
         const SizedBox(height: 4),
         Text(tier == 'PRO' ? 'Sin anuncios en la app de la empresa.' : 'La empresa ve el anuncio "Pásate a PRO".',
@@ -71,10 +78,27 @@ class PlanFields extends StatelessWidget {
               ),
               IconButton(icon: const Icon(Icons.edit_calendar), tooltip: 'Elegir fecha', onPressed: () => _pickDate(context)),
               if (proUntil != null)
-                IconButton(icon: const Icon(Icons.clear), tooltip: 'Quitar vencimiento', onPressed: () => onChanged('PRO', null)),
+                IconButton(icon: const Icon(Icons.clear), tooltip: 'Quitar vencimiento', onPressed: () => onChanged('PRO', null, maxActiveRaffles)),
             ],
           ),
         ],
+        const SizedBox(height: 12),
+        TextFormField(
+          initialValue: maxActiveRaffles.toString(),
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Cupo total de rifas contratadas',
+            prefixIcon: const Icon(Icons.confirmation_number_outlined),
+            helperText: maxActiveRaffles == 0
+                ? '0 = Ilimitadas (Modalidad Suscripción Mensual)'
+                : 'Cupo: $maxActiveRaffles rifa(s). Aunque se cierre o elimine, no podrá crear más sin recarga de cupo.',
+            helperMaxLines: 2,
+          ),
+          onChanged: (val) {
+            final parsed = int.tryParse(val.trim()) ?? 0;
+            onChanged(tier, proUntil, parsed < 0 ? 0 : parsed);
+          },
+        ),
       ],
     );
   }
@@ -89,11 +113,16 @@ class PlanBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (company.isDemo) return _chip('DEMO', Colors.purple);
+    final limit = company.maxActiveRaffles == 0
+        ? 'Ilimitadas'
+        : 'Cupo: ${company.rafflesCreatedCount}/${company.maxActiveRaffles}';
     if (company.effectiveTier == 'PRO') {
-      return _chip(company.proUntil == null ? 'PRO' : 'PRO hasta ${formatPlanDate(company.proUntil)}', Colors.amber.shade800);
+      final text = company.proUntil == null ? 'PRO ($limit)' : 'PRO hasta ${formatPlanDate(company.proUntil)} ($limit)';
+      return _chip(text, Colors.amber.shade800);
     }
     final expired = company.tier == 'PRO';
-    return _chip(expired ? 'GRATIS (PRO vencido ${formatPlanDate(company.proUntil)})' : 'GRATIS', Colors.blueGrey);
+    final text = expired ? 'GRATIS (PRO vencido ${formatPlanDate(company.proUntil)})' : 'GRATIS ($limit)';
+    return _chip(text, Colors.blueGrey);
   }
 
   Widget _chip(String text, Color color) => Container(

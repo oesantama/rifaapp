@@ -36,6 +36,8 @@ import 'ui/features/monetization/monetization_view.dart';
 import 'ui/features/admin_cash/view_models/cash_view_model.dart';
 import 'ui/features/admin_cash/views/advisor_cash_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
+import 'ui/features/raffles/views/independent_book_dialog.dart';
+import 'ui/features/independent/views/independent_deliveries_view.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
 import 'ui/core/utils/cache_helper.dart';
@@ -262,14 +264,22 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const MonetizationView(),
           ]
         : authVM.isAdmin
-            ? [
-                DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
-                const TicketGridView(),
-                const AdvisorManagementView(),
-                const AdminCashView(),
-                const WinnerRegistrationView(),
-                const ControlView(),
-              ]
+            ? (authVM.isIndependent
+                ? [
+                    DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                    const TicketGridView(),
+                    const IndependentDeliveriesView(),
+                    const WinnerRegistrationView(),
+                    const ControlView(),
+                  ]
+                : [
+                    DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                    const TicketGridView(),
+                    const AdvisorManagementView(),
+                    const AdminCashView(),
+                    const WinnerRegistrationView(),
+                    const ControlView(),
+                  ])
             : [
                 DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
                 const TicketGridView(),
@@ -453,16 +463,39 @@ class _MainShellScreenState extends State<MainShellScreen> {
                     tooltip: 'Modo Oscuro/Claro',
                   ),
                   if (authVM.isAdmin && !authVM.isSuperAdmin)
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, size: 20),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (_) => const RaffleCreateDialog(),
-                        );
-                      },
-                      tooltip: 'Crear Nuevo Sorteo',
-                    ),
+                    authVM.isIndependent
+                        ? Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal.shade700,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                              icon: const Icon(Icons.post_add_rounded, size: 18),
+                              label: Text(
+                                isMobile ? 'Talonario' : 'Cargar Talonario',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => const IndependentBookDialog(),
+                                );
+                              },
+                            ),
+                          )
+                        : IconButton(
+                            icon: const Icon(Icons.add_circle_outline, size: 20),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => const RaffleCreateDialog(),
+                              );
+                            },
+                            tooltip: 'Crear Nuevo Sorteo',
+                          ),
                   IconButton(
                     icon: const Icon(Icons.logout, color: AppTheme.dangerRose, size: 20),
                     onPressed: () {
@@ -545,38 +578,66 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       ),
                     ]
                   : authVM.isAdmin
-                      ? const [
-                          NavigationRailDestination(
-                            icon: Icon(Icons.dashboard_outlined),
-                            selectedIcon: Icon(Icons.dashboard),
-                            label: Text('Dashboard'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.grid_on_outlined),
-                            selectedIcon: Icon(Icons.grid_on),
-                            label: Text('Boletas'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.people_outline),
-                            selectedIcon: Icon(Icons.people),
-                            label: Text('Asesores'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.point_of_sale_outlined),
-                            selectedIcon: Icon(Icons.point_of_sale),
-                            label: Text('Caja Admin'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.emoji_events_outlined),
-                            selectedIcon: Icon(Icons.emoji_events),
-                            label: Text('Ganadores'),
-                          ),
-                          NavigationRailDestination(
-                            icon: Icon(Icons.fact_check_outlined),
-                            selectedIcon: Icon(Icons.fact_check),
-                            label: Text('Control'),
-                          ),
-                        ]
+                      ? (authVM.isIndependent
+                          ? const [
+                              NavigationRailDestination(
+                                icon: Icon(Icons.dashboard_outlined),
+                                selectedIcon: Icon(Icons.dashboard),
+                                label: Text('Dashboard'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.grid_on_outlined),
+                                selectedIcon: Icon(Icons.grid_on),
+                                label: Text('Mis Boletas'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.account_balance_wallet_outlined),
+                                selectedIcon: Icon(Icons.account_balance_wallet),
+                                label: Text('Entregas / Caja'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.emoji_events_outlined),
+                                selectedIcon: Icon(Icons.emoji_events),
+                                label: Text('Ganadores'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.fact_check_outlined),
+                                selectedIcon: Icon(Icons.fact_check),
+                                label: Text('Control'),
+                              ),
+                            ]
+                          : const [
+                              NavigationRailDestination(
+                                icon: Icon(Icons.dashboard_outlined),
+                                selectedIcon: Icon(Icons.dashboard),
+                                label: Text('Dashboard'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.grid_on_outlined),
+                                selectedIcon: Icon(Icons.grid_on),
+                                label: Text('Boletas'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.people_outline),
+                                selectedIcon: Icon(Icons.people),
+                                label: Text('Asesores'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.point_of_sale_outlined),
+                                selectedIcon: Icon(Icons.point_of_sale),
+                                label: Text('Caja Admin'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.emoji_events_outlined),
+                                selectedIcon: Icon(Icons.emoji_events),
+                                label: Text('Ganadores'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.fact_check_outlined),
+                                selectedIcon: Icon(Icons.fact_check),
+                                label: Text('Control'),
+                              ),
+                            ])
                       : const [
                           NavigationRailDestination(
                             icon: Icon(Icons.dashboard_outlined),
@@ -627,14 +688,22 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: 'Planes'),
                     ]
                   : authVM.isAdmin
-                      ? const [
-                          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                          BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
-                          BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
-                          BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
-                          BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
-                        ]
+                      ? (authVM.isIndependent
+                          ? const [
+                              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
+                              BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                              BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Entregas'),
+                              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                              BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
+                            ]
+                          : const [
+                              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
+                              BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                              BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
+                              BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
+                              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                              BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
+                            ])
                       : const [
                           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
                           BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),

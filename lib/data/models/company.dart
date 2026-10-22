@@ -17,6 +17,11 @@ class Company {
   final String? proUntil; // last day of PRO ("YYYY-MM-DD"); null = no end date
   final String effectiveTier; // plan in force today (an expired PRO is FREE)
   final bool isDemo;
+  final int maxActiveRaffles; // 0 = ilimitadas (suscripción), >=1 = cupo total contratado (pago por rifa)
+  final int rafflesCreatedCount; // acumulado histórico de rifas creadas
+  final bool isIndependent;
+  final String accountType; // 'COMPANY' | 'INDEPENDENT'
+  final String phone;
 
   Company({
     required this.id,
@@ -37,6 +42,11 @@ class Company {
     this.proUntil,
     this.effectiveTier = 'FREE',
     this.isDemo = false,
+    this.maxActiveRaffles = 0,
+    this.rafflesCreatedCount = 0,
+    this.isIndependent = false,
+    this.accountType = 'COMPANY',
+    this.phone = '',
   });
 
   factory Company.fromJson(Map<String, dynamic> json) {
@@ -49,6 +59,8 @@ class Company {
     final rawAdvisors = json['advisors'] is List
         ? List<Map<String, dynamic>>.from((json['advisors'] as List).map((x) => Map<String, dynamic>.from(x)))
         : <Map<String, dynamic>>[];
+
+    final isInd = json['isIndependent'] == true || json['accountType'] == 'INDEPENDENT';
 
     return Company(
       id: json['id'] ?? '',
@@ -78,6 +90,15 @@ class Company {
       proUntil: (json['proUntil'] ?? '').toString().isEmpty ? null : json['proUntil'].toString(),
       effectiveTier: json['effectiveTier'] ?? json['tier'] ?? 'FREE',
       isDemo: json['isDemo'] == true,
+      maxActiveRaffles: json['maxActiveRaffles'] is int
+          ? json['maxActiveRaffles']
+          : (int.tryParse(json['maxActiveRaffles']?.toString() ?? '0') ?? 0),
+      rafflesCreatedCount: json['rafflesCreatedCount'] is int
+          ? json['rafflesCreatedCount']
+          : (int.tryParse(json['rafflesCreatedCount']?.toString() ?? '0') ?? 0),
+      isIndependent: isInd,
+      accountType: isInd ? 'INDEPENDENT' : 'COMPANY',
+      phone: json['phone']?.toString() ?? '',
     );
   }
 
@@ -92,11 +113,16 @@ class Company {
         'createdAt': createdAt,
         'tier': tier,
         'proUntil': proUntil,
+        'maxActiveRaffles': maxActiveRaffles,
+        'rafflesCreatedCount': rafflesCreatedCount,
         'adminsCount': adminsCount,
         'admins': admins,
         'rafflesCount': rafflesCount,
         'raffles': raffles,
         'advisorsCount': advisorsCount,
         'advisors': advisors,
+        'isIndependent': isIndependent,
+        'accountType': accountType,
+        'phone': phone,
       };
 }

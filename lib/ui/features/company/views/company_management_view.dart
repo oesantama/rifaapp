@@ -72,12 +72,15 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final codeController = TextEditingController();
+    final phoneController = TextEditingController();
     final adminNameController = TextEditingController();
     final adminEmailController = TextEditingController();
     final adminUsernameController = TextEditingController();
     final adminPasswordController = TextEditingController();
+    String accountType = 'COMPANY'; // 'COMPANY' | 'INDEPENDENT'
     String tier = 'FREE';
     String? proUntil;
+    int maxActiveRaffles = 0;
 
     showDialog(
       context: context,
@@ -85,13 +88,19 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
         bool obscurePassword = true;
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final isInd = accountType == 'INDEPENDENT';
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
-                children: const [
-                  Icon(Icons.business_rounded, color: AppTheme.primaryBlue),
-                  SizedBox(width: 10),
-                  Expanded(child: Text('Registrar Nueva Empresa / Grupo')),
+                children: [
+                  Icon(isInd ? Icons.badge_rounded : Icons.business_rounded, color: isInd ? Colors.teal : AppTheme.primaryBlue),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isInd ? 'Registrar Vendedor Independiente' : 'Registrar Nueva Empresa / Grupo',
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
@@ -102,102 +111,271 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                     key: formKey,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        TextFormField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Nombre de la Empresa / Grupo *',
-                            hintText: 'Ej: Rifas San Martín S.A.S.',
-                            prefixIcon: Icon(Icons.apartment),
+                        // Selector de Tipo de Cuenta
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
                           ),
-                          validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: codeController,
-                          decoration: const InputDecoration(
-                            labelText: 'Código Identificador',
-                            hintText: 'Ej: EMP02 (Opcional)',
-                            prefixIcon: Icon(Icons.qr_code),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        PlanFields(
-                          tier: tier,
-                          proUntil: proUntil,
-                          onChanged: (t, until) => setDialogState(() {
-                            tier = t;
-                            proUntil = until;
-                          }),
-                        ),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const Text(
-                          '👤 Credenciales para el Administrador de la Empresa:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: adminNameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Nombre Completo del Admin',
-                            hintText: 'Ej: Carlos Pérez',
-                            prefixIcon: Icon(Icons.person),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: adminEmailController,
-                          validator: (val) => (val ?? '').trim().isEmpty || RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(val!.trim())
-                              ? null
-                              : 'Correo no válido (ej: nombre@correo.com)',
-                          decoration: const InputDecoration(
-                            labelText: 'Correo Electrónico',
-                            hintText: 'admin@empresa.com',
-                            prefixIcon: Icon(Icons.email),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _responsivePair(
-                          TextFormField(
-                            controller: adminUsernameController,
-                            autofillHints: const [AutofillHints.newUsername],
-                            autocorrect: false,
-                            decoration: const InputDecoration(
-                              labelText: 'Usuario Admin *',
-                              hintText: 'ej: admin_sanmartin',
-                              prefixIcon: Icon(Icons.account_circle),
-                            ),
-                            validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
-                          ),
-                          TextFormField(
-                            controller: adminPasswordController,
-                            autofillHints: const [AutofillHints.newPassword],
-                            decoration: InputDecoration(
-                              labelText: 'Contraseña temporal *',
-                              helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
-                              helperMaxLines: 2,
-                              prefixIcon: const Icon(Icons.lock),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                  color: Colors.grey,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: InkWell(
+                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(9)),
+                                  onTap: () => setDialogState(() => accountType = 'COMPANY'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: !isInd ? AppTheme.primaryBlue : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.business_rounded, size: 18, color: !isInd ? Colors.white : Colors.grey[700]),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Empresa / Grupo',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: !isInd ? Colors.white : Colors.grey[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                tooltip: obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
-                                onPressed: () {
-                                  setDialogState(() {
-                                    obscurePassword = !obscurePassword;
-                                  });
-                                },
                               ),
-                            ),
-                            obscureText: obscurePassword,
-                            validator: validateNewPassword,
+                              Expanded(
+                                child: InkWell(
+                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(9)),
+                                  onTap: () => setDialogState(() => accountType = 'INDEPENDENT'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: isInd ? Colors.teal : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.badge_rounded, size: 18, color: isInd ? Colors.white : Colors.grey[700]),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Asesor Independiente',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isInd ? Colors.white : Colors.grey[700],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+
+                        if (isInd) ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.teal.shade200),
+                            ),
+                            child: Row(
+                              children: const [
+                                Icon(Icons.info_outline, color: Colors.teal, size: 20),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Cuenta para vendedor callejero. Podrá cargar talonarios de múltiples sorteos (Don Wilo, William, etc.) y auto-conciliar entregas de dinero.',
+                                    style: TextStyle(fontSize: 12, color: Colors.teal),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextFormField(
+                            controller: nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nombre Completo del Vendedor *',
+                              hintText: 'Ej: Pedro González',
+                              prefixIcon: Icon(Icons.person),
+                            ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: codeController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Número de Cédula *',
+                              hintText: 'Ej: 11223344',
+                              prefixIcon: Icon(Icons.badge),
+                            ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'La cédula es obligatoria' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: phoneController,
+                            keyboardType: TextInputType.phone,
+                            decoration: const InputDecoration(
+                              labelText: 'Teléfono / WhatsApp *',
+                              hintText: 'Ej: 3101234567',
+                              prefixIcon: Icon(Icons.phone),
+                            ),
+                            validator: (val) => val == null || val.trim().length < 7 ? 'Teléfono requerido' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          _responsivePair(
+                            TextFormField(
+                              controller: adminUsernameController,
+                              autofillHints: const [AutofillHints.newUsername],
+                              autocorrect: false,
+                              decoration: const InputDecoration(
+                                labelText: 'Usuario de Ingreso *',
+                                hintText: 'ej: pedro123 o cédula',
+                                prefixIcon: Icon(Icons.account_circle),
+                              ),
+                              validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                            ),
+                            TextFormField(
+                              controller: adminPasswordController,
+                              autofillHints: const [AutofillHints.newPassword],
+                              decoration: InputDecoration(
+                                labelText: 'Contraseña *',
+                                helperText: 'Mínimo 8 caracteres',
+                                prefixIcon: const Icon(Icons.lock),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                    color: Colors.grey,
+                                  ),
+                                  onPressed: () => setDialogState(() => obscurePassword = !obscurePassword),
+                                ),
+                              ),
+                              obscureText: obscurePassword,
+                              validator: validateNewPassword,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: adminEmailController,
+                            decoration: const InputDecoration(
+                              labelText: 'Correo Electrónico (Opcional)',
+                              hintText: 'vendedor@correo.com',
+                              prefixIcon: Icon(Icons.email),
+                            ),
+                          ),
+                        ] else ...[
+                          TextFormField(
+                            controller: nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nombre de la Empresa / Grupo *',
+                              hintText: 'Ej: Rifas San Martín S.A.S.',
+                              prefixIcon: Icon(Icons.apartment),
+                            ),
+                            validator: (val) => val == null || val.trim().isEmpty ? 'El nombre es obligatorio' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: codeController,
+                            decoration: const InputDecoration(
+                              labelText: 'Código Identificador',
+                              hintText: 'Ej: EMP02 (Opcional)',
+                              prefixIcon: Icon(Icons.qr_code),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          PlanFields(
+                            tier: tier,
+                            proUntil: proUntil,
+                            maxActiveRaffles: maxActiveRaffles,
+                            onChanged: (t, until, max) => setDialogState(() {
+                              tier = t;
+                              proUntil = until;
+                              maxActiveRaffles = max;
+                            }),
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const Text(
+                            '👤 Credenciales para el Administrador de la Empresa:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: adminNameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Nombre Completo del Admin',
+                              hintText: 'Ej: Carlos Pérez',
+                              prefixIcon: Icon(Icons.person),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: adminEmailController,
+                            validator: (val) => (val ?? '').trim().isEmpty || RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(val!.trim())
+                                ? null
+                                : 'Correo no válido (ej: nombre@correo.com)',
+                            decoration: const InputDecoration(
+                              labelText: 'Correo Electrónico',
+                              hintText: 'admin@empresa.com',
+                              prefixIcon: Icon(Icons.email),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _responsivePair(
+                            TextFormField(
+                              controller: adminUsernameController,
+                              autofillHints: const [AutofillHints.newUsername],
+                              autocorrect: false,
+                              decoration: const InputDecoration(
+                                labelText: 'Usuario Admin *',
+                                hintText: 'ej: admin_sanmartin',
+                                prefixIcon: Icon(Icons.account_circle),
+                              ),
+                              validator: (val) => val == null || val.trim().isEmpty ? 'Usuario requerido' : null,
+                            ),
+                            TextFormField(
+                              controller: adminPasswordController,
+                              autofillHints: const [AutofillHints.newPassword],
+                              decoration: InputDecoration(
+                                labelText: 'Contraseña temporal *',
+                                helperText: 'Mín. 8, letras y números. Se pedirá cambiarla al ingresar.',
+                                helperMaxLines: 2,
+                                prefixIcon: const Icon(Icons.lock),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                    color: Colors.grey,
+                                  ),
+                                  tooltip: obscurePassword ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      obscurePassword = !obscurePassword;
+                                    });
+                                  },
+                                ),
+                              ),
+                              obscureText: obscurePassword,
+                              validator: validateNewPassword,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -209,17 +387,22 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
+                  style: isInd ? ElevatedButton.styleFrom(backgroundColor: Colors.teal) : null,
                   onPressed: () async {
                     if (formKey.currentState!.validate()) {
                       final data = {
                         'name': nameController.text.trim(),
                         'code': codeController.text.trim(),
-                        'adminName': adminNameController.text.trim(),
+                        'adminName': isInd ? nameController.text.trim() : adminNameController.text.trim(),
                         'adminEmail': adminEmailController.text.trim(),
                         'adminUsername': adminUsernameController.text.trim(),
                         'adminPassword': adminPasswordController.text,
                         'tier': tier,
                         'proUntil': proUntil ?? '',
+                        'maxActiveRaffles': isInd ? 0 : maxActiveRaffles,
+                        'accountType': accountType,
+                        'isIndependent': isInd,
+                        'phone': phoneController.text.trim(),
                       };
                       final Company created;
                       try {
@@ -235,8 +418,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               backgroundColor: AppTheme.secondaryEmerald,
-                              content:
-                                  Text('✓ Empresa "${created.name}" creada exitosamente con usuario Admin "${created.adminUsername}".'),
+                              content: Text(
+                                isInd
+                                    ? '✓ Vendedor Independiente "${created.name}" registrado con usuario "${created.adminUsername}".'
+                                    : '✓ Empresa "${created.name}" creada exitosamente con usuario Admin "${created.adminUsername}".',
+                              ),
                             ),
                           );
                         }
@@ -245,7 +431,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                       _showMissing(formKey);
                     }
                   },
-                  child: const Text('Crear Empresa y Admin'),
+                  child: Text(isInd ? 'Registrar Vendedor Independiente' : 'Crear Empresa y Admin'),
                 ),
               ],
             );
@@ -266,6 +452,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
     String selectedStatus = company.status;
     String tier = company.tier;
     String? proUntil = company.proUntil;
+    int maxActiveRaffles = company.maxActiveRaffles;
 
     showDialog(
       context: context,
@@ -329,9 +516,11 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                           PlanFields(
                             tier: tier,
                             proUntil: proUntil,
-                            onChanged: (t, until) => setDialogState(() {
+                            maxActiveRaffles: maxActiveRaffles,
+                            onChanged: (t, until, max) => setDialogState(() {
                               tier = t;
                               proUntil = until;
+                              maxActiveRaffles = max;
                             }),
                           ),
                           const SizedBox(height: 16),
@@ -419,6 +608,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         'status': selectedStatus,
                         if (!company.isDemo) 'tier': tier,
                         if (!company.isDemo) 'proUntil': proUntil ?? '',
+                        if (!company.isDemo) 'maxActiveRaffles': maxActiveRaffles,
                         'adminName': adminNameController.text.trim(),
                         'adminEmail': adminEmailController.text.trim(),
                         'adminUsername': adminUsernameController.text.trim(),
@@ -878,11 +1068,15 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
               children: [
                 CircleAvatar(
                   radius: 22,
-                  backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                  child: Text(
-                    comp.name.isNotEmpty ? comp.name[0].toUpperCase() : 'E',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 18),
-                  ),
+                  backgroundColor: comp.isIndependent
+                      ? Colors.teal.withValues(alpha: 0.15)
+                      : AppTheme.primaryBlue.withValues(alpha: 0.15),
+                  child: comp.isIndependent
+                      ? const Icon(Icons.person_pin_rounded, color: Colors.teal, size: 24)
+                      : Text(
+                          comp.name.isNotEmpty ? comp.name[0].toUpperCase() : 'E',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue, fontSize: 18),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -899,6 +1093,37 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                         spacing: 6,
                         runSpacing: 4,
                         children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: comp.isIndependent
+                                  ? Colors.teal.withValues(alpha: 0.1)
+                                  : Colors.indigo.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: comp.isIndependent ? Colors.teal.shade300 : Colors.indigo.shade200,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  comp.isIndependent ? Icons.person_rounded : Icons.business_rounded,
+                                  size: 12,
+                                  color: comp.isIndependent ? Colors.teal.shade800 : Colors.indigo.shade800,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  comp.isIndependent ? 'INDEPENDIENTE' : 'EMPRESA',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: comp.isIndependent ? Colors.teal.shade800 : Colors.indigo.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(

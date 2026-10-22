@@ -131,6 +131,9 @@ class AuthViewModel extends ChangeNotifier {
   bool _showAds = true;
   bool get showAds => _showAds;
 
+  bool _isIndependent = false;
+  bool get isIndependent => _isIndependent;
+
   void _applyUser(Map<String, dynamic> user) {
     switch (user['role']) {
       case 'superadmin':
@@ -149,6 +152,7 @@ class AuthViewModel extends ChangeNotifier {
     _companyName = (user['companyName'] ?? '').toString();
     _mustChangePassword = user['mustChangePassword'] == true;
     _isDemo = user['isDemo'] == true;
+    _isIndependent = user['isIndependent'] == true || user['accountType'] == 'INDEPENDENT';
     _tier = (user['tier'] ?? 'FREE').toString();
     _showAds = user['showAds'] == true;
     _activeAdvisor = user['advisor'] is Map ? Advisor.fromJson(Map<String, dynamic>.from(user['advisor'])) : null;

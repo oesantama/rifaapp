@@ -128,6 +128,10 @@ class Raffle {
   final String? fondoBoletaDriveId;
   final String? driveFolderId;
 
+  /// Independent seller book details
+  final String? ownerName;
+  final bool isIndependentBook;
+
   /// Metadata of stored template images by type ('poster', 'ticket'); images are fetched separately.
   final Map<String, dynamic> templates;
   final String createdAt;
@@ -169,6 +173,8 @@ class Raffle {
     this.fondoBoletaUrl,
     this.fondoBoletaDriveId,
     this.driveFolderId,
+    this.ownerName,
+    this.isIndependentBook = false,
     this.templates = const {},
     required this.createdAt,
   });
@@ -220,6 +226,8 @@ class Raffle {
       fondoBoletaUrl: json['fondoBoletaUrl'],
       fondoBoletaDriveId: json['fondoBoletaDriveId'],
       driveFolderId: json['driveFolderId'],
+      ownerName: json['ownerName'] as String?,
+      isIndependentBook: json['isIndependentBook'] == true,
       templates: json['templates'] is Map ? Map<String, dynamic>.from(json['templates']) : const {},
       createdAt: json['createdAt'] ?? '',
     );
@@ -258,6 +266,8 @@ class Raffle {
         'fondoBoletaUrl': fondoBoletaUrl,
         'fondoBoletaDriveId': fondoBoletaDriveId,
         'driveFolderId': driveFolderId,
+        'ownerName': ownerName,
+        'isIndependentBook': isIndependentBook,
         'templates': templates,
         'createdAt': createdAt,
       };
