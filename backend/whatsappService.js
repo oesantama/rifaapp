@@ -505,7 +505,6 @@ _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha s
       return { handled: true };
     }
   }
-  }
 
   // 3. CONSULTA DE MEDIOS DE PAGO / CUENTAS (Priorizando cuentas de la rifa)
   if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
