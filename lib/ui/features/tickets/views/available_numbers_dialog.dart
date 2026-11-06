@@ -15,6 +15,7 @@ import 'package:rifaapp/ui/core/utils/file_saver.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/shared/widgets/searchable_picker.dart';
 
 /// Modal dialog to preview and download available raffle numbers
 /// as a high-definition image (PNG) or structured Excel (.xlsx) file,
@@ -341,22 +342,32 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
                       ),
                       if (filterBySpecificAdvisor && advisors.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        DropdownButtonFormField<Advisor>(
-                          initialValue: targetAdvisor ?? advisors.first,
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          items: advisors.map((adv) {
-                            return DropdownMenuItem(
-                              value: adv,
-                              child: Text(adv.name, style: const TextStyle(fontSize: 13)),
+                        InkWell(
+                          onTap: () async {
+                            final chosen = await showSearchablePicker<Advisor>(
+                              context: context,
+                              title: 'Seleccionar Asesor',
+                              searchHint: 'Buscar por nombre o cédula...',
+                              items: advisors,
+                              labelBuilder: (a) => '${a.name} (${a.code})',
+                              selectedValue: targetAdvisor,
                             );
-                          }).toList(),
-                          onChanged: (adv) {
-                            if (adv != null) setModalState(() => targetAdvisor = adv);
+                            if (chosen != null) {
+                              setModalState(() => targetAdvisor = chosen);
+                            }
                           },
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              suffixIcon: const Icon(Icons.arrow_drop_down),
+                            ),
+                            child: Text(
+                              targetAdvisor?.name ?? 'Seleccionar Asesor',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ),
                         ),
                       ],
                       const SizedBox(height: 16),

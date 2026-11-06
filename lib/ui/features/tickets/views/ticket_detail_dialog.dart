@@ -20,7 +20,8 @@ import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'ticket_print_dialog.dart';
 import 'transfer_widgets.dart';
-import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte;
+import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte, askReason;
+import 'package:rifaapp/ui/features/admin_cash/view_models/cash_view_model.dart';
 
 class TicketDetailDialog extends StatefulWidget {
   final Ticket ticket;
@@ -479,6 +480,66 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     return Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color.shade800));
   }
 
+  Future<void> _validateTransfer(Abono abono) async {
+    final authVM = context.read<AuthViewModel>();
+    if (!authVM.isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Solo los administradores pueden validar transferencias bancarias.')),
+      );
+      return;
+    }
+    final err = await context.read<CashViewModel>().verifyTransfer(
+          widget.ticket.id,
+          abono.id,
+          'validar',
+          raffleId: widget.ticket.raffleId,
+        );
+    if (err == null && mounted) {
+      await context.read<TicketViewModel>().loadTickets(raffleId: widget.ticket.raffleId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald,
+          content: Text('✓ Transferencia validada en caja y notificada al cliente por WhatsApp.'),
+        ),
+      );
+      Navigator.of(context).pop();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error: $err')),
+      );
+    }
+  }
+
+  Future<void> _rejectTransfer(Abono abono) async {
+    final reason = await askReason(
+      context,
+      'Rechazar transferencia bancaria',
+      hint: 'Ej: no llegó a la cuenta o comprobante ilegible',
+    );
+    if (reason == null || !mounted) return;
+    final err = await context.read<CashViewModel>().verifyTransfer(
+          widget.ticket.id,
+          abono.id,
+          'rechazar',
+          note: reason,
+          raffleId: widget.ticket.raffleId,
+        );
+    if (err == null && mounted) {
+      await context.read<TicketViewModel>().loadTickets(raffleId: widget.ticket.raffleId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppTheme.dangerRose,
+          content: Text('Transferencia rechazada y notificada por WhatsApp.'),
+        ),
+      );
+      Navigator.of(context).pop();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error: $err')),
+      );
+    }
+  }
+
   /// Voids one payment (e.g. saved twice) after asking for the reason; it stays in the history.
   Future<void> _confirmVoidAbono(Abono abono, NumberFormat currency) async {
     final reasonCtrl = TextEditingController(text: 'Abono registrado dos veces por error');
@@ -848,6 +909,93 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                 ],
               ),
               const Divider(height: 24),
+
+              for (final pt in widget.ticket.abonos.where((a) => a.isTransfer && a.cashState == 'POR_VALIDAR'))
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.amber.shade800, width: 1.5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'TRANSFERENCIA POR VALIDAR EN CAJA',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.amber.shade900),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('• Valor Transferido: ${currency.format(pt.amount)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      if (pt.amount > (widget.ticket.balancePending > 0 ? widget.ticket.balancePending : 0))
+                        Text(
+                          '  (Excedente a favor: ${currency.format(pt.amount - (widget.ticket.balancePending > 0 ? widget.ticket.balancePending : 0))})',
+                          style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                        ),
+                      if ((pt.approvalNumber ?? '').isNotEmpty)
+                        Text('• Comprobante No.: ${pt.approvalNumber}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      if ((pt.originBank ?? '').isNotEmpty)
+                        Text('• Medio / Banco de Origen: ${pt.originBank}', style: const TextStyle(fontSize: 13)),
+                      if (pt.soporteWebViewUrl != null || pt.soporteUrl != null) ...[
+                        const SizedBox(height: 6),
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.receipt_long, size: 16),
+                          label: const Text('Ver Soporte / Comprobante'),
+                          onPressed: () => showSoporte(
+                            context,
+                            driveId: pt.soporteDriveId,
+                            url: pt.soporteUrl,
+                            webViewUrl: pt.soporteWebViewUrl,
+                            title: 'Comprobante #${pt.approvalNumber ?? ""}',
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      if (authVM.isAdmin)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.secondaryEmerald,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                icon: const Icon(Icons.check_circle_outline, size: 18),
+                                label: const Text('VALIDAR Y CONFIRMAR EN BANCO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                onPressed: () => _validateTransfer(pt),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.red.shade700,
+                                side: BorderSide(color: Colors.red.shade300),
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                              ),
+                              icon: const Icon(Icons.cancel_outlined, size: 18),
+                              label: const Text('RECHAZAR', style: TextStyle(fontSize: 12)),
+                              onPressed: () => _rejectTransfer(pt),
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          '⏳ Pendiente de validación por el administrador en extracto bancario.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                        ),
+                    ],
+                  ),
+                ),
               const Text('Números de Oportunidad (Boleta):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               Wrap(

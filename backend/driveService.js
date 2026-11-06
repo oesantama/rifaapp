@@ -118,10 +118,11 @@ async function getRaffleFolders(companyName, companyId, raffleTitle, raffleId, e
     raffleFolderId = await findOrCreateSubfolder(raffleFolderName, companyFolderId);
   }
 
-  const [aficheFolderId, fondoBoletaFolderId, soportesFolderId] = await Promise.all([
+  const [aficheFolderId, fondoBoletaFolderId, soportesFolderId, galeriaFolderId] = await Promise.all([
     findOrCreateSubfolder('Afiche_2D', raffleFolderId),
     findOrCreateSubfolder('Fondo_Boleta', raffleFolderId),
     findOrCreateSubfolder('Soportes_Abonos', raffleFolderId),
+    findOrCreateSubfolder('Galeria_Premios', raffleFolderId),
   ]);
 
   return {
@@ -130,6 +131,7 @@ async function getRaffleFolders(companyName, companyId, raffleTitle, raffleId, e
     aficheFolderId,
     fondoBoletaFolderId,
     soportesFolderId,
+    galeriaFolderId,
   };
 }
 

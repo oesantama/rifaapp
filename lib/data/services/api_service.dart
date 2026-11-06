@@ -1575,6 +1575,23 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Subir foto o video del premio a Google Drive (Galería)
+  Future<Map<String, dynamic>> uploadPrizeMedia(String raffleId, String mediaBase64, String filename, String mimeType) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/raffles/$raffleId/prize-media'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'mediaBase64': mediaBase64,
+        'filename': filename,
+        'mimeType': mimeType,
+      }),
+    ).timeout(const Duration(seconds: 120));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw ApiException.fromResponse(response);
+  }
+
   // ---------------------------------------------------------------------------
   // VENDEDORES INDEPENDIENTES: Entregas y Conciliación
   // ---------------------------------------------------------------------------

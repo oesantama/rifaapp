@@ -437,6 +437,25 @@ class _TicketGridViewState extends State<TicketGridView> {
                   Row(
                     children: [
                       StatusBadge(status: ticket.status, isSmall: true),
+                      if (ticket.abonos.any((a) => a.isTransfer && a.cashState == 'POR_VALIDAR')) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.amber.shade800),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 12, color: Colors.amber.shade900),
+                              const SizedBox(width: 2),
+                              Text('Validar', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (ticket.saleChannel.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Flexible(child: _buildChannelChip(ticket.saleChannel)),

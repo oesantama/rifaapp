@@ -7,6 +7,7 @@ import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'package:rifaapp/ui/features/banks/view_models/bank_view_model.dart';
+import 'package:rifaapp/ui/shared/widgets/searchable_picker.dart';
 
 /// Colombia has no daylight saving time: always UTC-5. Wall-clock times are handled as
 /// DateTime values whose fields are the Colombian date and time.
@@ -313,6 +314,24 @@ class _BankFieldState extends State<BankField> {
     });
   }
 
+  Future<void> _pickBank(List<String> names, String current) async {
+    final selected = await showSearchablePicker<String>(
+      context: context,
+      title: 'Seleccionar Banco o Billetera',
+      searchHint: 'Buscar banco o billetera (ej: Bogotá, Nequi, Davivienda)...',
+      items: names,
+      labelBuilder: (name) => name,
+      selectedValue: current.isEmpty ? null : current,
+      allowCustom: true,
+      customBuilder: (val) => val,
+    );
+    if (selected != null) {
+      setState(() {
+        widget.controller.text = selected;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<BankViewModel>();
@@ -320,21 +339,26 @@ class _BankFieldState extends State<BankField> {
     final current = widget.controller.text.trim();
     if (current.isNotEmpty && !names.contains(current)) names.insert(0, current);
 
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      value: current.isEmpty ? null : current,
-      decoration: InputDecoration(
-        labelText: widget.label,
-        prefixIcon: const Icon(Icons.account_balance_outlined),
-        border: const OutlineInputBorder(),
-        helperText: vm.error != null
-            ? 'No se pudo cargar la lista de bancos'
-            : (names.isEmpty && !vm.isLoading ? 'No hay bancos activos: el SuperAdmin debe agregarlos' : null),
-        helperMaxLines: 2,
+    return InkWell(
+      onTap: () => _pickBank(names, current),
+      borderRadius: BorderRadius.circular(10),
+      child: IgnorePointer(
+        child: TextFormField(
+          key: ValueKey('bank-${widget.controller.text}'),
+          controller: widget.controller,
+          decoration: InputDecoration(
+            labelText: widget.label,
+            prefixIcon: const Icon(Icons.account_balance_outlined),
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+            border: const OutlineInputBorder(),
+            helperText: vm.error != null
+                ? 'No se pudo cargar la lista de bancos'
+                : (names.isEmpty && !vm.isLoading ? 'No hay bancos activos: el SuperAdmin debe agregarlos' : 'Toca para buscar y seleccionar banco'),
+            helperMaxLines: 2,
+          ),
+          validator: widget.validator,
+        ),
       ),
-      items: [for (final name in names) DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis))],
-      onChanged: (v) => widget.controller.text = v ?? '',
-      validator: widget.validator,
     );
   }
 }

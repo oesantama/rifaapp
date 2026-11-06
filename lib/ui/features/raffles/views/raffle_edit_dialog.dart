@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/features/raffles/views/winning_rule_fields.dart';
 import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
@@ -53,6 +56,62 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
   List<Map<String, dynamic>>? _importedRecords;
   String? _importedFileName;
+  bool _uploadingMedia = false;
+  bool _advisorsInitialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_advisorsInitialized) {
+      _advisorsInitialized = true;
+      if (_selectedAdvisorIds.isEmpty) {
+        final advisors = context.read<AdvisorViewModel>().advisors;
+        if (advisors.isNotEmpty) {
+          _selectedAdvisorIds = advisors.map((a) => a.id).toList();
+        }
+      }
+    }
+  }
+
+  Future<void> _uploadMediaFromDevice() async {
+    try {
+      final bytes = await pickFileBytes(allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'mp4', 'mov', 'webm']);
+      if (bytes == null || bytes.isEmpty) return;
+
+      setState(() => _uploadingMedia = true);
+
+      final base64Str = base64Encode(bytes);
+      final filename = 'premio_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final uploadRes = await ApiService().uploadPrizeMedia(
+        widget.raffle.id,
+        base64Str,
+        filename,
+        'image/jpeg',
+      );
+
+      final url = uploadRes['webViewUrl'] ?? uploadRes['file']?['webViewUrl'];
+      if (url != null && url.isNotEmpty) {
+        final current = _prizeImagesController.text.trim();
+        _prizeImagesController.text = current.isEmpty ? url : '$current\n$url';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: AppTheme.secondaryEmerald,
+              content: Text('✓ Archivo subido exitosamente a Google Drive y agregado a la galería.'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error al subir: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingMedia = false);
+    }
+  }
 
   @override
   void initState() {
@@ -529,6 +588,17 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     prefixIcon: Icon(Icons.photo_library_outlined),
                   ),
                 ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: _uploadingMedia
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.cloud_upload_outlined, size: 18),
+                    label: Text(_uploadingMedia ? 'Subiendo a Google Drive...' : 'Subir Foto / Video desde Dispositivo (Drive)'),
+                    onPressed: _uploadingMedia ? null : _uploadMediaFromDevice,
+                  ),
+                ),
                 const SizedBox(height: 12),
 
                 // Lottery of the main draw: shown in WhatsApp messages, terms and the printed ticket
@@ -662,14 +732,25 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   children: [
                     const Icon(Icons.people, color: AppTheme.primaryBlue, size: 20),
                     const SizedBox(width: 8),
-                    Expanded(
-                        child: const Text('Asesores Autorizados para este Sorteo:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    const Expanded(
+                      child: Text('Asesores Autorizados para este Sorteo:',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.select_all, size: 16),
+                      label: const Text('Todos', style: TextStyle(fontSize: 12)),
+                      onPressed: () => setState(() => _selectedAdvisorIds = advisorVM.advisors.map((a) => a.id).toList()),
+                    ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.deselect, size: 16),
+                      label: const Text('Ninguno', style: TextStyle(fontSize: 12)),
+                      onPressed: () => setState(() => _selectedAdvisorIds.clear()),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Si no seleccionas ninguno, todos los asesores tendrán acceso. Si seleccionas asesores específicos, solo ellos podrán vender boletas de este sorteo.',
+                  'Los asesores autorizados pueden ver y vender números disponibles. Si desmarcas a un asesor, no podrá ver disponibilidad de números libres (únicamente verá las boletas que ya haya vendido).',
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),

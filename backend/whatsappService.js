@@ -299,6 +299,66 @@ function extractBuyerProfile(text) {
 }
 
 /**
+ * Extrae detalles de transferencia: valor, comprobante y banco
+ */
+function extractTransferInfo(text) {
+  if (!text) return {};
+  const clean = String(text).trim();
+  const info = {};
+
+  // 1. Monto: $400.000, 400.000, $400000, 400000 COP
+  const amountMatch = clean.match(/(?:\$|valor|monto|total|consign[eé]|pagu[eé]|transfer[ií]|abono)?\s*([1-9]\d{1,2}(?:\.\d{3})+|[1-9]\d{4,8})\b/i);
+  if (amountMatch) {
+    const rawVal = parseInt(amountMatch[1].replace(/\./g, ''), 10);
+    if (rawVal >= 5000) {
+      info.amount = rawVal;
+    }
+  }
+
+  // 2. Comprobante / Aprobación: Comprobante No. 1831555615, Aprobación 1831555615
+  const voucherMatch = clean.match(/(?:comprobante|aprobaci[oó]n|transacci[oó]n|ref|n[uú]mero|no\.?)\s*[:#]?\s*([0-9]{6,14})/i);
+  if (voucherMatch) {
+    info.approvalNumber = voucherMatch[1];
+  } else {
+    const standaloneDigits = clean.match(/\b([1-9][0-9]{7,11})\b/);
+    if (standaloneDigits && !standaloneDigits[1].startsWith('3')) {
+      info.approvalNumber = standaloneDigits[1];
+    }
+  }
+
+  // 3. Banco origen / medio
+  if (/nequi/i.test(clean)) info.bank = 'Nequi';
+  else if (/bancolombia/i.test(clean)) info.bank = 'Bancolombia';
+  else if (/daviplata/i.test(clean)) info.bank = 'Daviplata';
+  else if (/davivienda/i.test(clean)) info.bank = 'Davivienda';
+  else if (/agrario/i.test(clean)) info.bank = 'Banco Agrario';
+  else if (/bogot[aá]/i.test(clean)) info.bank = 'Banco de Bogotá';
+  else if (/occidente/i.test(clean)) info.bank = 'Banco de Occidente';
+  else if (/bbva/i.test(clean)) info.bank = 'BBVA';
+  else if (/popular/i.test(clean)) info.bank = 'Banco Popular';
+  else if (/ahorros/i.test(clean)) info.bank = 'Cuenta de Ahorros';
+
+  return info;
+}
+
+/**
+ * Valida si un comprobante ya fue usado en otra boleta (Antifraude)
+ */
+function checkDuplicateApprovalNumber(approvalNumber, currentTicketId, db) {
+  if (!approvalNumber) return null;
+  const cleanApp = String(approvalNumber).trim();
+  for (const t of db.tickets || []) {
+    if (t.id === currentTicketId) continue;
+    for (const a of t.abonos || []) {
+      if (a.approvalNumber && String(a.approvalNumber).trim() === cleanApp) {
+        return { ticketNumber: t.ticketNumber, buyerName: t.buyerName, numbers: t.numbers, date: a.date };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde de forma inteligente
  */
 async function handleWebhookEvent(body, db, saveDBCallback) {
@@ -454,12 +514,71 @@ _(Escribe el número de la opción o tu consulta)_`;
       targetTicket = (db.tickets || []).find(t => t.buyerPhone === senderPhone && t.raffleId === mainRaffle.id);
       if (targetTicket) numberIdentified = targetTicket.numbers[0];
     }
+    // Si aún no hay boleta asignada, apartar automáticamente la primera disponible
+    if (!targetTicket) {
+      const freeTicket = (db.tickets || []).find(t => t.raffleId === mainRaffle.id && t.status === 'DISPONIBLE');
+      if (freeTicket) {
+        targetTicket = freeTicket;
+        numberIdentified = freeTicket.numbers[0];
+        targetTicket.status = 'RESERVADA';
+        targetTicket.buyerPhone = senderPhone;
+        targetTicket.saleChannel = 'WhatsApp';
+        targetTicket.assignedDate = new Date().toISOString();
+      }
+    }
+
+    // Extraer datos financieros del comprobante (monto, número de comprobante, banco)
+    const transferInfo = extractTransferInfo(userText);
+    const detectedAmount = transferInfo.amount || session?.pendingAmount || ticketPrice;
+    const detectedApproval = transferInfo.approvalNumber || session?.pendingApproval || '';
+    const detectedBank = transferInfo.bank || session?.pendingBank || 'Transferencia Bancaria';
+
+    // Anti-fraude: Validar si este comprobante ya fue usado
+    const duplicateVoucher = detectedApproval ? checkDuplicateApprovalNumber(detectedApproval, targetTicket?.id, db) : null;
+
+    if (targetTicket) {
+      targetTicket.abonos = targetTicket.abonos || [];
+      let existingAbono = targetTicket.abonos.find(a => a.isTransfer || a.metodoPago === 'transferencia');
+      if (!existingAbono) {
+        existingAbono = {
+          id: `abn-${Date.now()}`,
+          amount: detectedAmount,
+          metodoPago: 'transferencia',
+          date: new Date().toISOString(),
+          sellerId: targetTicket.advisorId || (advisor ? advisor.id : ''),
+          sellerName: targetTicket.advisorName || (advisor ? advisor.name : 'Venta WhatsApp'),
+          note: `Transferencia reportada por WhatsApp${detectedApproval ? ` (Comprobante: #${detectedApproval})` : ''}`,
+          approvalNumber: detectedApproval,
+          originBank: detectedBank,
+          transferDate: new Date().toISOString(),
+          soporteWebViewUrl: null,
+          duplicateApprovalConfirmed: !!duplicateVoucher
+          // Sin objeto 'verification' para que cashState sea POR_VALIDAR
+        };
+        targetTicket.abonos.push(existingAbono);
+      } else {
+        if (transferInfo.amount) existingAbono.amount = transferInfo.amount;
+        if (transferInfo.approvalNumber) existingAbono.approvalNumber = transferInfo.approvalNumber;
+        if (transferInfo.bank) existingAbono.originBank = transferInfo.bank;
+      }
+
+      targetTicket.pendingTransferValidation = true;
+      targetTicket.totalPaid = (targetTicket.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
+      if (targetTicket.status === 'DISPONIBLE') {
+        targetTicket.status = 'RESERVADA';
+      }
+
+      if (typeof saveDBCallback === 'function') {
+        saveDBCallback(mainRaffle.id);
+      }
+    }
 
     const knownName = targetTicket?.buyerName || session?.buyerName || '';
     const knownDoc = targetTicket?.buyerDocument || session?.buyerDocument || '';
     const knownEmail = targetTicket?.buyerEmail || session?.buyerEmail || '';
     const knownCity = targetTicket?.buyerCity || session?.buyerCity || '';
     const knownCountry = targetTicket?.buyerCountry || session?.buyerCountry || 'Colombia';
+    const hasAdvisor = targetTicket?.advisorName && targetTicket.advisorName !== 'Venta WhatsApp';
 
     const missing = [];
     if (!knownName) missing.push('Nombre y Apellidos completos (o Razón Social)');
@@ -467,19 +586,45 @@ _(Escribe el número de la opción o tu consulta)_`;
     if (!knownEmail) missing.push('Correo electrónico (para envío de soporte de compra)');
     if (!knownCity) missing.push('Ciudad y País (ej: San Martín, Meta)');
 
-    let receiptReply = `📸 *¡Comprobante de transferencia recibido con éxito!* ✅\nHemos recibido la imagen de tu pago para *${companyName}*.\n\n`;
+    let receiptReply = `📸 *¡Comprobante de transferencia recibido con éxito!* ✅\nHemos registrado tu comprobante en el sistema para *${companyName}*.\n\n`;
 
     if (numberIdentified && targetTicket) {
-      receiptReply += `🎟️ *Boleta identificada de la conversación:* *${numberIdentified}* (Boleta #${targetTicket.ticketNumber})\n`;
+      receiptReply += `🎟️ *Boleta identificada:* *${numberIdentified}* (Boleta #${targetTicket.ticketNumber})\n`;
       receiptReply += `_(¿Deseas cambiar este número? Solo escribe el nuevo número que prefieres antes de confirmar).\n\n`;
     }
 
+    // Reporte de monto y validación de excedente si paga más de una boleta
+    receiptReply += `💵 *Valor reportado:* $${detectedAmount.toLocaleString('es-CO')} COP\n`;
+    if (detectedApproval) receiptReply += `🧾 *Comprobante No.:* ${detectedApproval}\n`;
+    if (detectedBank) receiptReply += `🏛️ *Medio / Banco:* ${detectedBank}\n`;
+
+    if (detectedAmount > ticketPrice) {
+      const surplus = detectedAmount - ticketPrice;
+      const extraTickets = Math.floor(surplus / ticketPrice);
+      const leftover = surplus % ticketPrice;
+      receiptReply += `\n💡 *¡Tienes un excedente a tu favor de $${surplus.toLocaleString('es-CO')} COP!*\n`;
+      receiptReply += `El valor de la boleta #${targetTicket.ticketNumber} es de $${ticketPrice.toLocaleString('es-CO')} COP. `;
+      if (extraTickets > 0) {
+        receiptReply += `¡Tu pago cubre *${extraTickets} boleta(s) adicional(es) completa(s)*${leftover > 0 ? ` y un abono de $${leftover.toLocaleString('es-CO')}` : ''}!\n`;
+        receiptReply += `👉 *¿Deseas elegir tus números adicionales ahora?* Responde con los números que deseas apartar o escribe *DISPONIBLES*.\n`;
+      }
+    }
+
+    if (duplicateVoucher) {
+      receiptReply += `\n🚨 *ALERTA DE SEGURIDAD:* Este número de comprobante (#${detectedApproval}) ya figura registrado en otra boleta. Nuestro equipo administrativo cotejará el extracto bancario antes de la activación.\n`;
+    }
+
+    // Preguntar por asesor si aún no está asignado
+    if (!hasAdvisor) {
+      receiptReply += `\n🤝 *¿Te recomendó algún asesor de nuestro equipo?*\nIndícanos su nombre o código (o escribe *Ninguno* si compraste directamente).\n`;
+    }
+
     if (missing.length === 0) {
-      receiptReply += `👤 *Titular:* ${knownName}\n`;
+      receiptReply += `\n👤 *Titular:* ${knownName}\n`;
       receiptReply += `🪪 *Cédula/NIT:* ${knownDoc}\n`;
       receiptReply += `📧 *Correo:* ${knownEmail}\n`;
       receiptReply += `📍 *Ciudad:* ${knownCity}, ${knownCountry}\n\n`;
-      receiptReply += `✨ *Todos tus datos ya están completos y vinculados.* Nuestro equipo administrativo validará la transferencia en banco y activará tu boleta oficial.\n\n`;
+      receiptReply += `✨ *Todos tus datos ya están completos y vinculados.* Nuestro equipo administrativo validará la transferencia en cuenta bancaria y activará tu boleta oficial.\n\n`;
       receiptReply += `🌐 *Puedes consultar tu boleta y Soporte Digital de Compra aquí:*\n`;
       receiptReply += `https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}\n\n`;
       receiptReply += `¡Muchas gracias y mucha suerte en el sorteo! 🍀`;
@@ -491,17 +636,14 @@ _(Escribe el número de la opción o tu consulta)_`;
       if (knownCity) registeredLines.push(`• *Ciudad:* ${knownCity}`);
 
       if (registeredLines.length > 0) {
-        receiptReply += `✅ *Datos ya registrados:*\n${registeredLines.join('\n')}\n\n`;
+        receiptReply += `\n✅ *Datos ya registrados:*\n${registeredLines.join('\n')}\n\n`;
       }
 
-      receiptReply += `📋 *Para completar tu Soporte Digital de Compra y registro legal, indícanos únicamente:*\n`;
+      receiptReply += `\n📋 *Para completar tu Soporte Digital de Compra oficial, indícanos únicamente:*\n`;
       missing.forEach((m, idx) => {
         receiptReply += `${idx + 1}️⃣ *${m}*\n`;
       });
-      if (!numberIdentified) {
-        receiptReply += `5️⃣ *Número de boleta o cifras que compraste*\n`;
-      }
-      receiptReply += `\n✍️ *Por favor indícanos ${missing.length === 1 ? 'este dato' : 'estos datos faltantes'} en un solo mensaje.*`;
+      receiptReply += `\n✍️ *Por favor indícanos ${missing.length === 1 ? 'este dato' : 'estos datos faltantes'} en tu siguiente mensaje.*`;
     }
 
     updateSession(senderPhone, {
@@ -509,15 +651,82 @@ _(Escribe el número de la opción o tu consulta)_`;
       lastTicketId: targetTicket ? targetTicket.id : (session?.lastTicketId || null),
       lastOpportunity: numberIdentified,
       waitingData: missing.length > 0,
-      lastImageAt: Date.now()
+      lastImageAt: Date.now(),
+      pendingAmount: detectedAmount,
+      pendingApproval: detectedApproval,
+      pendingBank: detectedBank
     }, db, saveDBCallback, mainRaffle.id);
 
     await sendTextMessage(instance, senderPhone, receiptReply);
     return { handled: true };
   }
 
-  // 2. PARSEO DE DATOS DEL COMPRADOR (Si responde con sus datos: Nombre, Cédula, Correo, Ciudad, País)
+  // 1.5. RESPUESTA SOBRE ASESOR RECOMENDADO / REFERIDO
   const session = getSession(senderPhone, db);
+  const targetTkt = session?.lastTicketId ? (db.tickets || []).find(t => t.id === session.lastTicketId) : (db.tickets || []).find(t => t.buyerPhone === senderPhone);
+  if (targetTkt && (!targetTkt.advisorName || targetTkt.advisorName === 'Venta WhatsApp')) {
+    if (cleanLower === 'ninguno' || cleanLower === 'ninguna' || cleanLower === 'nadie' || cleanLower === 'directo' || cleanLower === 'no') {
+      targetTkt.advisorId = null;
+      targetTkt.advisorName = 'Venta Directa WhatsApp';
+      if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, `🤝 ¡Perfecto! Tu boleta #${targetTkt.ticketNumber} quedó registrada como *compra directa*.`);
+      return { handled: true };
+    }
+
+    // Buscar si escribió el nombre o código de un asesor
+    const matchedAdvisor = (db.advisors || []).find(a => {
+      const advNameClean = (a.name || '').toLowerCase();
+      const advCodeClean = (a.code || '').toLowerCase();
+      return cleanLower.includes(advNameClean) || (advCodeClean && cleanLower.includes(advCodeClean)) ||
+             (cleanLower.startsWith('asesor') && cleanLower.includes(advNameClean.split(' ')[0]));
+    });
+
+    if (matchedAdvisor) {
+      targetTkt.advisorId = matchedAdvisor.id;
+      targetTkt.advisorName = matchedAdvisor.name;
+      if (targetTkt.abonos) {
+        targetTkt.abonos.forEach(ab => {
+          ab.sellerId = matchedAdvisor.id;
+          ab.sellerName = matchedAdvisor.name;
+        });
+      }
+      if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, `🤝 ¡Excelente! Tu boleta #${targetTkt.ticketNumber} ha quedado formalmente vinculada a nuestro asesor *${matchedAdvisor.name}*.`);
+      return { handled: true };
+    }
+  }
+
+  // 1.6. DETECCIÓN DE DATOS DE TRANSFERENCIA EN TEXTO (Si envía comprobante, valor o banco por mensaje)
+  const textTransfer = extractTransferInfo(userText);
+  if ((textTransfer.amount || textTransfer.approvalNumber) && targetTkt) {
+    targetTkt.abonos = targetTkt.abonos || [];
+    let existingAbono = targetTkt.abonos.find(a => a.isTransfer || a.metodoPago === 'transferencia');
+    if (!existingAbono) {
+      existingAbono = {
+        id: `abn-${Date.now()}`,
+        amount: textTransfer.amount || ticketPrice,
+        metodoPago: 'transferencia',
+        date: new Date().toISOString(),
+        sellerId: targetTkt.advisorId || '',
+        sellerName: targetTkt.advisorName || 'Venta WhatsApp',
+        note: `Transferencia reportada por WhatsApp${textTransfer.approvalNumber ? ` (Comprobante: #${textTransfer.approvalNumber})` : ''}`,
+        approvalNumber: textTransfer.approvalNumber || '',
+        originBank: textTransfer.bank || 'Transferencia Bancaria',
+        transferDate: new Date().toISOString(),
+        soporteWebViewUrl: null
+      };
+      targetTkt.abonos.push(existingAbono);
+    } else {
+      if (textTransfer.amount) existingAbono.amount = textTransfer.amount;
+      if (textTransfer.approvalNumber) existingAbono.approvalNumber = textTransfer.approvalNumber;
+      if (textTransfer.bank) existingAbono.originBank = textTransfer.bank;
+    }
+    targetTkt.pendingTransferValidation = true;
+    targetTkt.totalPaid = (targetTkt.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
+    if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+  }
+
+  // 2. PARSEO DE DATOS DEL COMPRADOR (Si responde con sus datos: Nombre, Cédula, Correo, Ciudad, País)
   const profile = extractBuyerProfile(userText);
   const hasProfileData = (profile.name && (profile.document || profile.email)) || 
                          (profile.document && profile.email) || 

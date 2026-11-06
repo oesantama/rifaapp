@@ -797,9 +797,15 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
         </div>
       </div>
 
-      <!-- Carrusel de fotos del premio -->
+      <!-- Carrusel de fotos y videos del premio -->
       <div class="carousel-container">
-        ${images.map((img, i) => `<img src="${escapeHtml(img)}" class="carousel-slide ${i === 0 ? 'active' : ''}" alt="Premio">`).join('')}
+        ${images.map((mediaUrl, i) => {
+          const isVid = /\.(mp4|mov|webm)(\?.*)?$/i.test(mediaUrl) || mediaUrl.includes('video');
+          if (isVid) {
+            return `<video src="${escapeHtml(mediaUrl)}" class="carousel-slide ${i === 0 ? 'active' : ''}" controls playsinline preload="metadata"></video>`;
+          }
+          return `<img src="${escapeHtml(mediaUrl)}" class="carousel-slide ${i === 0 ? 'active' : ''}" alt="Premio">`;
+        }).join('')}
         <div class="carousel-counter" id="carouselBadge">1 / ${images.length}</div>
         ${images.length > 1 ? `
           <button class="carousel-nav-btn prev" onclick="prevSlide()">‹</button>
@@ -881,33 +887,73 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
           </details>
         ` : ''}
 
-        <!-- Condiciones del sorteo -->
+        <!-- Condiciones del sorteo y cronograma de abonos mínimos (Estilo Imagen 4) -->
         <div class="section-title" style="margin-top: 16px;">
-          <span>🎯</span>
-          <span>Datos del sorteo y condiciones oficiales</span>
+          <span>📋</span>
+          <span>Condiciones para ganar y abonos mínimos</span>
         </div>
 
         <details open>
-          <summary>🏆 Sorteo y Lotería Oficial</summary>
+          <summary>🏆 Ver condiciones y cronograma de abonos</summary>
           <div class="details-inner">
-            <p>• <b>Lotería Oficial:</b> ${escapeHtml(raffle.mainLotteryName || raffle.lotteryName || 'Lotería Oficial')}</p>
-            <p>• <b>Fecha del Sorteo:</b> ${escapeHtml(drawDate)}</p>
+            <p>• <b>Premio mayor:</b> ${escapeHtml(raffle.description || raffle.title)}</p>
+            <p>• <b>Fecha del sorteo mayor:</b> ${escapeHtml(drawDate)} • <b>Lotería:</b> ${escapeHtml(raffle.mainLotteryName || raffle.lotteryName || 'Lotería Oficial')}.</p>
             <p>• <b>Modalidad:</b> Juega con las ${raffle.winningDigitsPosition === 'PRIMERAS' ? 'primeras' : 'últimas'} ${raffle.digits || 4} cifras del premio mayor.</p>
-            <p>• <b>Premio Mayor:</b> ${escapeHtml(raffle.description || raffle.title)}</p>
-            <p style="margin-top: 6px; font-size: 12px; color: #DC2626;">• <b>Importante:</b> La boleta debe estar cancelada al 100% antes de la hora del sorteo para tener derecho al premio.</p>
+            <p>• <b>Boleta completamente pagada:</b> $${ticketPrice.toLocaleString('es-CO')} COP</p>
+
+            ${raffle.weeklyPrizes && raffle.weeklyPrizes.length > 0 ? `
+              <div style="margin-top: 14px;">
+                <b style="color: #0F172A; font-size: 13.5px;">Cronograma de abonos mínimos para participar:</b>
+                <div style="overflow-x: auto; margin-top: 8px;">
+                  <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                    <thead>
+                      <tr style="background: #F1F5F9; text-align: left; border-bottom: 2px solid #CBD5E1;">
+                        <th style="padding: 8px 6px;">Fecha del sorteo</th>
+                        <th style="padding: 8px 6px;">Total abonado mínimo</th>
+                        <th style="padding: 8px 6px;">Premio</th>
+                        <th style="padding: 8px 6px; text-align: center;">Tu Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${raffle.weeklyPrizes.map(p => {
+                        const reqAbono = p.minAbonoType === 'PORCENTAJE' 
+                          ? (ticketPrice * (p.minAbonoValue || 50) / 100) 
+                          : (p.minAbonoValue || 0);
+                        const qualifies = totalPaid >= reqAbono;
+                        return `
+                          <tr style="border-bottom: 1px solid #E2E8F0;">
+                            <td style="padding: 8px 6px; font-weight: 700;">${escapeHtml(p.drawDate ? (p.drawDate.substring(0, 10)) : 'Programado')}</td>
+                            <td style="padding: 8px 6px; font-weight: 800; color: #0F172A;">$${Number(reqAbono).toLocaleString('es-CO')}</td>
+                            <td style="padding: 8px 6px; color: #475569;">${escapeHtml(p.name || 'Sorteo')} ($${Number(p.amount || 0).toLocaleString('es-CO')})</td>
+                            <td style="padding: 8px 6px; text-align: center;">
+                              ${qualifies 
+                                ? '<span style="background: #ECFDF5; color: #059669; font-weight: 800; padding: 2px 8px; border-radius: 12px; font-size: 11px;">✓ Califica</span>' 
+                                : `<span style="background: #FEF2F2; color: #DC2626; font-weight: 700; padding: 2px 8px; border-radius: 12px; font-size: 11px;">Faltan $${Number(reqAbono - totalPaid).toLocaleString('es-CO')}</span>`}
+                            </td>
+                          </tr>
+                        `;
+                      }).join('')}
+                      <tr style="background: #FFFBEB; font-weight: 800; border-top: 2px solid #FDE68A;">
+                        <td style="padding: 8px 6px;">${escapeHtml(drawDate)} (Gran Sorteo)</td>
+                        <td style="padding: 8px 6px;">$${ticketPrice.toLocaleString('es-CO')} (100%)</td>
+                        <td style="padding: 8px 6px;">Premio Mayor</td>
+                        <td style="padding: 8px 6px; text-align: center;">
+                          ${isPaid 
+                            ? '<span style="background: #ECFDF5; color: #059669; font-weight: 800; padding: 2px 8px; border-radius: 12px; font-size: 11px;">✓ 100% Pagada</span>' 
+                            : `<span style="background: #FFFBEB; color: #D97706; font-weight: 700; padding: 2px 8px; border-radius: 12px; font-size: 11px;">Faltan $${balancePending.toLocaleString('es-CO')}</span>`}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ` : ''}
+
+            <p style="margin-top: 12px; font-size: 12px; color: #64748B; line-height: 1.5;">
+              ${escapeHtml(raffle.customPolicies || company.termsConditions || 'Para participar en cada sorteo semanal o anticipado, la boleta debe contar con el abono mínimo acumulado requerido a la fecha del sorteo. Para el premio mayor, debe estar 100% cancelada.')}
+            </p>
           </div>
         </details>
-
-        ${raffle.weeklyPrizes && raffle.weeklyPrizes.length > 0 ? `
-          <details>
-            <summary>🎁 Premios semanales / anticipados</summary>
-            <div class="details-inner">
-              <ul style="padding-left: 18px;">
-                ${raffle.weeklyPrizes.map(p => `<li><b>${escapeHtml(p.name)}:</b> $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha'})</li>`).join('')}
-              </ul>
-            </div>
-          </details>
-        ` : ''}
 
         <!-- Sello de verificación digital -->
         <div class="verify-box">
@@ -4415,6 +4461,62 @@ app.post('/api/raffles/:id/fondo-boleta', adminOnly, async (req, res) => {
   }
 });
 
+// POST Subir Foto o Video del Premio a Google Drive (Galería)
+app.post('/api/raffles/:id/prize-media', adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mediaBase64, filename = 'premio', mimeType = 'image/jpeg' } = req.body;
+
+    if (!mediaBase64) {
+      return res.status(400).json({ error: 'Debes proporcionar el archivo en Base64 (mediaBase64).' });
+    }
+
+    const raffle = db.raffles.find(r => r.id === id);
+    if (!raffle) {
+      return res.status(404).json({ error: 'Rifa no encontrada' });
+    }
+
+    const company = (db.companies || []).find(c => c.id === raffle.companyId);
+    const companyName = company ? (company.name || company.companyName || 'Empresa') : 'Empresa General';
+    const folders = await driveService.getRaffleFolders(companyName, raffle.companyId, raffle.title, raffle.id, raffle.driveFolderId);
+    raffle.driveFolderId = folders.raffleFolderId;
+
+    const cleanBase64 = mediaBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+
+    const ext = mimeType.includes('video') ? (mimeType.includes('quicktime') ? 'mov' : 'mp4') : (mimeType.includes('png') ? 'png' : 'jpg');
+    const safeFilename = `premio_${raffle.id}_${Date.now()}.${ext}`;
+
+    const uploadRes = await driveService.uploadFileToDrive({
+      buffer,
+      filename: safeFilename,
+      mimeType,
+      parentFolderId: folders.galeriaFolderId || folders.raffleFolderId
+    });
+
+    raffle.prizeImages = raffle.prizeImages || [];
+    if (!raffle.prizeImages.includes(uploadRes.directUrl)) {
+      raffle.prizeImages.push(uploadRes.directUrl);
+    }
+
+    saveDB();
+    notifyRaffleChanged(raffle.id);
+
+    res.json({
+      message: 'Foto o video subido exitosamente a Google Drive.',
+      url: uploadRes.directUrl,
+      webViewUrl: uploadRes.webViewUrl,
+      fileId: uploadRes.fileId,
+      mimeType,
+      prizeImages: raffle.prizeImages,
+      raffle
+    });
+  } catch (error) {
+    console.error('⚠️ Error al subir foto/video a Google Drive:', error);
+    res.status(500).json({ error: `Error al subir archivo a Drive: ${error.message}` });
+  }
+});
+
 // DELETE Eliminar Fondo de Boleta
 app.delete('/api/raffles/:id/fondo-boleta', adminOnly, async (req, res) => {
   try {
@@ -4459,6 +4561,11 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     }
   }
 
+  const companyAdvisors = (db.advisors || []).filter(a => (!a.companyId || a.companyId === targetCompanyId) && a.status === 'ACTIVO').map(a => a.id);
+  const selectedAdvisors = Array.isArray(req.body.assignedAdvisorIds) && req.body.assignedAdvisorIds.length > 0
+    ? req.body.assignedAdvisorIds
+    : companyAdvisors;
+
   const newRaffle = {
     id: `raf-${Date.now()}`,
     companyId: targetCompanyId,
@@ -4472,6 +4579,7 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     opportunitiesPerTicket: opps,
     ticketPrice: parseFloat(ticketPrice) || 50000,
     weeklyPrizes: weeklyPrizes || [],
+    assignedAdvisorIds: selectedAdvisors,
     commissionType: commissionType || 'PORCENTAJE',
     commissionValue: parseFloat(commissionValue) || 10,
     // Which lottery digits decide the winner, and whether "combinado" (any order) also wins
@@ -4717,6 +4825,18 @@ app.get('/api/tickets', (req, res) => {
     if (availableRaffles.length > 0) {
       result = result.filter(t => availableRaffles.some(r => r.id === t.raffleId));
     }
+  }
+
+  // Restricción para asesores: si el administrador le quitó el check en una rifa,
+  // no podrá ver números disponibles (DISPONIBLE), solo lo que ya vendió.
+  if (req.auth && req.auth.role === 'asesor') {
+    const myAdvId = req.auth.record.id;
+    result = result.filter(t => {
+      const r = (db.raffles || []).find(rf => rf.id === t.raffleId);
+      const isAssigned = r && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(myAdvId));
+      if (isAssigned) return true;
+      return t.advisorId === myAdvId || (t.abonos && t.abonos.some(a => a.sellerId === myAdvId));
+    });
   }
 
   if (advisorId) {
@@ -5622,6 +5742,33 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   recalcCashConfirmation(ticket);
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
+
+  // Auto-notificar al comprador por WhatsApp si tiene teléfono
+  if (ticket.buyerPhone) {
+    const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
+    const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
+    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
+    const confirmMsg = 
+`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
+
+Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
+
+🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
+🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
+💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
+🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
+📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
+
+🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
+https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+
+¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+      console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
+    });
+  }
+
   res.json(withVerification(ticket));
 });
 
@@ -5638,12 +5785,84 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => 
   } else if (action === 'validar' || action === 'rechazar') {
     if (action === 'rechazar' && note.length < 5) return res.status(400).json({ error: 'Explique por qué rechaza la transferencia.' });
     abono.verification = { status: action === 'validar' ? 'VALIDADA' : 'RECHAZADA', by: actorName(req), at: new Date().toISOString(), note };
+
+    // Auto-notificación inmediata por WhatsApp al comprador
+    if (ticket.buyerPhone) {
+      const company = (db.companies || []).find(c => c.id === raffle.companyId) || (db.companies || [])[0] || {};
+      const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
+      const approvalTxt = abono.approvalNumber ? `\n🧾 *Comprobante bancario:* #${abono.approvalNumber}` : '';
+      const bankTxt = abono.originBank ? `\n🏛️ *Banco / Medio:* ${abono.originBank}` : '';
+      const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
+      const isFull = totalPaid >= Number(raffle.ticketPrice || 0);
+
+      if (action === 'validar') {
+        const confirmMsg = 
+`✅ *¡PAGO VALIDADO Y CONFIRMADO EN BANCO!* 🎉
+
+Hola *${ticket.buyerName || 'Participante'}*, tu transferencia bancaria ha sido confirmada con éxito por nuestro equipo administrativo.
+
+🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
+🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
+💵 *Valor Validado:* $${Number(abono.amount || 0).toLocaleString('es-CO')} COP${approvalTxt}${bankTxt}
+🏆 *Sorteo:* ${raffle.title || 'Gran Sorteo'}
+📌 *Estado:* ${isFull ? 'PAGADA / CONFIRMADA (Activa para el sorteo)' : `ABONADA ($${totalPaid.toLocaleString('es-CO')} de $${Number(raffle.ticketPrice || 0).toLocaleString('es-CO')})`}
+
+🌐 *Puedes consultar y descargar tu Boleta Oficial con QR y Soporte Digital aquí:*
+https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+
+¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+
+        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+          console.warn('⚠️ No se pudo enviar WhatsApp de confirmación de pago:', err.message);
+        });
+      } else if (action === 'rechazar') {
+        const rejectMsg = 
+`⚠️ *AVISO SOBRE TU TRANSFERENCIA* - ${company.name || 'Rifa Master'}
+
+Hola *${ticket.buyerName || 'Participante'}*, te informamos que tu comprobante de transferencia${abono.approvalNumber ? ` (#${abono.approvalNumber})` : ''} para la boleta *#${ticket.ticketNumber}* (${ticket.numbers.join(' • ')}) no pudo ser validado en nuestra cuenta bancaria.
+
+❌ *Motivo:* ${note}
+
+Por favor verifica la transacción o comunícate con nosotros por este medio para aclararlo y conservar tus números. 📲`;
+
+        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, rejectMsg).catch(err => {
+          console.warn('⚠️ No se pudo enviar WhatsApp de rechazo de transferencia:', err.message);
+        });
+      }
+    }
   } else {
     return res.status(400).json({ error: 'Acción no válida.' });
   }
   recalcCashConfirmation(ticket);
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
+
+  // Auto-notificar al comprador por WhatsApp si tiene teléfono
+  if (ticket.buyerPhone) {
+    const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
+    const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
+    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
+    const confirmMsg = 
+`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
+
+Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
+
+🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
+🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
+💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
+🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
+📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
+
+🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
+https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+
+¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+      console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
+    });
+  }
+
   res.json(withVerification(ticket));
 });
 
@@ -5659,6 +5878,33 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) =>
   recalcCashConfirmation(ticket);
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
+
+  // Auto-notificar al comprador por WhatsApp si tiene teléfono
+  if (ticket.buyerPhone) {
+    const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
+    const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
+    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
+    const confirmMsg = 
+`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
+
+Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
+
+🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
+🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
+💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
+🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
+📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
+
+🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
+https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+
+¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+      console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
+    });
+  }
+
   res.json(withVerification(ticket));
 });
 
@@ -6000,6 +6246,17 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   newAdvisor.assignedTicketRanges = checked.ranges;
 
   db.advisors.push(newAdvisor);
+
+  // Auto-autorizar al nuevo asesor en todas las rifas activas de la empresa
+  (db.raffles || []).forEach(r => {
+    if ((!r.companyId || r.companyId === targetCompanyId) && r.status === 'ACTIVA') {
+      r.assignedAdvisorIds = r.assignedAdvisorIds || [];
+      if (!r.assignedAdvisorIds.includes(newAdvisor.id)) {
+        r.assignedAdvisorIds.push(newAdvisor.id);
+      }
+    }
+  });
+
   saveDB();
   res.status(201).json(newAdvisor);
 });
