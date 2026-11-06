@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const security = require('./security');
 const driveService = require('./driveService');
+const whatsappService = require('./whatsappService');
 let admin;
 try {
   admin = require('firebase-admin');
@@ -1810,7 +1811,8 @@ app.get('/api/drive/status', async (req, res) => {
 // Every other API route requires a valid session
 app.use('/api', (req, res, next) => {
   if (req.path === '/auth/login' || req.path === '/auth/demo-login' || req.path === '/auth/forgot-password' ||
-      req.path === '/auth/reset-password' || req.path === '/health' || req.path.startsWith('/public/')) {
+      req.path === '/auth/reset-password' || req.path === '/health' || req.path.startsWith('/public/') ||
+      req.path === '/whatsapp/webhook') {
     return next();
   }
   const header = req.headers.authorization || '';
@@ -1855,6 +1857,66 @@ app.use('/api', async (req, res, next) => {
 
 app.get('/api/auth/me', (req, res) => {
   res.json({ user: sessionUser(req.auth.role, req.auth.record) });
+});
+
+// -------------------------------------------------------------
+// WHATSAPP BOT ENDPOINTS (SuperAdmin, Empresa, Asesor)
+// -------------------------------------------------------------
+app.get('/api/whatsapp/status', async (req, res) => {
+  try {
+    const instanceName = whatsappService.getInstanceName(req.auth);
+    const status = await whatsappService.getStatus(instanceName);
+    res.json({ success: true, instanceName, ...status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/connect', async (req, res) => {
+  try {
+    const instanceName = whatsappService.getInstanceName(req.auth);
+    const phoneNumber = req.body?.phoneNumber || null;
+    const result = await whatsappService.connectInstance(instanceName, phoneNumber);
+    res.json({ success: true, instanceName, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/disconnect', async (req, res) => {
+  try {
+    const instanceName = whatsappService.getInstanceName(req.auth);
+    const result = await whatsappService.disconnectInstance(instanceName);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/test-message', async (req, res) => {
+  try {
+    const instanceName = whatsappService.getInstanceName(req.auth);
+    const { phoneNumber, message } = req.body;
+    if (!phoneNumber) return res.status(400).json({ error: 'Número de teléfono requerido' });
+    const result = await whatsappService.sendTextMessage(
+      instanceName,
+      phoneNumber,
+      message || '👋 Mensaje de prueba exitoso desde Rifa Master WhatsApp Bot 🚀'
+    );
+    res.json({ success: true, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/webhook', async (req, res) => {
+  try {
+    const result = await whatsappService.handleWebhookEvent(req.body, db);
+    res.json({ success: true, result });
+  } catch (err) {
+    console.error('Error procesando webhook de WhatsApp:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.post('/api/auth/change-password', (req, res) => {

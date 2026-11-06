@@ -540,4 +540,282 @@ class ExcelCsvHelper {
     }
   }
 
+  /// Exports available or all numbers to Excel (.xlsx) with:
+  /// 1. 'Sabana_Matriz': Grid matrix of numbers (e.g. 20 columns like in Image 3) with status colors (Yellow for reserved, White for available, Red for sold).
+  /// 2. 'Listado_Detallado': Table by ticket with actual opportunity numbers (no confusing sequential IDs).
+  /// 3. Guaranteed file name 'numeros_disponibles.xlsx'.
+  static void exportAvailableNumbersToExcel({
+    required List<Ticket> availableTickets,
+    required String raffleTitle,
+    List<Ticket>? allTickets,
+    String? advisorName,
+    double? ticketPrice,
+    String? drawDate,
+    String? lotteryName,
+    int matrixColumns = 20,
+    String contentMode = 'ONLY_AVAILABLE', // 'ONLY_AVAILABLE', 'ALL_STATUS', 'BY_ADVISOR'
+    int? maxNumbersCount,
+    bool includeMatrixSheet = true,
+    bool includeDetailedList = true,
+  }) {
+    final currency = NumberFormat.currency(locale: 'es_CO', symbol: r'$', decimalDigits: 0);
+    final scopeLabel = (advisorName != null && advisorName.trim().isNotEmpty) ? advisorName.trim() : 'General (Toda la Rifa)';
+
+    // Source tickets based on mode
+    List<Ticket> ticketsToProcess;
+    if (contentMode == 'ALL_STATUS' && allTickets != null && allTickets.isNotEmpty) {
+      ticketsToProcess = [...allTickets]..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+    } else {
+      ticketsToProcess = [...availableTickets]..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+    }
+
+    if (maxNumbersCount != null && maxNumbersCount > 0 && ticketsToProcess.length > maxNumbersCount) {
+      ticketsToProcess = ticketsToProcess.take(maxNumbersCount).toList();
+    }
+
+    const String exportFileName = 'numeros_disponibles.xlsx';
+
+    try {
+      var excel = Excel.createExcel();
+      String defaultSheet = excel.getDefaultSheet() ?? 'Sheet1';
+
+      // -------------------------------------------------------------
+      // HOJA 1: SABANA MATRIZ (ESTILO IMAGEN 3)
+      // -------------------------------------------------------------
+      if (includeMatrixSheet) {
+        excel.rename(defaultSheet, 'Sabana_Matriz');
+        Sheet matrixSheet = excel['Sabana_Matriz'];
+
+        // Header
+        matrixSheet.appendRow([TextCellValue('SÁBANA DE NÚMEROS - ${raffleTitle.toUpperCase()}')]);
+        matrixSheet.appendRow([
+          TextCellValue('Alcance: $scopeLabel'),
+          TextCellValue('Modo: ${contentMode == "ALL_STATUS" ? "Todos con Estado" : "Solo Disponibles"}'),
+          TextCellValue('Fecha: ${DateFormat("dd/MM/yyyy HH:mm").format(DateTime.now())}'),
+        ]);
+
+        // Color Legend row
+        matrixSheet.appendRow([
+          TextCellValue('🟢 BLANCO/VERDE = DISPONIBLE'),
+          TextCellValue('🟡 AMARILLO = APARTADO / RESERVADO'),
+          TextCellValue('🔴 ROJO = PAGADO / VENDIDO'),
+        ]);
+        matrixSheet.appendRow([]); // Espaciador
+
+        // Gather all individual numbers with their ticket status
+        // A ticket may have multiple opportunities; each is placed in the grid
+        final List<Map<String, dynamic>> numberItems = [];
+        for (var t in ticketsToProcess) {
+          final st = t.status.toUpperCase();
+          final isAvail = st == 'DISPONIBLE';
+          final isReserved = st == 'RESERVADA' || st == 'ABONO_PARCIAL';
+          final isSold = st == 'PAGADA' || st == 'VENDIDA' || st == 'CONFIRMADA';
+          final numStatus = isAvail
+              ? 'AVAILABLE'
+              : (isReserved ? 'RESERVED' : (isSold ? 'SOLD' : 'OTHER'));
+
+          if (t.numbers.isNotEmpty) {
+            for (var n in t.numbers) {
+              numberItems.add({
+                'number': n,
+                'status': numStatus,
+                'ticket': t,
+              });
+            }
+          } else {
+            numberItems.add({
+              'number': t.displayNumber,
+              'status': numStatus,
+              'ticket': t,
+            });
+          }
+        }
+
+        // Apply number limit if requested on individual items
+        final itemsToGrid = (maxNumbersCount != null && maxNumbersCount > 0 && numberItems.length > maxNumbersCount)
+            ? numberItems.take(maxNumbersCount).toList()
+            : numberItems;
+
+        // Build matrix header (Col 1, Col 2, ... Col N)
+        final cols = matrixColumns > 0 ? matrixColumns : 20;
+        final matrixHeader = <CellValue>[];
+        for (int c = 1; c <= cols; c++) {
+          matrixHeader.add(TextCellValue('C$c'));
+        }
+        matrixSheet.appendRow(matrixHeader);
+
+        // Predefine cell styles
+        CellStyle? styleAvailable;
+        CellStyle? styleReserved;
+        CellStyle? styleSold;
+
+        try {
+          styleAvailable = CellStyle(
+            backgroundColorHex: ExcelColor.fromHexString('FFFFFF'),
+            fontColorHex: ExcelColor.black,
+            horizontalAlign: HorizontalAlign.Center,
+            verticalAlign: VerticalAlign.Center,
+            bold: false,
+            fontSize: 10,
+          );
+          styleReserved = CellStyle(
+            backgroundColorHex: ExcelColor.fromHexString('FFFF00'), // Yellow as in Image 3
+            fontColorHex: ExcelColor.black,
+            horizontalAlign: HorizontalAlign.Center,
+            verticalAlign: VerticalAlign.Center,
+            bold: true,
+            fontSize: 10,
+          );
+          styleSold = CellStyle(
+            backgroundColorHex: ExcelColor.fromHexString('FEE2E2'), // Light red
+            fontColorHex: ExcelColor.black,
+            horizontalAlign: HorizontalAlign.Center,
+            verticalAlign: VerticalAlign.Center,
+            bold: false,
+            fontSize: 10,
+          );
+        } catch (_) {}
+
+        if (itemsToGrid.isEmpty) {
+          matrixSheet.appendRow([TextCellValue('No hay números disponibles o asignados con este alcance.')]);
+        } else {
+          for (int r = 0; r < itemsToGrid.length; r += cols) {
+            final end = (r + cols > itemsToGrid.length) ? itemsToGrid.length : r + cols;
+            final chunk = itemsToGrid.sublist(r, end);
+
+            final rowCells = <CellValue>[];
+            for (var item in chunk) {
+              rowCells.add(TextCellValue(item['number'] as String));
+            }
+            matrixSheet.appendRow(rowCells);
+
+            final rowIndex = matrixSheet.maxRows - 1;
+            for (int c = 0; c < chunk.length; c++) {
+              final status = chunk[c]['status'] as String;
+              try {
+                final cell = matrixSheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex));
+                if (status == 'RESERVED' && styleReserved != null) {
+                  cell.cellStyle = styleReserved;
+                } else if (status == 'SOLD' && styleSold != null) {
+                  cell.cellStyle = styleSold;
+                } else if (styleAvailable != null) {
+                  cell.cellStyle = styleAvailable;
+                }
+              } catch (_) {}
+            }
+          }
+        }
+      }
+
+      // -------------------------------------------------------------
+      // HOJA 2: LISTADO DETALLADO
+      // -------------------------------------------------------------
+      if (includeDetailedList || !includeMatrixSheet) {
+        final detailSheetName = includeMatrixSheet ? 'Listado_Detallado' : 'Disponibles';
+        if (!includeMatrixSheet) {
+          excel.rename(defaultSheet, detailSheetName);
+        }
+        Sheet detailSheet = excel[detailSheetName];
+
+        detailSheet.appendRow([TextCellValue('REPORTE DETALLADO - ${raffleTitle.toUpperCase()}')]);
+        detailSheet.appendRow([TextCellValue('Alcance:'), TextCellValue(scopeLabel)]);
+        detailSheet.appendRow([TextCellValue('Total Boletas:'), IntCellValue(ticketsToProcess.length)]);
+        if (ticketPrice != null) {
+          detailSheet.appendRow([TextCellValue('Valor Boleta:'), TextCellValue(currency.format(ticketPrice))]);
+        }
+        if (drawDate != null && drawDate.isNotEmpty) {
+          detailSheet.appendRow([TextCellValue('Fecha Sorteo:'), TextCellValue(drawDate), TextCellValue('Lotería:'), TextCellValue(lotteryName ?? '')]);
+        }
+        detailSheet.appendRow([TextCellValue('Fecha Generación:'), TextCellValue(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()))]);
+        detailSheet.appendRow([]); // Espacio
+
+        final maxOpps = ticketsToProcess.fold<int>(1, (max, t) => t.numbers.length > max ? t.numbers.length : max);
+
+        // HEADERS: Actual primary number first, NOT confusing ticketNumber index
+        final headers = <String>[];
+        if (maxOpps > 1) {
+          for (int k = 1; k <= maxOpps; k++) {
+            headers.add('Oportunidad $k');
+          }
+        } else {
+          headers.add('Número Boleta');
+        }
+        headers.addAll([
+          'Número Completo',
+          'Precio',
+          'Estado',
+          'Asesor Asignado',
+        ]);
+        detailSheet.appendRow(headers.map((h) => TextCellValue(h)).toList());
+
+        for (var t in ticketsToProcess) {
+          final row = <CellValue>[];
+          if (maxOpps > 1) {
+            for (int k = 0; k < maxOpps; k++) {
+              final oppVal = k < t.numbers.length ? t.numbers[k] : '';
+              row.add(TextCellValue(oppVal));
+            }
+          } else {
+            row.add(TextCellValue(t.displayNumber));
+          }
+          row.addAll([
+            TextCellValue(t.displayNumber),
+            IntCellValue(t.price.round()),
+            TextCellValue(t.status.toUpperCase()),
+            TextCellValue(t.advisorName.isNotEmpty ? t.advisorName : (advisorName ?? 'Sin asignar / Pool')),
+          ]);
+          detailSheet.appendRow(row);
+        }
+      }
+
+      // Encode bytes without invoking the default web save that forces 'FlutterExcel.xlsx'
+      final fileBytes = excel.encode() ?? excel.save(fileName: exportFileName);
+      if (fileBytes != null) {
+        saveAndDownloadBytes(exportFileName, fileBytes);
+      }
+    } catch (_) {
+      // CSV Fallback with proper primary number headers
+      final maxOpps = ticketsToProcess.fold<int>(1, (max, t) => t.numbers.length > max ? t.numbers.length : max);
+      final headers = <dynamic>[];
+      if (maxOpps > 1) {
+        for (int k = 1; k <= maxOpps; k++) {
+          headers.add('Oportunidad $k');
+        }
+      } else {
+        headers.add('Número Boleta');
+      }
+      headers.addAll(['Número Completo', 'Precio', 'Estado', 'Asesor Asignado']);
+
+      List<List<dynamic>> rows = [
+        ['REPORTE DE NÚMEROS DISPONIBLES'],
+        ['Rifa:', raffleTitle],
+        ['Alcance:', scopeLabel],
+        ['Total Boletas:', ticketsToProcess.length],
+        if (ticketPrice != null) ['Valor Boleta:', currency.format(ticketPrice)],
+        ['Fecha Generación:', DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())],
+        [],
+        headers,
+        ...ticketsToProcess.map((t) {
+          final row = <dynamic>[];
+          if (maxOpps > 1) {
+            for (int k = 0; k < maxOpps; k++) {
+              row.add(k < t.numbers.length ? t.numbers[k] : '');
+            }
+          } else {
+            row.add(t.displayNumber);
+          }
+          row.addAll([
+            t.displayNumber,
+            t.price.round(),
+            t.status.toUpperCase(),
+            t.advisorName.isNotEmpty ? t.advisorName : (advisorName ?? 'Sin asignar / Pool'),
+          ]);
+          return row;
+        }),
+      ];
+      saveAndDownloadFile('numeros_disponibles.csv', _rowsToCsv(rows));
+    }
+  }
+
 }
+

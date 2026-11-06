@@ -12,6 +12,8 @@ import 'package:rifaapp/data/models/advisor.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/commission_dashboard_view.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
+import 'package:rifaapp/ui/features/tickets/views/available_numbers_dialog.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 class AdvisorManagementView extends StatelessWidget {
@@ -767,6 +769,15 @@ class AdvisorManagementView extends StatelessWidget {
                                         onSelected: (val) async {
                                           if (val == 'edit') {
                                             _showAdvisorDialog(context, advisor: adv);
+                                          } else if (val == 'available_numbers') {
+                                            final currentRaffle = context.read<RaffleViewModel>().selectedRaffle;
+                                            if (currentRaffle != null) {
+                                              AvailableNumbersDialog.show(context, raffle: currentRaffle, initialAdvisor: adv);
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('No hay una rifa activa seleccionada.')),
+                                              );
+                                            }
                                           } else if (val == 'numbers') {
                                             AssignNumbersDialog.show(context, adv);
                                           } else if (val == 'toggle_status') {
@@ -785,6 +796,16 @@ class AdvisorManagementView extends StatelessWidget {
                                             value: 'edit',
                                             child: Row(
                                               children: [Icon(Icons.edit, size: 18), SizedBox(width: 8), Text('Editar Datos & Clave')],
+                                            ),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'available_numbers',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.mark_chat_read_outlined, size: 18, color: AppTheme.secondaryEmerald),
+                                                SizedBox(width: 8),
+                                                Text('Números Disponibles (Imagen/Excel)'),
+                                              ],
                                             ),
                                           ),
                                           const PopupMenuItem(

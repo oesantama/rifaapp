@@ -6,6 +6,8 @@ import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
+import 'package:rifaapp/ui/features/tickets/views/available_numbers_dialog.dart';
 
 /// Joins sorted numbers into compact ranges: [1,2,3,7] -> ["1-3", "7"].
 List<String> compressNumbers(List<int> numbers) {
@@ -485,19 +487,40 @@ class AdvisorNumbersBar extends StatelessWidget {
             ]),
             style: const TextStyle(fontSize: 13),
           ),
-          if (request != null)
-            Chip(
-              avatar: Icon(Icons.hourglass_top, size: 16, color: Colors.orange.shade800),
-              label: Text('Pidió ${request.quantity} más • esperando'),
-              visualDensity: VisualDensity.compact,
-            )
-          else
-            FilledButton.tonalIcon(
-              onPressed: () => _request(context),
-              icon: const Icon(Icons.add_circle_outline, size: 18),
-              label: const Text('Solicitar más'),
-              style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  final raffle = context.read<RaffleViewModel>().selectedRaffle;
+                  if (raffle != null) {
+                    AvailableNumbersDialog.show(context, raffle: raffle, initialAdvisor: adv);
+                  }
+                },
+                icon: const Icon(Icons.image_outlined, size: 16, color: AppTheme.secondaryEmerald),
+                label: const Text('Descargar disponibles (Imagen/Excel)', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: AppTheme.secondaryEmerald,
+                ),
+              ),
+              if (request != null)
+                Chip(
+                  avatar: Icon(Icons.hourglass_top, size: 16, color: Colors.orange.shade800),
+                  label: Text('Pidió ${request.quantity} más • esperando'),
+                  visualDensity: VisualDensity.compact,
+                )
+              else
+                FilledButton.tonalIcon(
+                  onPressed: () => _request(context),
+                  icon: const Icon(Icons.add_circle_outline, size: 18),
+                  label: const Text('Solicitar más'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                ),
+            ],
+          ),
         ],
       ),
     );

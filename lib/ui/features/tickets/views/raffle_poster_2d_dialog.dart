@@ -50,7 +50,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   String _singleCircleColorHex = '#DC2626'; // Default red
 
   // Circle color per ticket status (used when _colorByStatus is on); editable and saved with the template
-  Map<String, String> _statusCircleColors = Map.of(_defaultStatusCircleColors);
+  final Map<String, String> _statusCircleColors = Map.of(_defaultStatusCircleColors);
   static const Map<String, String> _defaultStatusCircleColors = {
     'PAGADA': '#10B981',
     'ABONO_PARCIAL': '#F59E0B',
@@ -176,6 +176,46 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
             const Icon(Icons.edit, size: 12, color: Colors.black45),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Responsive card container for sliders
+  Widget _buildSliderControl({
+    required String label,
+    required Widget slider,
+    Color? titleColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: titleColor ?? Colors.black87,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3.5,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7.0),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
+            ),
+            child: slider,
+          ),
+        ],
       ),
     );
   }
@@ -491,9 +531,6 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     return null;
   }
 
-  bool _isNumberSold(String numStr, List<Ticket> tickets) {
-    return _getTicketForNumber(numStr, tickets) != null;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -694,130 +731,103 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
 
-                            // ROW 1: Zoom, Posición Vertical (Top), Posición Horizontal (Left)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('🔍 Zoom Vista: ${(_posterScale * 100).toInt()}%',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                      Slider(
-                                        value: _posterScale,
-                                        min: 0.40,
-                                        max: 1.20,
-                                        onChanged: (v) => setState(() => _posterScale = v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (_bgImageBase64 != null) ...[
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('↕️ Posición Vertical (Top): ${(_gridTopPercent * 100).toInt()}%',
-                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                        Slider(
-                                          value: _gridTopPercent,
-                                          min: 0.10,
-                                          max: 0.85,
-                                          onChanged: (v) => setState(() => _gridTopPercent = v),
-                                        ),
-                                      ],
+                            // RESPONSIVE GRID DE CONTROLES:
+                            // Móvil (< 500px): col-12 (1 col, 100%)
+                            // Tablet pequeña (500 - 780px): col-6 (2 cols, 50%)
+                            // Pantalla mediana (780 - 1100px): col-4 (3 cols, 33%)
+                            // Pantalla grande (>= 1100px): col-3 (4 cols, 25%)
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final width = constraints.maxWidth;
+                                final int cols = width < 500
+                                    ? 1
+                                    : width < 780
+                                        ? 2
+                                        : width < 1100
+                                            ? 3
+                                            : 4;
+
+                                const double spacing = 10.0;
+                                final double itemWidth = (width - (cols - 1) * spacing) / cols;
+
+                                final controlItems = <Widget>[
+                                  _buildSliderControl(
+                                    label: '🔍 Zoom Vista: ${(_posterScale * 100).toInt()}%',
+                                    slider: Slider(
+                                      value: _posterScale,
+                                      min: 0.40,
+                                      max: 1.20,
+                                      onChanged: (v) => setState(() => _posterScale = v),
                                     ),
                                   ),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text('↔️ Posición Horizontal (Left): ${(_gridLeftPercent * 100).toInt()}%',
-                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                        Slider(
-                                          value: _gridLeftPercent,
-                                          min: 0.0,
-                                          max: 0.20,
-                                          onChanged: (v) => setState(() => _gridLeftPercent = v),
-                                        ),
-                                      ],
+                                  if (_bgImageBase64 != null) ...[
+                                    _buildSliderControl(
+                                      label: '↕️ Posición Vertical (Top): ${(_gridTopPercent * 100).toInt()}%',
+                                      slider: Slider(
+                                        value: _gridTopPercent,
+                                        min: 0.10,
+                                        max: 0.85,
+                                        onChanged: (v) => setState(() => _gridTopPercent = v),
+                                      ),
+                                    ),
+                                    _buildSliderControl(
+                                      label: '↔️ Posición Horizontal (Left): ${(_gridLeftPercent * 100).toInt()}%',
+                                      slider: Slider(
+                                        value: _gridLeftPercent,
+                                        min: 0.0,
+                                        max: 0.20,
+                                        onChanged: (v) => setState(() => _gridLeftPercent = v),
+                                      ),
+                                    ),
+                                  ],
+                                  _buildSliderControl(
+                                    label: '📏 Alto de Grilla / Celdas: ${_cellHeight.toInt()} px',
+                                    titleColor: Colors.indigo,
+                                    slider: Slider(
+                                      value: _cellHeight,
+                                      min: 16.0,
+                                      max: 45.0,
+                                      activeColor: Colors.indigo,
+                                      onChanged: (v) => setState(() => _cellHeight = v),
                                     ),
                                   ),
-                                ],
-                              ],
-                            ),
+                                  _buildSliderControl(
+                                    label: '📐 Ancho de Grilla: ${(_gridWidthPercent * 100).toInt()}%',
+                                    slider: Slider(
+                                      value: _gridWidthPercent,
+                                      min: 0.50,
+                                      max: 0.98,
+                                      onChanged: (v) => setState(() => _gridWidthPercent = v),
+                                    ),
+                                  ),
+                                  _buildSliderControl(
+                                    label: '🔤 Tamaño Texto: ${_fontSize.toStringAsFixed(1)} px',
+                                    slider: Slider(
+                                      value: _fontSize,
+                                      min: 8.0,
+                                      max: 16.0,
+                                      onChanged: (v) => setState(() => _fontSize = v),
+                                    ),
+                                  ),
+                                  _buildSliderControl(
+                                    label: '🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x',
+                                    slider: Slider(
+                                      value: _dotScale,
+                                      min: 0.5,
+                                      max: 1.8,
+                                      onChanged: (v) => setState(() => _dotScale = v),
+                                    ),
+                                  ),
+                                ];
 
-                            // ROW 2: Alto Grilla/Celdas, Ancho Grilla, Tamaño Texto, Tamaño Círculo Rojo
-                            Row(
-                              children: [
-                                // Alto Celdas / Grilla
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('📏 Alto de Grilla / Celdas: ${_cellHeight.toInt()} px',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.indigo)),
-                                      Slider(
-                                        value: _cellHeight,
-                                        min: 16.0,
-                                        max: 45.0,
-                                        activeColor: Colors.indigo,
-                                        onChanged: (v) => setState(() => _cellHeight = v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Ancho Grilla
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('📐 Ancho de Grilla: ${(_gridWidthPercent * 100).toInt()}%',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                      Slider(
-                                        value: _gridWidthPercent,
-                                        min: 0.50,
-                                        max: 0.98,
-                                        onChanged: (v) => setState(() => _gridWidthPercent = v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Tamaño Texto
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('🔤 Tamaño Texto: ${_fontSize.toStringAsFixed(1)} px',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                      Slider(
-                                        value: _fontSize,
-                                        min: 8.0,
-                                        max: 16.0,
-                                        onChanged: (v) => setState(() => _fontSize = v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                // Círculo Rojo
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x',
-                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                      Slider(
-                                        value: _dotScale,
-                                        min: 0.5,
-                                        max: 1.8,
-                                        onChanged: (v) => setState(() => _dotScale = v),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                                return Wrap(
+                                  spacing: spacing,
+                                  runSpacing: 10,
+                                  children: controlItems.map((item) => SizedBox(width: itemWidth, child: item)).toList(),
+                                );
+                              },
                             ),
                             const Divider(height: 16),
 

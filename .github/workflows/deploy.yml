@@ -1,0 +1,23 @@
+name: Despliegue Automático al VPS
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  deploy:
+    name: Desplegar en Contabo VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar Webhook de Despliegue en el VPS
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" "http://45.137.192.195/api/deploy-webhook?token=rifaapp_deploy_secret_2026")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "Respuesta del servidor: $BODY"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Error en el despliegue. Código HTTP: $HTTP_CODE"
+            exit 1
+          fi
+          echo "¡Despliegue iniciado correctamente en el VPS!"
+

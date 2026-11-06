@@ -20,6 +20,7 @@ import 'ticket_detail_dialog.dart';
 import 'ticket_print_dialog.dart';
 import 'import_sold_tickets_dialog.dart';
 import 'raffle_poster_2d_dialog.dart';
+import 'available_numbers_dialog.dart';
 
 class TicketGridView extends StatefulWidget {
   const TicketGridView({super.key});
@@ -170,6 +171,16 @@ class _TicketGridViewState extends State<TicketGridView> {
                               builder: (_) => RafflePoster2dDialog(raffle: currentRaffle),
                             ),
                             tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.mark_chat_read_outlined, color: AppTheme.secondaryEmerald),
+                            onPressed: () => AvailableNumbersDialog.show(
+                              context,
+                              raffle: currentRaffle,
+                              initialAdvisor: authVM.isAsesor ? authVM.activeAdvisor : null,
+                            ),
+                            tooltip: 'Números Disponibles (Ver / Descargar en Imagen o Excel)',
                           ),
                           const SizedBox(width: 8),
                         ],

@@ -23,7 +23,7 @@ class ApiService {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl;
     if (kIsWeb) return '/api';
-    return 'https://rifaapp-backend.onrender.com/api';
+    return 'http://45.137.192.195/api';
   }
 
   /// Public site address (where /verificar/<code> lives) for links and QR codes.
@@ -31,7 +31,7 @@ class ApiService {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl.replaceFirst(RegExp(r'/api/?$'), '');
     if (kIsWeb) return Uri.base.origin;
-    return 'http://localhost:8080';
+    return 'http://45.137.192.195';
   }
 
   static String verificationUrl(String code) => '$publicBaseUrl/verificar/$code';
@@ -1598,6 +1598,52 @@ class ApiService {
     if (response.statusCode == 200) {
       final list = jsonDecode(response.body) as List;
       return list.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  // -------------------------------------------------------------
+  // WhatsApp Bot API
+  // -------------------------------------------------------------
+  Future<Map<String, dynamic>> getWhatsAppStatus() async {
+    final response = await authGet(Uri.parse('$baseUrl/whatsapp/status'));
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> connectWhatsApp({String? phoneNumber}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/whatsapp/connect'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'phoneNumber': phoneNumber}),
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> disconnectWhatsApp() async {
+    final response = await authPost(Uri.parse('$baseUrl/whatsapp/disconnect'));
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
+    }
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> sendWhatsAppTest(String phoneNumber, [String? message]) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/whatsapp/test-message'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'phoneNumber': phoneNumber,
+        'message': message,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(jsonDecode(response.body));
     }
     throw ApiException.fromResponse(response);
   }

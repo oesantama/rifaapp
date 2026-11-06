@@ -33,6 +33,7 @@ import 'ui/features/lotteries/view_models/lottery_view_model.dart';
 import 'ui/features/lotteries/views/lotteries_view.dart';
 import 'ui/features/monetization/app_config_view_model.dart';
 import 'ui/features/monetization/monetization_view.dart';
+import 'ui/features/control/views/whatsapp_bot_tab.dart';
 import 'ui/features/admin_cash/view_models/cash_view_model.dart';
 import 'ui/features/admin_cash/views/advisor_cash_view.dart';
 import 'ui/features/raffles/views/raffle_create_dialog.dart';
@@ -262,6 +263,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
             const BanksView(),
             const LotteriesView(),
             const MonetizationView(),
+            const WhatsAppBotTab(),
           ]
         : authVM.isAdmin
             ? (authVM.isIndependent
@@ -576,6 +578,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                         selectedIcon: Icon(Icons.workspace_premium),
                         label: Text('Planes'),
                       ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.smart_toy_outlined),
+                        selectedIcon: Icon(Icons.smart_toy),
+                        label: Text('Bot Ventas'),
+                      ),
                     ]
                   : authVM.isAdmin
                       ? (authVM.isIndependent
@@ -686,6 +693,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                       BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Bancos'),
                       BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'Loterías'),
                       BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: 'Planes'),
+                      BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'Bot Ventas'),
                     ]
                   : authVM.isAdmin
                       ? (authVM.isIndependent

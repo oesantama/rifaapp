@@ -1,0 +1,21 @@
+services:
+  rifaapp-backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile
+    container_name: rifaapp-backend
+    ports:
+      - "${PORT_BINDING:-3000:3000}"
+    environment:
+      - PORT=3000
+      - DATA_SOURCE=local
+    env_file:
+      - ${RIFAAPP_ENV_FILE:-./backend/.env}
+    volumes:
+      - ${RIFAAPP_DATA_DIR:-./backend}/data.json:/app/data.json
+      - ${RIFAAPP_DATA_DIR:-./backend}/secrets:/app/secrets
+      - ${RIFAAPP_DATA_DIR:-./backend}/backups:/app/backups
+      - ${RIFAAPP_DATA_DIR:-./backend}/assets:/app/assets
+      - ./backend/public:/app/public
+    restart: always
+
