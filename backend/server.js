@@ -1911,7 +1911,10 @@ app.post('/api/whatsapp/test-message', async (req, res) => {
 
 app.post('/api/whatsapp/webhook', async (req, res) => {
   try {
-    const result = await whatsappService.handleWebhookEvent(req.body, db);
+    const result = await whatsappService.handleWebhookEvent(req.body, db, (raffleId) => {
+      saveDB();
+      notifyRaffleChanged(raffleId);
+    });
     res.json({ success: true, result });
   } catch (err) {
     console.error('Error procesando webhook de WhatsApp:', err.message);
@@ -4136,12 +4139,40 @@ app.post('/api/tickets/import', adminOnly, (req, res) => {
   });
 
   saveDB();
+  notifyRaffleChanged(id);
   res.json({ message: `${importedCount} boletas importadas correctamente`, count: importedCount });
+});
+
+// ---------------------------------------------------------------------------
+// REAL-TIME CONCURRENCY SYSTEM FOR 100+ ADVISORS
+// ---------------------------------------------------------------------------
+const raffleRevisions = {};
+
+function notifyRaffleChanged(raffleId) {
+  if (!raffleId) return;
+  raffleRevisions[raffleId] = (raffleRevisions[raffleId] || 1) + 1;
+}
+
+function getRaffleRevision(raffleId) {
+  return raffleRevisions[raffleId] || 1;
+}
+
+// Ultra-fast lightweight revision endpoint: allows 100+ advisors to poll every 3s with <1ms overhead
+app.get('/api/raffles/:id/revision', (req, res) => {
+  const { id } = req.params;
+  res.json({
+    raffleId: id,
+    revision: getRaffleRevision(id),
+    timestamp: Date.now()
+  });
 });
 
 // GET Tickets (with multi-tenant isolation)
 app.get('/api/tickets', (req, res) => {
   const { raffleId, advisorId, status, search, numberSearch, companyId } = req.query;
+  if (raffleId) {
+    res.setHeader('X-Raffle-Revision', String(getRaffleRevision(raffleId)));
+  }
   
   let targetCompanyId = companyId;
   if (!targetCompanyId && req.auth) {
@@ -4510,6 +4541,7 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
     date: new Date().toISOString()
   });
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(ticket);
 });
 
@@ -4723,6 +4755,25 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (wasRequestApplied(requestId)) {
     return res.json(withVerification(ticket));
   }
+
+  // Control de concurrencia atómica para 100+ asesores simultáneos:
+  const expectedStatus = req.body.expectedStatus;
+  if (expectedStatus === 'DISPONIBLE' && ticket.status !== 'DISPONIBLE') {
+    const holder = ticket.advisorName ? `por ${ticket.advisorName}` : 'por otro usuario';
+    return res.status(409).json({
+      error: `¡Atención! La boleta #${ticket.ticketNumber || ticket.id} ya no está disponible. Acaba de ser apartada/vendida ${holder}. Por favor elija otra boleta.`,
+      code: 'TICKET_ALREADY_TAKEN',
+      currentStatus: ticket.status
+    });
+  }
+
+  // Si la boleta ya pertenece a otro asesor, un asesor distinto no puede modificarla
+  if (req.auth.role === 'asesor' && ticket.status !== 'DISPONIBLE' && ticket.advisorId && ticket.advisorId !== req.auth.record.id) {
+    return res.status(403).json({
+      error: `Esta boleta pertenece a otro asesor (${ticket.advisorName || ticket.advisorId}) y no puede ser modificada.`,
+      code: 'TICKET_OWNED_BY_ANOTHER'
+    });
+  }
   const ticketRaffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
   if (ticket.status === 'DISPONIBLE' && ticketRaffle && ticketRaffle.scheduledDeletionAt) {
     return res.status(400).json({ error: 'La rifa está cerrada: ya no se pueden vender boletas.' });
@@ -4834,6 +4885,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (ticket.totalPaid > 0) recalcCashConfirmation(ticket);
 
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(withVerification(ticket));
 });
 
@@ -4911,6 +4963,7 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
   });
 
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(ticket);
 });
 
@@ -5042,6 +5095,7 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   }
   recalcCashConfirmation(ticket);
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(withVerification(ticket));
 });
 
@@ -5063,6 +5117,7 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => 
   }
   recalcCashConfirmation(ticket);
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(withVerification(ticket));
 });
 
@@ -5077,6 +5132,7 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) =>
   abono.received = { by: actorName(req), at: new Date().toISOString(), method: 'efectivo', note: 'Recibido en mano por el administrador' };
   recalcCashConfirmation(ticket);
   saveDB();
+  notifyRaffleChanged(ticket.raffleId);
   res.json(withVerification(ticket));
 });
 

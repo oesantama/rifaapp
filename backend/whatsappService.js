@@ -6,6 +6,18 @@ const EVOLUTION_URL = process.env.EVOLUTION_URL || 'http://evolution_api:8080';
 const EVOLUTION_APIKEY = process.env.EVOLUTION_APIKEY || 'rifaapp_evo_secret_key_2026';
 const PUBLIC_WEBHOOK_URL = process.env.PUBLIC_WEBHOOK_URL || 'http://45.137.192.195/api/whatsapp/webhook';
 
+/**
+ * Normaliza números telefónicos para WhatsApp:
+ * Si es un número colombiano de 10 dígitos (inicia en 3), le antepone automáticamente el 57.
+ */
+function formatPhoneNumber(number) {
+  let clean = String(number || '').replace(/[^0-9]/g, '');
+  if (clean.length === 10 && clean.startsWith('3')) {
+    clean = '57' + clean;
+  }
+  return clean;
+}
+
 function getInstanceName(auth) {
   if (!auth) return 'rifaapp_bot';
   if (auth.role === 'superadmin') {
@@ -60,7 +72,6 @@ async function getStatus(instanceName) {
   const state = stateRes.data?.instance?.state || 'close';
 
   if (state === 'open') {
-    // Si ya está conectado, obtenemos datos del perfil
     return {
       state: 'open',
       instanceName,
@@ -69,7 +80,6 @@ async function getStatus(instanceName) {
     };
   }
 
-  // Si está esperando conexión, solicitamos el QR actual
   const connectRes = await evoRequest(`/instance/connect/${instanceName}`);
   const qrcode = connectRes.data?.base64 || null;
   const pairingCode = connectRes.data?.pairingCode || null;
@@ -87,13 +97,13 @@ async function getStatus(instanceName) {
  * phoneNumber es opcional (para Pairing Code de 8 dígitos).
  */
 async function connectInstance(instanceName, phoneNumber = null) {
-  // Asegura que la instancia exista con Webhook configurado
+  const formattedNumber = phoneNumber ? formatPhoneNumber(phoneNumber) : null;
   await evoRequest('/instance/create', {
     method: 'POST',
     body: JSON.stringify({
       instanceName,
-      qrcode: !phoneNumber,
-      number: phoneNumber || undefined,
+      qrcode: !formattedNumber,
+      number: formattedNumber || undefined,
       integration: 'WHATSAPP-BAILEYS',
       webhook: {
         enabled: true,
@@ -105,8 +115,7 @@ async function connectInstance(instanceName, phoneNumber = null) {
     })
   });
 
-  // Solicita conexión
-  const query = phoneNumber ? `?number=${encodeURIComponent(phoneNumber)}` : '';
+  const query = formattedNumber ? `?number=${encodeURIComponent(formattedNumber)}` : '';
   const connectRes = await evoRequest(`/instance/connect/${instanceName}${query}`);
 
   return {
@@ -128,23 +137,26 @@ async function disconnectInstance(instanceName) {
 }
 
 /**
- * Envía un mensaje de texto por WhatsApp
+ * Envía un mensaje de texto por WhatsApp con formateo de número automático
  */
 async function sendTextMessage(instanceName, number, text) {
-  const cleanNumber = String(number).replace(/[^0-9]/g, '');
+  const targetNumber = formatPhoneNumber(number);
   return evoRequest(`/message/sendText/${instanceName}`, {
     method: 'POST',
     body: JSON.stringify({
-      number: cleanNumber,
+      number: targetNumber,
       text: text
     })
   });
 }
 
+// Memoria a corto plazo de última consulta por usuario { 'senderPhone': { lastTicketId, lastRaffleId, timestamp } }
+const lastUserInquiry = new Map();
+
 /**
- * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde
+ * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde de forma inteligente
  */
-async function handleWebhookEvent(body, db) {
+async function handleWebhookEvent(body, db, saveDBCallback) {
   const event = body.event || body.type;
   if (event !== 'messages.upsert' && event !== 'MESSAGES_UPSERT') {
     return { ignored: true };
@@ -160,21 +172,22 @@ async function handleWebhookEvent(body, db) {
 
   const senderJid = key.remoteJid || '';
   if (senderJid.endsWith('@g.us')) {
-    // Ignorar mensajes de grupos por ahora
+    // Ignorar grupos
     return { ignored: true };
   }
 
   const senderPhone = senderJid.split('@')[0];
   const userText = (msgData.conversation || msgData.extendedTextMessage?.text || '').trim();
   const hasImage = !!msgData.imageMessage;
+  const cleanLower = userText.toLowerCase();
 
-  console.log(`💬 [WhatsApp Bot (${instance})] Mensaje de ${senderPhone}: "${userText}" ${hasImage ? '[FOTO COMPROBANTE]' : ''}`);
+  console.log(`💬 [WhatsApp Bot (${instance})] Mensaje de ${senderPhone}: "${userText}" ${hasImage ? '[IMAGEN COMPROBANTE]' : ''}`);
 
   // -------------------------------------------------------------
-  // CASO 1: SUPER ADMIN BOT (Venta de Planes y Software RifaApp)
+  // CASO 1: SUPER ADMIN BOT (Venta de Planes y Software Rifa Master)
   // -------------------------------------------------------------
   if (instance === 'superadmin_sales' || instance === 'rifaapp_bot') {
-    if (userText === '1' || userText.toLowerCase().includes('plan') || userText.toLowerCase().includes('precio')) {
+    if (userText === '1' || cleanLower.includes('plan') || cleanLower.includes('precio') || cleanLower.includes('costo')) {
       const plansText = 
 `💎 *PLANES Y PRECIOS RIFA MASTER* 🚀
 
@@ -201,14 +214,14 @@ async function handleWebhookEvent(body, db) {
       return { handled: true };
     }
 
-    if (userText.toLowerCase().includes('demo') || userText === '2') {
+    if (cleanLower.includes('demo') || userText === '2') {
       const demoText = 
 `🎯 *ACCESO A LA DEMO DE RIFA MASTER:*
 Puedes probar la plataforma ahora mismo:
 🌐 *Web:* http://45.137.192.195
 
-Explora el módulo de boletas, asesores, comisiones, caja y generador de afiches.
-Si deseas una asesoría personalizada, un comercial te contactará en breve.`;
+Explora el módulo de boletas en tiempo real, asesores, comisiones, caja y generador de afiches.
+Si deseas una asesoría personalizada, responde *ASESOR* y un comercial te contactará.`;
       await sendTextMessage(instance, senderPhone, demoText);
       return { handled: true };
     }
@@ -216,7 +229,7 @@ Si deseas una asesoría personalizada, un comercial te contactará en breve.`;
     // Saludo General SuperAdmin
     const greetingSuper = 
 `👋 ¡Hola! Bienvenido a *Rifa Master Oficial* 🏆
-El sistema profesional para gestión de rifas, boletas, asesores y recaudos.
+El sistema profesional para gestión de rifas, boletas concurrentes para +100 asesores, caja y bots de WhatsApp.
 
 ¿En qué te podemos colaborar hoy?
 1️⃣ Ver Planes y Precios
@@ -229,7 +242,7 @@ _(Escribe el número de la opción o tu consulta)_`;
   }
 
   // -------------------------------------------------------------
-  // CASO 2: EMPRESA O ASESOR (Venta de Boletas y Sorteos)
+  // CASO 2: EMPRESA O ASESOR INDEPENDIENTE (Venta de Boletas)
   // -------------------------------------------------------------
   let company = null;
   let advisor = null;
@@ -242,105 +255,296 @@ _(Escribe el número de la opción o tu consulta)_`;
     }
   } else if (instance.startsWith('empresa_')) {
     const compCode = instance.replace('empresa_', '');
-    company = (db.companies || []).find(c => (c.code && c.code.toLowerCase() === compCode) || c.id === compCode);
+    company = (db.companies || []).find(c => 
+      (c.code && c.code.toLowerCase() === compCode) || 
+      c.id === compCode ||
+      (c.name && c.name.toLowerCase().replace(/[^a-z0-9_]/g, '') === compCode)
+    );
   }
 
-  // Si no se encuentra empresa específica, tomar la primera activa como fallback
+  // Fallback a primera empresa si no se encuentra
   if (!company && db.companies && db.companies.length > 0) {
     company = db.companies[0];
   }
 
-  const companyName = company?.name || 'Rifa Master';
-  const activeRaffles = (db.raffles || []).filter(r => (!company || r.companyId === company.id) && r.active !== false);
+  const companyName = company?.name || company?.companyName || 'Rifa Master';
+  const companyCode = company?.code || '';
+
+  // Buscar rifas activas de la empresa
+  const activeRaffles = (db.raffles || []).filter(r => 
+    (!company || r.companyId === company.id) && 
+    r.status !== 'INACTIVA' && 
+    r.active !== false
+  );
   const mainRaffle = activeRaffles[0];
 
-  // Si envía una foto (Comprobante de pago / abono)
+  // Si no hay rifas creadas aún
+  if (!mainRaffle) {
+    let noRaffleMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n\n`;
+    noRaffleMsg += `Actualmente estamos afinando los detalles de nuestro próximo gran sorteo.\n`;
+    noRaffleMsg += `Muy pronto publicaremos las fechas, premios y abriremos la venta de boletas.\n\n`;
+    noRaffleMsg += `Escribe *CUENTAS* si deseas consultar información de contacto o medios de pago.`;
+    await sendTextMessage(instance, senderPhone, noRaffleMsg);
+    return { handled: true };
+  }
+
+  // Contexto inteligente de la rifa activa
+  const digits = mainRaffle.digits || 4;
+  const opportunities = mainRaffle.opportunitiesPerTicket || 1;
+  const ticketPrice = Number(mainRaffle.ticketPrice || 0);
+  const lotteryName = mainRaffle.mainLotteryName || mainRaffle.lotteryName || 'Lotería Oficial';
+  const drawDateRaw = mainRaffle.mainDrawDate ? mainRaffle.mainDrawDate.substring(0, 10) : '';
+  let drawDateFormatted = drawDateRaw;
+  if (drawDateRaw.includes('-')) {
+    const parts = drawDateRaw.split('-');
+    if (parts.length === 3) drawDateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+
+  // 1. RECEPCIÓN DE COMPROBANTES DE PAGO / TRANSFERENCIA (FOTO)
   if (hasImage) {
     const receiptReply = 
-`📸 *¡Comprobante de transferencia recibido!* ✅
+`📸 *¡Comprobante de transferencia recibido con éxito!* ✅
 Hemos recibido la imagen de tu pago para *${companyName}*.
 
-Nuestro equipo administrativo verificará la transacción en Nequi / Bancolombia para asentar tu pago/abono en el sistema.
-En breve te confirmaremos tus números y te enviaremos tu boleta digital con código QR. ¡Mucha suerte! 🍀`;
+📋 *Para procesar tu boleta más rápido, por favor indícanos:*
+1️⃣ Tu *Nombre y Apellidos completos*.
+2️⃣ El *número de boleta o cifras* que compraste o abonaste.
+
+Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia y te emitiremos tu boleta oficial con código QR y respaldo digital. 🍀`;
     await sendTextMessage(instance, senderPhone, receiptReply);
     return { handled: true };
   }
 
-  // Si el usuario escribe cuentas o pagos
-  if (userText.toLowerCase().includes('cuenta') || userText.toLowerCase().includes('pago') || userText.toLowerCase().includes('banco') || userText.toLowerCase().includes('nequi')) {
+  // 2. CONSULTA DE MEDIOS DE PAGO / CUENTAS
+  if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
+      cleanLower.includes('nequi') || cleanLower.includes('bancolombia') || cleanLower.includes('daviplata') ||
+      cleanLower.includes('donde pago') || cleanLower.includes('transferencia')) {
+    
     const bankAccounts = (db.banks || []).filter(b => !company || b.companyId === company.id || !b.companyId);
-    let bankMsg = `💳 *MEDIOS DE PAGO OFICIALES - ${companyName}:*\n\n`;
+    let bankMsg = `💳 *MEDIOS DE PAGO OFICIALES - ${companyName}* 🏦\n\n`;
+    bankMsg += `Puedes realizar tu pago o abono a través de:\n\n`;
+    
     if (bankAccounts.length > 0) {
       bankAccounts.forEach(b => {
-        bankMsg += `• *${b.name}:* ${b.accountNumber || b.number || ''} (${b.type || 'Ahorros'}) - Titular: ${b.holder || companyName}\n`;
+        bankMsg += `• *${b.name || 'Banco'}:* ${b.accountNumber || b.number || ''}\n`;
+        bankMsg += `  Tipo: ${b.type || 'Ahorros'} | Titular: ${b.holder || companyName}\n\n`;
       });
     } else {
-      bankMsg += `• *Nequi / Bancolombia:* Consulta con nuestro asesor al número de atención para los datos de transferencia.\n`;
+      bankMsg += `• *Nequi / Bancolombia / Daviplata*\n`;
+      bankMsg += `  Titular: *${companyName}*\n`;
+      bankMsg += `  Pide los datos de transferencia a nuestro administrador aquí mismo.\n\n`;
     }
-    bankMsg += `\n📌 *Importante:* Una vez realizada la transferencia o abono, envía la foto del comprobante aquí mismo.`;
+
+    bankMsg += `📌 *Importante:* Una vez realizada la transferencia, envía la *foto del comprobante aquí mismo* para validar tu pago y registrar tu boleta con QR oficial.`;
     await sendTextMessage(instance, senderPhone, bankMsg);
     return { handled: true };
   }
 
-  // Si el usuario escribe un número para consultar disponibilidad (ej: "428" o "0428")
-  const numberMatch = userText.match(/\b\d{2,5}\b/);
-  if (numberMatch && mainRaffle) {
-    const searchedNum = numberMatch[0];
-    const tickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id);
-    const foundTicket = tickets.find(t => {
-      if (t.number === searchedNum) return true;
-      if (t.series && Array.isArray(t.series) && t.series.includes(searchedNum)) return true;
-      return false;
-    });
+  // 3. CONSULTA DE PLAN DE PREMIOS / PREMIO MAYOR
+  if (cleanLower.includes('premio') || cleanLower.includes('que se gana') || cleanLower.includes('gana') || cleanLower.includes('mayor')) {
+    let prizeMsg = `🏆 *PLAN DE PREMIOS - ${mainRaffle.title}* 🎁\n\n`;
+    prizeMsg += `🌟 *Premio Mayor:*\n${mainRaffle.description || 'Gran Premio Oficial'}\n\n`;
+    
+    if (mainRaffle.weeklyPrizes && mainRaffle.weeklyPrizes.length > 0) {
+      prizeMsg += `🎁 *Premios Anticipados / Semanales:*\n`;
+      mainRaffle.weeklyPrizes.forEach(p => {
+        prizeMsg += `• *${p.name || 'Premio Semanal'}:* $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha programada'})\n`;
+      });
+      prizeMsg += '\n';
+    }
 
-    if (foundTicket) {
-      if (foundTicket.status === 'DISPONIBLE') {
-        const reply = 
-`✅ *¡EL NÚMERO ${searchedNum} ESTÁ DISPONIBLE!* 🎉
+    prizeMsg += `🎯 *Juega con:* ${lotteryName}\n`;
+    prizeMsg += `📅 *Fecha del Gran Sorteo:* ${drawDateFormatted}\n`;
+    prizeMsg += `💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP (${opportunities} oportunidades de ${digits} cifras)\n\n`;
+    prizeMsg += `💡 *Escribe un número de ${digits} cifras (ej: ${digits === 4 ? '3456' : '428'}) para verificar si está disponible.*`;
 
-🎟️ *Rifa:* ${mainRaffle.title}
-💵 *Valor Boleta:* $${(mainRaffle.ticketPrice || 0).toLocaleString()} COP
-${mainRaffle.minAbono ? `💰 *Abono Mínimo:* $${mainRaffle.minAbono.toLocaleString()} COP` : ''}
+    await sendTextMessage(instance, senderPhone, prizeMsg);
+    return { handled: true };
+  }
 
-¿Deseas apartarlo? Responde con tu *NOMBRE COMPLETO* para reservarlo a tu número de WhatsApp.`;
-        await sendTextMessage(instance, senderPhone, reply);
-        return { handled: true };
-      } else {
-        const reply = 
-`❌ *El número ${searchedNum} ya NO está disponible.*
-Estado actual: *${foundTicket.status}*
+  // 4. CONSULTA DE FECHA, LOTERÍA Y CONDICIONES
+  if (cleanLower.includes('fecha') || cleanLower.includes('cuando juega') || cleanLower.includes('loteria') || cleanLower.includes('con que juega')) {
+    let dateMsg = `📅 *FECHA Y LOTERÍA DEL SORTEO* 🎰\n\n`;
+    dateMsg += `🎯 *Rifa:* ${mainRaffle.title}\n`;
+    dateMsg += `🏆 *Lotería:* ${lotteryName}\n`;
+    dateMsg += `🗓️ *Fecha:* ${drawDateFormatted}\n`;
+    dateMsg += `🔢 *Modalidad:* Sorteo de *${digits} cifras* (${mainRaffle.winningDigitsPosition === 'PRIMERAS' ? 'Primeras cifras' : 'Últimas cifras'} del premio mayor).\n`;
+    dateMsg += `💵 *Precio:* $${ticketPrice.toLocaleString('es-CO')} COP\n\n`;
+    dateMsg += `👉 Escribe cualquier número de ${digits} cifras para ver si está libre.`;
 
-💡 Puedes probar consultándome otro número (ejemplo: escribe otro número de 2 a 4 cifras).`;
-        await sendTextMessage(instance, senderPhone, reply);
+    await sendTextMessage(instance, senderPhone, dateMsg);
+    return { handled: true };
+  }
+
+  // 5. CONSULTA DE POLÍTICAS Y REGLAS
+  if (cleanLower.includes('politica') || cleanLower.includes('regla') || cleanLower.includes('termino') || cleanLower.includes('condicion') || cleanLower.includes('como funciona')) {
+    let rulesMsg = `📜 *TÉRMINOS Y CONDICIONES - ${companyName}* 📋\n\n`;
+    rulesMsg += `1️⃣ *Condición de Ganador:* La boleta debe encontrarse 100% cancelada antes del inicio del sorteo oficial de ${lotteryName}.\n`;
+    rulesMsg += `2️⃣ *Apartados:* Las boletas apartadas sin abono tienen vigencia temporal fijada por la administración.\n`;
+    rulesMsg += `3️⃣ *Transparencia:* Cada boleta cuenta con registro criptográfico, serial único y código QR de verificación.\n`;
+    rulesMsg += `4️⃣ *Reclamo:* El titular ganador deberá identificarse con su cédula de ciudadanía coincidente con el registro del sistema.\n\n`;
+    rulesMsg += `¿Tienes dudas con un número? Escribe el número que buscas para consultar su disponibilidad.`;
+
+    await sendTextMessage(instance, senderPhone, rulesMsg);
+    return { handled: true };
+  }
+
+  // 6. INTENCIÓN DE RESERVAR / APARTAR CON NOMBRE TRAS CONSULTAR
+  const isNameReservation = cleanLower.startsWith('apartar a ') || cleanLower.startsWith('mi nombre es ') || cleanLower.startsWith('reservar a ');
+  if (isNameReservation && lastUserInquiry.has(senderPhone)) {
+    const inquiry = lastUserInquiry.get(senderPhone);
+    const candidateName = userText.replace(/^(apartar a|mi nombre es|reservar a)\s*/i, '').trim();
+    if (candidateName.length >= 3) {
+      const tickets = (db.tickets || []).filter(t => t.raffleId === inquiry.lastRaffleId);
+      const targetTicket = tickets.find(t => t.id === inquiry.lastTicketId && t.status === 'DISPONIBLE');
+      if (targetTicket) {
+        targetTicket.status = 'RESERVADA';
+        targetTicket.buyerName = candidateName;
+        targetTicket.buyerPhone = senderPhone;
+        targetTicket.saleChannel = 'WhatsApp';
+        targetTicket.assignedDate = new Date().toISOString();
+        targetTicket.abonos.push({
+          id: `ab-bot-${Date.now()}`,
+          amount: 0,
+          date: new Date().toISOString(),
+          sellerId: advisor ? advisor.id : 'bot',
+          sellerName: advisor ? advisor.name : 'Bot WhatsApp',
+          note: `Apartada automáticamente vía WhatsApp Bot por ${candidateName}`,
+          metodoPago: 'efectivo'
+        });
+
+        if (typeof saveDBCallback === 'function') {
+          saveDBCallback(inquiry.lastRaffleId);
+        }
+
+        const confirmMsg = 
+`🎉 *¡BOLETA APARTADA CON ÉXITO!* ✅
+
+🎟️ *Boleta:* #${targetTicket.ticketNumber}
+🔢 *Tus números:* ${targetTicket.numbers.join('  •  ')}
+👤 *Titular:* ${candidateName}
+📱 *Teléfono:* ${senderPhone}
+💵 *Saldo Pendiente:* $${ticketPrice.toLocaleString('es-CO')} COP
+
+📌 *Siguiente paso:*
+Para asegurar tu boleta, puedes realizar tu pago a nuestras cuentas (escribe *CUENTAS*) y enviar la foto del comprobante aquí mismo. ¡Muchos éxitos! 🍀`;
+        
+        lastUserInquiry.delete(senderPhone);
+        await sendTextMessage(instance, senderPhone, confirmMsg);
         return { handled: true };
       }
     }
   }
 
-  // Saludo General de la Rifa
+  // 7. BÚSQUEDA Y CONSULTA DE NÚMERO (INTELIGENTE: 2, 3 o 4 CIFRAS)
+  const numbersFound = userText.match(/\d+/g);
+  if (numbersFound && numbersFound.length > 0) {
+    const rawNumber = numbersFound[0];
+    const tickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id);
+
+    // Buscar coincidencia exacta en las oportunidades de la boleta o en el ticketNumber
+    let matchedTicket = tickets.find(t => {
+      if (Array.isArray(t.numbers) && t.numbers.includes(rawNumber)) return true;
+      if (String(t.ticketNumber) === rawNumber) return true;
+      return false;
+    });
+
+    // Si no encontró coincidencia exacta y el usuario escribió menos cifras de las requeridas,
+    // rellenar con ceros a la izquierda (ej: 345 -> 0345 si digits=4)
+    let paddedNumber = rawNumber;
+    if (!matchedTicket && rawNumber.length < digits) {
+      paddedNumber = rawNumber.padStart(digits, '0');
+      matchedTicket = tickets.find(t => {
+        if (Array.isArray(t.numbers) && t.numbers.includes(paddedNumber)) return true;
+        return false;
+      });
+    }
+
+    if (matchedTicket) {
+      // Guardar en memoria para que el usuario pueda apartar con su nombre en el siguiente mensaje
+      lastUserInquiry.set(senderPhone, {
+        lastTicketId: matchedTicket.id,
+        lastRaffleId: mainRaffle.id,
+        timestamp: Date.now()
+      });
+
+      if (matchedTicket.status === 'DISPONIBLE') {
+        const availReply = 
+`✅ *¡EL NÚMERO ${paddedNumber} ESTÁ DISPONIBLE!* 🎉
+
+🎟️ *Boleta:* #${matchedTicket.ticketNumber}
+🔢 *Oportunidades que juegas:* ${matchedTicket.numbers.join('  y  ')} (${opportunities} números por boleta)
+💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
+${mainRaffle.minAbono ? `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n` : ''}🎯 *Sorteo:* ${mainRaffle.title}
+🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}
+
+✍️ *¿Deseas apartarlo ahora mismo?*
+Responde con tu *NOMBRE COMPLETO* (ejemplo: _Apartar a Juan Pérez_) para reservártelo de inmediato a este número de WhatsApp.`;
+
+        await sendTextMessage(instance, senderPhone, availReply);
+        return { handled: true };
+      } else {
+        // Buscar 3 boletas alternativas disponibles
+        const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
+        let statusText = 'APARTADO';
+        if (matchedTicket.status === 'PAGADA' || matchedTicket.status === 'CONFIRMADA') statusText = 'VENDIDO';
+        if (matchedTicket.status === 'ABONO_PARCIAL') statusText = 'CON ABONO PARCIAL';
+
+        let busyReply = `❌ *El número ${paddedNumber} ya NO está disponible.* (Estado: *${statusText}*)\n\n`;
+        if (availableAlts.length > 0) {
+          busyReply += `🎲 *Te sugerimos estas opciones disponibles:*\n`;
+          availableAlts.forEach(a => {
+            busyReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
+          });
+          busyReply += `\n¿Te gustaría apartar alguno de ellos? Escribe el número que prefieras.`;
+        } else {
+          busyReply += `💡 Puedes escribir otro número de ${digits} cifras para verificar si está libre.`;
+        }
+
+        await sendTextMessage(instance, senderPhone, busyReply);
+        return { handled: true };
+      }
+    } else {
+      // Si el número no existe en la rifa, avisarle con amabilidad y sugerir opciones
+      const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
+      let notFoundReply = `ℹ️ El número *${rawNumber}* no pertenece al rango de esta rifa (*sorteo de ${digits} cifras*).\n\n`;
+      if (availableAlts.length > 0) {
+        notFoundReply += `🎲 *Te sugerimos estos números disponibles:*\n`;
+        availableAlts.forEach(a => {
+          notFoundReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
+        });
+        notFoundReply += `\nEscribe el número que desees consultar.`;
+      }
+      await sendTextMessage(instance, senderPhone, notFoundReply);
+      return { handled: true };
+    }
+  }
+
+  // 8. SALUDO GENERAL Y MENÚ INFORMATIVO
   let welcomeMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n`;
   if (advisor) {
     welcomeMsg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🎟️\n`;
   }
 
-  if (mainRaffle) {
-    welcomeMsg += `\n🎯 *Rifa Actual:* ${mainRaffle.title}\n`;
-    if (mainRaffle.description) welcomeMsg += `🏆 *Premios:* ${mainRaffle.description}\n`;
-    welcomeMsg += `💵 *Valor:* $${(mainRaffle.ticketPrice || 0).toLocaleString()} COP\n`;
-    if (mainRaffle.mainDrawDate) welcomeMsg += `📅 *Fecha Sorteo:* ${mainRaffle.mainDrawDate.substring(0, 10)}\n`;
-  }
+  welcomeMsg += `\n🎯 *Gran Sorteo:* ${mainRaffle.title}\n`;
+  if (mainRaffle.description) welcomeMsg += `🏆 *Premio Mayor:* ${mainRaffle.description}\n`;
+  welcomeMsg += `🔢 *Modalidad:* ${digits} cifras (${opportunities} oportunidades por boleta)\n`;
+  welcomeMsg += `📅 *Juega el:* ${drawDateFormatted} con ${lotteryName}\n`;
+  welcomeMsg += `💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
 
   welcomeMsg += 
 `\n📌 *¿Qué deseas hacer?*
-• Escribe cualquier *número* para consultar si está libre (ej: *428*).
+• Escribe cualquier *número de ${digits} cifras* para consultar si está libre (ej: *${digits === 4 ? '3456' : '428'}*).
+• Escribe *PREMIOS* para conocer el plan de premios completo.
 • Escribe *CUENTAS* para ver los datos de Nequi / Bancolombia.
-• Envía la *foto de tu comprobante* si ya hiciste una consignación o abono.`;
+• Envía la *foto de tu comprobante* si ya realizaste tu pago.`;
 
   await sendTextMessage(instance, senderPhone, welcomeMsg);
   return { handled: true };
 }
 
 module.exports = {
+  formatPhoneNumber,
   getInstanceName,
   getStatus,
   connectInstance,

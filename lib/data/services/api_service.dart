@@ -435,6 +435,19 @@ class ApiService {
     return true;
   }
 
+  Future<int> getRaffleRevision(String raffleId) async {
+    if (_useLocalFallback) return 1;
+    try {
+      final uri = Uri.parse('$baseUrl/raffles/$raffleId/revision');
+      final response = await authGet(uri).timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['revision'] as num?)?.toInt() ?? 1;
+      }
+    } catch (_) {}
+    return 1;
+  }
+
   Future<List<Ticket>> getTickets({String? raffleId, String? search, String? numberSearch, String? status, String? advisorId}) async {
     if (!_useLocalFallback) {
       try {

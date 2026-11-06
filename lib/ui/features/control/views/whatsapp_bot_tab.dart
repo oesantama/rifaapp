@@ -170,12 +170,16 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
   }
 
   Future<void> _sendTestMessage() async {
-    final phone = _testPhoneController.text.trim();
+    String phone = _testPhoneController.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
     if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ingresa un número de celular de prueba')),
       );
       return;
+    }
+    // Auto-agrega indicativo 57 de Colombia si es un celular de 10 dígitos
+    if (phone.length == 10 && phone.startsWith('3')) {
+      phone = '57$phone';
     }
 
     try {
@@ -183,7 +187,7 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
       await api.sendWhatsAppTest(phone);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Mensaje de prueba enviado con éxito.'), backgroundColor: AppTheme.secondaryEmerald),
+        SnackBar(content: Text('✅ Mensaje de prueba enviado con éxito a +$phone.'), backgroundColor: AppTheme.secondaryEmerald),
       );
     } catch (e) {
       if (!mounted) return;

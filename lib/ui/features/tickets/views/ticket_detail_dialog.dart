@@ -763,6 +763,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
         widget.ticket.id,
         {
           'requestId': _requestId,
+          'expectedStatus': widget.ticket.status,
           'amount': amt,
           'buyerName': _buyerNameController.text.trim(),
           'buyerPhone': _buyerPhoneController.text.trim(),

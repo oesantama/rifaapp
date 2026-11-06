@@ -22,6 +22,11 @@ class TicketViewModel extends ChangeNotifier {
   String? _selectedAdvisorFilter;
   String? get selectedAdvisorFilter => _selectedAdvisorFilter;
 
+  int _currentRevision = 0;
+  int get currentRevision => _currentRevision;
+  bool _isBackgroundSyncing = false;
+  bool get isBackgroundSyncing => _isBackgroundSyncing;
+
   /// Loads every ticket of the raffle. Search, status and advisor filters are applied
   /// locally, so [tickets] always holds the full raffle (dashboard, cash, winners, poster)
   /// and the grid can show how many tickets each status has.
@@ -31,11 +36,38 @@ class TicketViewModel extends ChangeNotifier {
 
     try {
       _tickets = await _repository.fetchTickets(raffleId: raffleId);
+      if (raffleId != null && raffleId.isNotEmpty) {
+        _currentRevision = await _repository.getRaffleRevision(raffleId);
+      }
     } catch (e) {
       debugPrint('Error al cargar boletas: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Silently checks if the server revision has changed.
+  /// If changed, reloads tickets in the background without triggering _isLoading
+  /// (avoiding full-screen spinner, jitter, or resetting user view).
+  Future<void> syncIfChanged({required String raffleId}) async {
+    if (_isLoading || _isBackgroundSyncing || raffleId.isEmpty) return;
+    try {
+      final remoteRev = await _repository.getRaffleRevision(raffleId);
+      if (_currentRevision == 0) {
+        _currentRevision = remoteRev;
+        return;
+      }
+      if (remoteRev > _currentRevision) {
+        _isBackgroundSyncing = true;
+        final freshTickets = await _repository.fetchTickets(raffleId: raffleId);
+        _tickets = freshTickets;
+        _currentRevision = remoteRev;
+        _isBackgroundSyncing = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      _isBackgroundSyncing = false;
     }
   }
 

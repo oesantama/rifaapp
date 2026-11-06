@@ -24,6 +24,8 @@ class RaffleRepository {
 
   Future<Raffle> updateRaffle(String raffleId, Map<String, dynamic> data) => _apiService.updateRaffle(raffleId, data);
 
+  Future<int> getRaffleRevision(String raffleId) => _apiService.getRaffleRevision(raffleId);
+
   Future<List<Ticket>> fetchTickets({
     String? raffleId,
     String? search,

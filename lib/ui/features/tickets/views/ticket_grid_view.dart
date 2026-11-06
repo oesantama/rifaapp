@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,7 @@ import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/assigned_numbers_widgets.dart';
 
+import 'package:rifaapp/ui/features/raffles/views/raffle_create_dialog.dart';
 import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
@@ -34,6 +36,26 @@ class _TicketGridViewState extends State<TicketGridView> {
   bool _isGridView = true;
 
   bool _isRefreshing = false;
+  Timer? _liveSyncTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startLiveSync();
+  }
+
+  void _startLiveSync() {
+    _liveSyncTimer?.cancel();
+    _liveSyncTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) return;
+      final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+      final currentRaffle = raffleVM.selectedRaffle;
+      if (currentRaffle != null) {
+        final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+        ticketVM.syncIfChanged(raffleId: currentRaffle.id);
+      }
+    });
+  }
 
   /// Reloads the raffle's tickets from the server so sold / available reflect other users' sales.
   Future<void> _refreshTickets(TicketViewModel ticketVM, String? raffleId, {bool showSummary = true}) async {
@@ -52,6 +74,7 @@ class _TicketGridViewState extends State<TicketGridView> {
 
   @override
   void dispose() {
+    _liveSyncTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -261,16 +284,39 @@ class _TicketGridViewState extends State<TicketGridView> {
                   ? const Center(child: CircularProgressIndicator())
                   : displayTickets.isEmpty
                       ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.confirmation_number_outlined, size: 64, color: Colors.grey.shade400),
-                              const SizedBox(height: 12),
-                              Text(
-                                authVM.isAsesor ? 'No tienes boletas en este filtro' : 'No se encontraron boletas',
-                                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                              ),
-                            ],
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.confirmation_number_outlined, size: 64, color: Colors.grey.shade400),
+                                const SizedBox(height: 12),
+                                Text(
+                                  raffleVM.raffles.isEmpty
+                                      ? '¡Aún no has creado ninguna rifa!'
+                                      : (authVM.isAsesor ? 'No tienes boletas en este filtro' : 'No se encontraron boletas'),
+                                  style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (raffleVM.raffles.isEmpty && authVM.isAdmin) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Crea tu primer sorteo para comenzar a vender boletas y asignar números a tus asesores.',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Crear Primer Sorteo'),
+                                    onPressed: () => showDialog(
+                                      context: context,
+                                      builder: (_) => const RaffleCreateDialog(),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         )
                       : RefreshIndicator(
