@@ -1189,6 +1189,26 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  Future<Map<String, dynamic>> distributeTransferSurplus(
+    String ticketId,
+    String abonoId, {
+    required double currentTicketAmount,
+    required List<Map<String, dynamic>> distributions,
+    String justification = '',
+  }) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/cash/abonos/$ticketId/$abonoId/distribute'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'currentTicketAmount': currentTicketAmount,
+        'distributions': distributions,
+        'justification': justification,
+      }),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw ApiException.fromResponse(response);
+  }
+
   /// Closes a raffle after its draw (deleted in 7 days) / reopens it. Returns the raffle.
   Future<Raffle> closeRaffle(String raffleId, {bool reopen = false}) async {
     final response =

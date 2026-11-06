@@ -3396,7 +3396,8 @@ ${SEP}
 💵 *Cómo pagar:* en efectivo con tu asesor(a) o por transferencia a:
 {cuentas}
 ${SEP}
-🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+🔐 *Verifica tu boleta en línea:*
+{enlace_verificacion}
 ¡Gracias por tu confianza! 🍀`
   },
   abono: {
@@ -3422,7 +3423,8 @@ ${SEP}
 💵 *Para completar el pago:* en efectivo con tu asesor(a) o por transferencia a:
 {cuentas}
 ${SEP}
-🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+🔐 *Verifica tu boleta en línea:*
+{enlace_verificacion}
 ¡Mucha suerte! 🍀`
   },
   pagada: {
@@ -3443,7 +3445,8 @@ ${SEP}
 🏆 *Gana con:* {cifras_ganadoras}
 🗓️ *Sorteos semanales:* {sorteos_semanales}
 ${SEP}
-🔐 *Verifica tu boleta en línea:* {enlace_verificacion}
+🔐 *Verifica tu boleta en línea:*
+{enlace_verificacion}
 🔑 *Código de verificación:* {codigo_verificacion}
 Guarda este mensaje: es tu comprobante. ¡Mucha suerte! 🍀`
   },
@@ -3468,7 +3471,8 @@ ${SEP}
 {cuentas}
 📲 Si pagas por transferencia, envíanos el comprobante por este medio.
 ${SEP}
-🔐 *Verifica tu boleta:* {enlace_verificacion}
+🔐 *Verifica tu boleta:*
+{enlace_verificacion}
 ¡Gracias y muchos éxitos en el sorteo! 🍀`
   }
 };
@@ -3517,6 +3521,10 @@ function colombiaLongDate(value) {
 /** Type of the message that confirms a saved ticket. */
 function receiptTypeOf(ticket) {
   if ((ticket.totalPaid || 0) <= 0) return 'reservada';
+  const hasUnvalidatedTransfer = (ticket.abonos || []).some(a => isTransferAbono(a) && (!a.verification || a.verification.status !== 'VALIDADA'));
+  if (hasUnvalidatedTransfer && !ticket.confirmedByAdmin) {
+    return 'abono';
+  }
   return (ticket.totalPaid || 0) >= (ticket.price || 0) ? 'pagada' : 'abono';
 }
 
@@ -5685,7 +5693,7 @@ function abonoCashState(abono) {
   return 'EN_PODER_ASESOR';
 }
 
-/** Recomputes the ticket's "confirmed in cash" flag from its payments. */
+/** Recomputes the ticket's "confirmed in cash" flag and status from its payments. */
 function recalcCashConfirmation(ticket) {
   const paying = (ticket.abonos || []).filter(a => (a.amount || 0) > 0);
   const settled = paying.length > 0 && paying.every(isAbonoSettled);
@@ -5696,8 +5704,19 @@ function recalcCashConfirmation(ticket) {
     ticket.confirmedByAdmin = false;
     ticket.confirmedDate = null;
   }
-  if (ticket.status === 'PAGADA' && ticket.confirmedByAdmin) ticket.status = 'CONFIRMADA';
-  if (ticket.status === 'CONFIRMADA' && !ticket.confirmedByAdmin) ticket.status = 'PAGADA';
+
+  ticket.totalPaid = (ticket.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
+  ticket.balancePending = Math.max(0, (ticket.price || 0) - ticket.totalPaid);
+
+  if (ticket.status !== 'DISPONIBLE') {
+    if (ticket.totalPaid >= (ticket.price || 0) && ticket.totalPaid > 0) {
+      ticket.status = ticket.confirmedByAdmin ? 'CONFIRMADA' : 'PAGADA';
+    } else if (ticket.totalPaid > 0) {
+      ticket.status = 'ABONO_PARCIAL';
+    } else {
+      ticket.status = 'RESERVADA';
+    }
+  }
 }
 
 /** Payments confirmed before this cash control existed count as received (once, on first start). */
@@ -5878,6 +5897,99 @@ https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
   }
 
   res.json(withVerification(ticket));
+});
+
+// Admin distributes a transfer surplus across other tickets or records a justification
+app.post('/api/cash/abonos/:ticketId/:abonoId/distribute', adminOnly, (req, res) => {
+  const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Pago no encontrado.' });
+
+  const currentTicketAmount = Number(req.body.currentTicketAmount) || (ticket.price || 0);
+  const distributions = Array.isArray(req.body.distributions) ? req.body.distributions : [];
+  const justification = String(req.body.justification || '').trim();
+
+  const totalDist = distributions.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const originalAmount = Number(abono.amount) || 0;
+
+  if (currentTicketAmount + totalDist > originalAmount) {
+    return res.status(400).json({
+      error: `La suma asignada ($${(currentTicketAmount + totalDist).toLocaleString('es-CO')}) excede el valor de la transferencia original ($${originalAmount.toLocaleString('es-CO')}).`
+    });
+  }
+
+  // 1. Ajustar el abono de la boleta actual
+  abono.amount = currentTicketAmount;
+  if (justification) {
+    abono.surplusJustification = justification;
+  }
+
+  const affectedTickets = [ticket];
+
+  // 2. Distribuir a las otras boletas seleccionadas
+  for (let i = 0; i < distributions.length; i++) {
+    const dist = distributions[i];
+    const distAmt = Number(dist.amount) || 0;
+    if (distAmt <= 0) continue;
+
+    let target = null;
+    if (dist.ticketId) {
+      target = (db.tickets || []).find(t => t.id === dist.ticketId && t.raffleId === raffle.id);
+    } else if (dist.ticketNumber !== undefined && dist.ticketNumber !== '') {
+      target = (db.tickets || []).find(t => t.ticketNumber === Number(dist.ticketNumber) && t.raffleId === raffle.id);
+    } else if (dist.opportunity) {
+      target = (db.tickets || []).find(t => t.raffleId === raffle.id && Array.isArray(t.numbers) && t.numbers.includes(String(dist.opportunity).trim()));
+    }
+
+    if (!target) {
+      return res.status(404).json({ error: `Boleta adicional #${dist.ticketNumber || dist.opportunity || dist.ticketId} no encontrada en esta rifa.` });
+    }
+
+    // Asignar al mismo comprador si la boleta estaba disponible
+    if (target.status === 'DISPONIBLE' || !target.buyerName) {
+      target.buyerName = ticket.buyerName;
+      target.buyerPhone = ticket.buyerPhone;
+      target.buyerDocument = ticket.buyerDocument;
+      target.buyerEmail = ticket.buyerEmail;
+      target.buyerCity = ticket.buyerCity;
+      target.buyerCountry = ticket.buyerCountry;
+      target.advisorId = ticket.advisorId;
+      target.advisorName = ticket.advisorName;
+      target.saleChannel = ticket.saleChannel;
+      target.assignedDate = new Date().toISOString();
+    }
+
+    target.abonos = target.abonos || [];
+    target.abonos.push({
+      id: `abn-dist-${Date.now()}-${i}`,
+      amount: distAmt,
+      metodoPago: 'transferencia',
+      date: abono.date,
+      sellerId: abono.sellerId,
+      sellerName: abono.sellerName,
+      note: `Distribuido de Comprobante #${abono.approvalNumber || ''} (Boleta #${ticket.ticketNumber})`,
+      approvalNumber: abono.approvalNumber,
+      originBank: abono.originBank,
+      cuentaDestino: abono.cuentaDestino,
+      transferDate: abono.transferDate,
+      soporteUrl: abono.soporteUrl,
+      soporteDriveId: abono.soporteDriveId,
+      soporteWebViewUrl: abono.soporteWebViewUrl,
+      ...(abono.verification ? { verification: { ...abono.verification } } : {})
+    });
+
+    recalcCashConfirmation(target);
+    affectedTickets.push(target);
+  }
+
+  recalcCashConfirmation(ticket);
+  saveDB();
+  notifyRaffleChanged(ticket.raffleId);
+
+  res.json({
+    message: 'Transferencia distribuida con éxito entre las boletas seleccionadas.',
+    updatedTickets: affectedTickets.map(withVerification)
+  });
 });
 
 // Admin received a cash payment in hand (without a delivery report from the advisor)

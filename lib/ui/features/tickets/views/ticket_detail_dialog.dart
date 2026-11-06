@@ -18,6 +18,7 @@ import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'ticket_print_dialog.dart';
 import 'transfer_widgets.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte, askReason;
@@ -540,6 +541,242 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     }
   }
 
+  Future<void> _showDistributeSurplusDialog(Abono pt, double surplus, NumberFormat currency) async {
+    final currentTicketPrice = widget.ticket.price > 0 ? widget.ticket.price : 150000.0;
+    final assignToCurrentCtrl = TextEditingController(text: currentTicketPrice.toStringAsFixed(0));
+    final extraNumberCtrl = TextEditingController();
+    final extraAmountCtrl = TextEditingController(text: surplus.toStringAsFixed(0));
+    final justificationCtrl = TextEditingController();
+
+    List<Map<String, dynamic>> distributions = [];
+    double remaining = surplus;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDlgState) {
+            void recalcRemaining() {
+              final curVal = double.tryParse(assignToCurrentCtrl.text) ?? 0.0;
+              final sumDist = distributions.fold<double>(0.0, (s, d) => s + ((d['amount'] as num?)?.toDouble() ?? 0.0));
+              remaining = pt.amount - curVal - sumDist;
+              setDlgState(() {});
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: const [
+                  Icon(Icons.call_split, color: Colors.deepPurple),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Distribuir Transferencia con Excedente', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.deepPurple.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('💵 Comprobante #${pt.approvalNumber ?? ""}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(height: 4),
+                            Text('• Total Transferido: ${currency.format(pt.amount)}', style: const TextStyle(fontSize: 13)),
+                            Text('• Valor Boleta #${widget.ticket.displayNumber}: ${currency.format(currentTicketPrice)}', style: const TextStyle(fontSize: 13)),
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Excedente por Distribuir:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                Text(
+                                  currency.format(remaining),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: remaining == 0 ? Colors.green : (remaining < 0 ? Colors.red : Colors.deepPurple),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: assignToCurrentCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Monto a Asignar a la Boleta Actual (#${widget.ticket.displayNumber})',
+                          prefixIcon: const Icon(Icons.confirmation_number_outlined),
+                          border: const OutlineInputBorder(),
+                          helperText: 'Por defecto cubre el 100% de esta boleta (${currency.format(currentTicketPrice)}).',
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => recalcRemaining(),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Asignar Excedente a Otras Boletas / Números:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: extraNumberCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'N° Boleta / Cifras',
+                                hintText: 'Ej: 3567',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: extraAmountCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Monto (\$ COP)',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              keyboardType: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            ),
+                            onPressed: () {
+                              final numStr = extraNumberCtrl.text.trim();
+                              final amt = double.tryParse(extraAmountCtrl.text) ?? 0.0;
+                              if (numStr.isEmpty || amt <= 0) return;
+                              distributions.add({'opportunity': numStr, 'amount': amt});
+                              extraNumberCtrl.clear();
+                              recalcRemaining();
+                              if (remaining > 0) {
+                                extraAmountCtrl.text = remaining.toStringAsFixed(0);
+                              } else {
+                                extraAmountCtrl.clear();
+                              }
+                            },
+                            child: const Text('+ Asignar'),
+                          ),
+                        ],
+                      ),
+                      if (distributions.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (int idx = 0; idx < distributions.length; idx++)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.arrow_right, size: 18, color: Colors.deepPurple),
+                                      Expanded(
+                                        child: Text(
+                                          'Boleta / Oportunidad #${distributions[idx]['opportunity']} ➔ ${currency.format(distributions[idx]['amount'])}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                        onPressed: () {
+                                          distributions.removeAt(idx);
+                                          recalcRemaining();
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: justificationCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Observación / Justificación del Excedente (Opcional)',
+                          hintText: 'Ej: Saldo a favor acordado con el cliente para el siguiente sorteo',
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
+                  onPressed: () async {
+                    final curVal = double.tryParse(assignToCurrentCtrl.text) ?? 0.0;
+                    if (curVal <= 0) return;
+                    try {
+                      final res = await ApiService().distributeTransferSurplus(
+                        widget.ticket.id,
+                        pt.id,
+                        currentTicketAmount: curVal,
+                        distributions: distributions,
+                        justification: justificationCtrl.text.trim(),
+                      );
+                      if (mounted) {
+                        Navigator.pop(ctx);
+                        Navigator.pop(context);
+                        await context.read<TicketViewModel>().loadTickets(raffleId: widget.ticket.raffleId);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: AppTheme.secondaryEmerald,
+                            content: Text(res['message']?.toString() ?? '✓ Transferencia distribuida con éxito.'),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error: $e')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('APLICAR DISTRIBUCIÓN'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Voids one payment (e.g. saved twice) after asking for the reason; it stays in the history.
   Future<void> _confirmVoidAbono(Abono abono, NumberFormat currency) async {
     final reasonCtrl = TextEditingController(text: 'Abono registrado dos veces por error');
@@ -936,11 +1173,32 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text('• Valor Transferido: ${currency.format(pt.amount)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      if (pt.amount > (widget.ticket.balancePending > 0 ? widget.ticket.balancePending : 0))
+                      if (pt.amount > (widget.ticket.price > 0 ? widget.ticket.price : 150000.0)) ...[
                         Text(
-                          '  (Excedente a favor: ${currency.format(pt.amount - (widget.ticket.balancePending > 0 ? widget.ticket.balancePending : 0))})',
+                          '  (Excedente a favor: ${currency.format(pt.amount - (widget.ticket.price > 0 ? widget.ticket.price : 150000.0))})',
                           style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
                         ),
+                        if (authVM.isAdmin) ...[
+                          const SizedBox(height: 6),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.deepPurple,
+                              side: const BorderSide(color: Colors.deepPurple, width: 1.5),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            icon: const Icon(Icons.call_split, size: 16),
+                            label: const Text(
+                              '🔀 Distribuir Excedente en Otras Boletas / Justificar',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () => _showDistributeSurplusDialog(
+                              pt,
+                              pt.amount - (widget.ticket.price > 0 ? widget.ticket.price : 150000.0),
+                              currency,
+                            ),
+                          ),
+                        ],
+                      ],
                       if ((pt.approvalNumber ?? '').isNotEmpty)
                         Text('• Comprobante No.: ${pt.approvalNumber}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                       if ((pt.originBank ?? '').isNotEmpty)

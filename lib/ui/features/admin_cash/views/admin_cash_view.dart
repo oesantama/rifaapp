@@ -9,6 +9,7 @@ import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
+import 'package:rifaapp/ui/features/tickets/views/ticket_detail_dialog.dart';
 
 /// A ticket payment with its ticket, for the cash lists.
 class CashPayment {
@@ -299,6 +300,8 @@ class _TransfersTab extends StatelessWidget {
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.deepPurple)),
                                 if (rejected) CashChip('RECHAZADA', Colors.red.shade700),
                                 if (!hasProof) CashChip('SIN SOPORTE', Colors.orange.shade800, icon: Icons.warning_amber),
+                                if (a.amount > p.ticket.price)
+                                  CashChip('EXCEDENTE: ${cashCurrency.format(a.amount - p.ticket.price)}', Colors.deepPurple, icon: Icons.call_split),
                               ],
                             ),
                             const SizedBox(height: 6),
@@ -333,6 +336,18 @@ class _TransfersTab extends StatelessWidget {
                                   style:
                                       ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
                                 ),
+                                if (a.amount > p.ticket.price)
+                                  OutlinedButton.icon(
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => TicketDetailDialog(ticket: p.ticket),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.call_split, size: 18, color: Colors.deepPurple),
+                                    label: const Text('Distribuir Excedente', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold)),
+                                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.deepPurple, width: 1.5)),
+                                  ),
                                 if (!rejected)
                                   TextButton.icon(
                                     onPressed: () => onReject(p),
