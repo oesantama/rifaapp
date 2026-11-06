@@ -9,6 +9,8 @@ services:
     environment:
       - PORT=3000
       - DATA_SOURCE=local
+      - EVOLUTION_URL=${EVOLUTION_URL:-http://evolution_api:8080}
+      - EVOLUTION_APIKEY=${EVOLUTION_APIKEY:-rifaapp_evo_secret_key_2026}
     env_file:
       - ${RIFAAPP_ENV_FILE:-./backend/.env}
     volumes:
@@ -17,5 +19,13 @@ services:
       - ${RIFAAPP_DATA_DIR:-./backend}/backups:/app/backups
       - ${RIFAAPP_DATA_DIR:-./backend}/assets:/app/assets
       - ./backend/public:/app/public
+    networks:
+      - default
+      - evolution_net
     restart: always
 
+networks:
+  default:
+  evolution_net:
+    name: evolution-api_default
+    external: true
