@@ -499,6 +499,79 @@ class _MainShellScreenState extends State<MainShellScreen> {
                             tooltip: 'Crear Nuevo Sorteo',
                           ),
                   IconButton(
+                    icon: const Icon(Icons.get_app_rounded, color: Color(0xFF38BDF8), size: 21),
+                    tooltip: 'Descargar APK o Instalar App',
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: const Color(0xFF0F172A),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (ctx) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.devices, color: Color(0xFF38BDF8), size: 22),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Instalar o Descargar Rifa Master',
+                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Úsala como aplicación nativa en tu celular Android o instálala como PWA en tu navegador.',
+                                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 20),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  web_launcher.downloadApk();
+                                },
+                                icon: const Icon(Icons.android, color: Colors.white),
+                                label: const Text(
+                                  'Descargar APK para Android',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  web_launcher.promptPwaInstall();
+                                },
+                                icon: const Icon(Icons.install_mobile, color: Colors.white),
+                                label: const Text(
+                                  'Instalar como App Web (PWA)',
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.logout, color: AppTheme.dangerRose, size: 20),
                     onPressed: () {
                       showDialog(

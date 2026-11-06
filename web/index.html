@@ -74,13 +74,49 @@
     <div class="bar"></div>
   </div>
   <script>
+    // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for(let registration of registrations) {
-          registration.unregister();
-        }
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('sw.js', { scope: './' })
+          .then(function(reg) {
+            console.log('[PWA] Service Worker registrado con éxito:', reg.scope);
+          })
+          .catch(function(err) {
+            console.warn('[PWA] Fallo al registrar Service Worker:', err);
+          });
       });
     }
+
+    // PWA Install prompt capture
+    window.deferredPWAInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      window.deferredPWAInstallPrompt = e;
+      window.dispatchEvent(new CustomEvent('pwa-installable'));
+      console.log('[PWA] Evento beforeinstallprompt capturado y listo para instalar');
+    });
+
+    window.promptPWAInstall = function() {
+      if (window.deferredPWAInstallPrompt) {
+        window.deferredPWAInstallPrompt.prompt();
+        window.deferredPWAInstallPrompt.userChoice.then(function(choiceResult) {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('[PWA] Usuario aceptó instalar la app');
+          } else {
+            console.log('[PWA] Usuario declinó la instalación');
+          }
+          window.deferredPWAInstallPrompt = null;
+        });
+      } else {
+        alert('Para instalar la aplicación Web en tu dispositivo, toca el botón Compartir o Menú del navegador y selecciona "Agregar a la pantalla de inicio" o "Instalar aplicación".');
+      }
+    };
+
+    window.addEventListener('appinstalled', function() {
+      console.log('[PWA] Rifa Master ha sido instalada.');
+      window.deferredPWAInstallPrompt = null;
+    });
+
     window.addEventListener('flutter-first-frame', function () {
       var s = document.getElementById('splash');
       if (s) { s.style.opacity = '0'; setTimeout(function () { s.remove(); }, 400); }

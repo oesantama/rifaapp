@@ -4,6 +4,7 @@ import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/legal/legal_widgets.dart';
 import 'package:rifaapp/version.dart';
 import 'package:rifaapp/ui/features/monetization/app_config_view_model.dart';
+import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -567,7 +568,73 @@ class _LoginViewState extends State<LoginView> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
-                  const SizedBox(height: 10),
+
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.devices, size: 16, color: Color(0xFF38BDF8)),
+                            SizedBox(width: 8),
+                            Text(
+                              'Disponible para tu celular o PC:',
+                              style: TextStyle(
+                                color: Color(0xFFCBD5E1),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: downloadApk,
+                                icon: const Icon(Icons.android, size: 18, color: Colors.white),
+                                label: const Text(
+                                  'Descargar APK',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: promptPwaInstall,
+                                icon: const Icon(Icons.install_mobile, size: 18, color: Colors.white),
+                                label: const Text(
+                                  'Instalar PWA',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2563EB),
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
                   const LegalLinks(),
                 ],
               ),

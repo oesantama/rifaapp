@@ -1,4 +1,5 @@
 import 'dart:html' as html;
+import 'dart:js' as js;
 
 void openWebWindow(String url) {
   try {
@@ -16,6 +17,25 @@ void reloadPage() {
   try {
     html.window.location.reload();
   } catch (_) {}
+}
+
+void promptPwaInstall() {
+  try {
+    js.context.callMethod('promptPWAInstall');
+  } catch (_) {}
+}
+
+void downloadApk() {
+  try {
+    final anchor = html.AnchorElement(href: '/descargar-apk')
+      ..setAttribute('download', 'RifaMaster.apk')
+      ..style.display = 'none';
+    html.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+  } catch (_) {
+    html.window.open('/descargar-apk', '_self');
+  }
 }
 
 /// Opens the WhatsApp app without leaving a blank tab behind (wa.me in a new tab only redirects to
