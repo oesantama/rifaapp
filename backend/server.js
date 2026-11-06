@@ -525,7 +525,7 @@ app.post('/eliminar-cuenta', express.urlencoded({ extended: false, limit: '10kb'
 function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], error = null, phone = '', baseUrl = '' }) {
   const companyName = company ? (company.name || company.companyName || 'Rifa Master') : 'Rifa Master';
   const companyPhone = company ? (company.phone || company.code || '') : '';
-  const waContact = formatPhoneNumber(companyPhone) || '573212300050';
+  const waContact = whatsappService.formatPhoneNumber(companyPhone) || '573212300050';
 
   // Si no hay boleta seleccionada, mostrar buscador estilo Los Plata
   if (!ticket) {
