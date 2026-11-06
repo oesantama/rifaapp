@@ -522,46 +522,463 @@ app.post('/eliminar-cuenta', express.urlencoded({ extended: false, limit: '10kb'
   res.send(legalPage('Solicitud recibida', '<div class="ok"><b>Recibimos su solicitud.</b><br>Verificaremos su identidad y la atenderemos en un máximo de 15 días hábiles. Le responderemos al contacto que indicó.</div>'));
 });
 
+function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], error = null, phone = '', baseUrl = '' }) {
+  const companyName = company ? (company.name || company.companyName || 'Rifa Master') : 'Rifa Master';
+  const companyPhone = company ? (company.phone || company.code || '') : '';
+  const waContact = formatPhoneNumber(companyPhone) || '573212300050';
+
+  // Si no hay boleta seleccionada, mostrar buscador estilo Los Plata
+  if (!ticket) {
+    return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consultar Boleta - ${escapeHtml(companyName)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background-color: #F8FAFC; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: #000000; color: #FFFFFF; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+    main { flex: 1; max-width: 480px; width: 100%; margin: 0 auto; padding: 24px 16px; }
+    .subhead { font-size: 11px; font-weight: 800; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 18px; }
+    .banner { background: #000000; color: #FFFFFF; border-radius: 16px; padding: 18px; margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start; }
+    .badge-icon { background: #10B981; color: #FFFFFF; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+    .banner-text b { font-size: 11px; letter-spacing: 1px; color: #10B981; text-transform: uppercase; display: block; margin-bottom: 4px; }
+    .banner-text p { font-size: 13.5px; line-height: 1.45; color: #E2E8F0; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13.5px; font-weight: 700; margin-bottom: 8px; color: #1E293B; }
+    .phone-input-row { display: flex; gap: 8px; }
+    .country-box { background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; width: 105px; flex-shrink: 0; }
+    .input-box { flex: 1; background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 600; color: #0F172A; outline: none; transition: border-color .2s; }
+    .input-box:focus { border-color: #0F172A; }
+    .hint { font-size: 12px; color: #64748B; margin-top: 6px; }
+    .btn-submit { width: 100%; background: #E2E8F0; color: #0F172A; font-size: 15px; font-weight: 700; padding: 14px; border: none; border-radius: 14px; cursor: pointer; transition: all .2s; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-submit.active { background: #000000; color: #FFFFFF; }
+    .error-card { background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; padding: 14px 16px; border-radius: 12px; font-size: 13px; margin-bottom: 20px; line-height: 1.4; }
+    .wa-float { position: fixed; bottom: 24px; right: 24px; background: #25D366; color: #FFFFFF; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(37,211,102,.4); text-decoration: none; z-index: 99; transition: transform .2s; }
+    .wa-float:hover { transform: scale(1.08); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">${escapeHtml(companyName)}</div>
+    <div style="font-size: 13px; font-weight: 600;">Ver mi boleta</div>
+  </header>
+  <main>
+    <div class="subhead">Consultar Boleta</div>
+    <h1>Encontremos tu boleta</h1>
+
+    <div class="banner">
+      <div class="badge-icon">i</div>
+      <div class="banner-text">
+        <b>IMPORTANTE</b>
+        <p>Usa el teléfono o el usuario de WhatsApp con el que quedó registrada tu boleta.</p>
+      </div>
+    </div>
+
+    ${error ? `<div class="error-card">${escapeHtml(error)}</div>` : ''}
+
+    <form method="GET" action="/boleta">
+      <div class="form-group">
+        <label>Buscar por</label>
+        <select class="input-box" style="width: 100%;">
+          <option selected>Número de teléfono</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>¿Cuál es tu número de teléfono?</label>
+        <div class="phone-input-row">
+          <div class="country-box">🇨🇴 +57</div>
+          <input type="tel" name="phone" id="phoneInput" class="input-box" placeholder="0000000000" value="${escapeHtml(phone)}" required autofocus>
+        </div>
+        <div class="hint">Ejemplo: 3107334957</div>
+      </div>
+
+      <button type="submit" id="btnSubmit" class="btn-submit">
+        <span>Ver mi boleta</span>
+        <span>→</span>
+      </button>
+    </form>
+  </main>
+
+  <a href="https://wa.me/${waContact}?text=${encodeURIComponent('Hola, necesito ayuda para consultar mi boleta en ' + companyName)}" class="wa-float" target="_blank" title="Contactar por WhatsApp">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
+  </a>
+
+  <script>
+    const input = document.getElementById('phoneInput');
+    const btn = document.getElementById('btnSubmit');
+    input.addEventListener('input', () => {
+      if (input.value.trim().length >= 7) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    if (input.value.trim().length >= 7) btn.classList.add('active');
+  </script>
+</body>
+</html>`;
+  }
+
+  // Si se encontró boleta(s):
+  const isPaid = ticket.status === 'PAGADA' || ticket.status === 'CONFIRMADA';
+  const drawDate = formatRaffleDate(raffle.mainDrawDate, false);
+  const opportunitiesText = Array.isArray(ticket.numbers) ? ticket.numbers.join('  •  ') : String(ticket.ticketNumber || '');
+  
+  // Galería de fotos del premio
+  let images = [];
+  if (Array.isArray(raffle.prizeImages) && raffle.prizeImages.length > 0) {
+    images = raffle.prizeImages;
+  } else if (raffle.aficheUrl) {
+    images = [raffle.aficheUrl];
+  } else if (raffle.fondoBoletaUrl) {
+    images = [raffle.fondoBoletaUrl];
+  } else {
+    // Galería demo visual elegante si no se han cargado fotos aún
+    images = ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80'];
+  }
+
+  const maskedDoc = ticket.buyerDocument ? `••• ${ticket.buyerDocument.slice(-3)}` : '••••••';
+  const city = company.city || 'San Martín';
+  const emailMasked = ticket.buyerEmail ? ticket.buyerEmail.replace(/^(.{2})(.*)(@.*)$/, '$1•••$3') : (ticket.buyerPhone ? `${ticket.buyerPhone.slice(0, 3)}•••@rifamaster.com` : 'No registrado');
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boleta Nº ${escapeHtml(opportunitiesText)} - ${escapeHtml(raffle.title || companyName)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background-color: #F8FAFC; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: #000000; color: #FFFFFF; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+    .back-btn { background: #1E293B; color: #FFFFFF; border: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: 800; }
+    .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
+    main { flex: 1; max-width: 500px; width: 100%; margin: 0 auto; padding: 16px 14px 60px; }
+    
+    .raffle-hero { margin-bottom: 14px; text-align: center; }
+    .raffle-hero h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 2px; }
+    .raffle-hero .subtitle { font-size: 14px; color: #64748B; font-weight: 600; }
+
+    /* Carrusel de fotos de premios */
+    .carousel-card { position: relative; border-radius: 20px; overflow: hidden; background: #000; margin-bottom: 18px; box-shadow: 0 10px 25px rgba(0,0,0,.08); }
+    .carousel-track { width: 100%; height: 280px; position: relative; }
+    .carousel-slide { width: 100%; height: 100%; object-fit: cover; display: none; }
+    .carousel-slide.active { display: block; }
+    .carousel-badge { position: absolute; top: 14px; right: 14px; background: rgba(0,0,0,.6); color: #fff; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
+    .carousel-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.8); border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #000; }
+    .carousel-btn.prev { left: 10px; }
+    .carousel-btn.next { right: 10px; }
+    .carousel-footer { position: absolute; bottom: 12px; left: 14px; background: rgba(0,0,0,.7); color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px); }
+
+    /* Tarjetas de información */
+    .card { background: #FFFFFF; border-radius: 18px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(15,23,42,.03); border: 1px solid #F1F5F9; }
+    .card-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 16px; font-weight: 800; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .data-item { margin-bottom: 10px; }
+    .data-label { font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px; }
+    .data-val { font-size: 15px; font-weight: 700; color: #0F172A; }
+    .badge-paid { color: #059669; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
+    .badge-pending { color: #D97706; font-weight: 800; }
+    .state-msg { font-size: 13.5px; color: #334155; margin-top: 6px; line-height: 1.4; }
+
+    /* Acordeones */
+    details { border-top: 1px solid #F1F5F9; padding: 14px 0 4px; }
+    details:first-of-type { border-top: none; }
+    summary { font-size: 14px; font-weight: 700; color: #0F172A; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: '⌄'; font-size: 18px; font-weight: 800; color: #64748B; transition: transform .2s; }
+    details[open] summary::after { transform: rotate(180deg); }
+    .details-body { padding-top: 12px; font-size: 13px; color: #475569; line-height: 1.55; }
+
+    .btn-share { width: 100%; background: #000000; color: #FFFFFF; font-size: 15px; font-weight: 700; padding: 16px; border: none; border-radius: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; margin-top: 10px; }
+    .footer-text { text-align: center; font-size: 11.5px; color: #94A3B8; margin-top: 24px; line-height: 1.5; padding: 0 10px; }
+    .wa-float { position: fixed; bottom: 24px; right: 24px; background: #25D366; color: #FFFFFF; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(37,211,102,.4); text-decoration: none; z-index: 99; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/boleta" class="back-btn" title="Buscar otra boleta">‹</a>
+    <div class="header-title">Boleta Nº ${escapeHtml(opportunitiesText)}</div>
+    <div style="width: 36px;"></div>
+  </header>
+
+  <main>
+    <div class="raffle-hero">
+      <h1>${escapeHtml(raffle.title || 'Gran Sorteo')}</h1>
+      <div class="subtitle">Boleta número ${escapeHtml(opportunitiesText)}</div>
+    </div>
+
+    <!-- Carrusel de fotos del premio -->
+    <div class="carousel-card">
+      <div class="carousel-track" id="carouselTrack">
+        ${images.map((img, i) => `<img src="${escapeHtml(img)}" class="carousel-slide ${i === 0 ? 'active' : ''}" alt="Foto premio">`).join('')}
+      </div>
+      <div class="carousel-badge" id="carouselBadge">1 / ${images.length}</div>
+      ${images.length > 1 ? `
+        <button class="carousel-btn prev" onclick="prevSlide()">‹</button>
+        <button class="carousel-btn next" onclick="nextSlide()">›</button>
+      ` : ''}
+      <div class="carousel-footer">${escapeHtml(raffle.description ? raffle.description.substring(0, 40) + '...' : 'Premio Oficial')}</div>
+    </div>
+
+    <!-- Tarjeta: Titular de la boleta -->
+    <div class="card">
+      <div class="card-title-row">
+        <span>📑</span>
+        <span>Titular de la boleta</span>
+      </div>
+      <div class="grid-2">
+        <div class="data-item">
+          <div class="data-label">Nombre</div>
+          <div class="data-val">${escapeHtml(ticket.buyerName || 'Sin asignar')}</div>
+        </div>
+        <div class="data-item">
+          <div class="data-label">CC</div>
+          <div class="data-val">${escapeHtml(maskedDoc)}</div>
+        </div>
+        <div class="data-item">
+          <div class="data-label">Celular</div>
+          <div class="data-val">${escapeHtml(ticket.buyerPhone || '—')}</div>
+        </div>
+        <div class="data-item">
+          <div class="data-label">Ciudad</div>
+          <div class="data-val">${escapeHtml(city)}</div>
+        </div>
+      </div>
+      <div class="data-item" style="margin-top: 4px;">
+        <div class="data-label">Correo Electrónico</div>
+        <div class="data-val" style="font-size: 13.5px;">${escapeHtml(emailMasked)}</div>
+      </div>
+      ${ticket.advisorName ? `
+        <div class="data-item" style="margin-top: 4px;">
+          <div class="data-label">Asesor Referido</div>
+          <div class="data-val" style="font-size: 13.5px;">${escapeHtml(ticket.advisorName)}</div>
+        </div>
+      ` : ''}
+    </div>
+
+    <!-- Tarjeta: Estado de pago -->
+    <div class="card">
+      <div class="card-title-row">
+        <span>💳</span>
+        <span>Estado de pago</span>
+      </div>
+      <div class="grid-2">
+        <div class="data-item">
+          <div class="data-label">Total Abonado</div>
+          <div class="data-val">$${Number(ticket.totalPaid || 0).toLocaleString('es-CO')}</div>
+        </div>
+        <div class="data-item">
+          <div class="data-label">Estado</div>
+          <div class="data-val">
+            ${isPaid ? '<span class="badge-paid">Pagada ✓</span>' : '<span class="badge-pending">Apartada ⏳</span>'}
+          </div>
+        </div>
+      </div>
+      <div class="state-msg">
+        ${isPaid 
+          ? 'Esta boleta está <b>totalmente pagada</b>. ¡Mucha suerte en el sorteo!' 
+          : `Saldo pendiente por pagar: <b>$${Number(ticket.balancePending || 0).toLocaleString('es-CO')} COP</b>.`}
+      </div>
+
+      <div style="margin-top: 14px;">
+        <details>
+          <summary>Ver abonos realizados (${ticket.abonos ? ticket.abonos.length : 0})</summary>
+          <div class="details-body">
+            ${ticket.abonos && ticket.abonos.length > 0 ? ticket.abonos.map((a, idx) => `
+              <div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #E2E8F0;">
+                <span>${idx + 1}. ${a.date ? a.date.substring(0, 10) : 'Abono'} (${escapeHtml(a.metodoPago || 'Efectivo')})</span>
+                <b>$${Number(a.amount || 0).toLocaleString('es-CO')} COP</b>
+              </div>
+            `).join('') : '<p>No se registran pagos previos para esta boleta.</p>'}
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Tarjeta: Premios y Condiciones -->
+    <div class="card">
+      <details>
+        <summary>🎁 Ver premios de la rifa</summary>
+        <div class="details-body">
+          <p><b>🏆 Premio Mayor:</b><br>${escapeHtml(raffle.description || raffle.title)}</p>
+          ${raffle.weeklyPrizes && raffle.weeklyPrizes.length > 0 ? `
+            <div style="margin-top: 10px;">
+              <b>🎁 Premios Anticipados / Semanales:</b>
+              <ul style="padding-left: 18px; margin-top: 4px;">
+                ${raffle.weeklyPrizes.map(p => `<li><b>${escapeHtml(p.name)}:</b> $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'Sorteo programado'})</li>`).join('')}
+              </ul>
+            </div>
+          ` : ''}
+        </div>
+      </details>
+
+      <details>
+        <summary>🛡️ Ver condiciones para ganar</summary>
+        <div class="details-body">
+          <p>• <b>Lotería Oficial:</b> ${escapeHtml(raffle.mainLotteryName || raffle.lotteryName || 'Lotería Oficial')}</p>
+          <p>• <b>Fecha de Sorteo:</b> ${escapeHtml(drawDate)}</p>
+          <p>• <b>Modalidad:</b> Juega con las ${raffle.winningDigitsPosition === 'PRIMERAS' ? 'primeras' : 'últimas'} ${raffle.digits || 4} cifras del premio mayor.</p>
+          <p>• <b>Requisito:</b> La boleta debe estar 100% cancelada para participar en el sorteo.</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>🔒 Ver condiciones de la boleta</summary>
+        <div class="details-body">
+          <p>Documento oficial emitido por ${escapeHtml(companyName)}. Cada boleta cuenta con serial digital y firma criptográfica registrada en la plataforma oficial.</p>
+          <p style="margin-top: 6px;">El premio será entregado al titular registrado presentando su documento de identidad original.</p>
+        </div>
+      </details>
+    </div>
+
+    ${ticketsList.length > 1 ? `
+      <div class="card" style="background: #F1F5F9;">
+        <div class="card-title-row" style="font-size: 14px; margin-bottom: 8px;">
+          <span>🎟️</span>
+          <span>Tus otras boletas registradas (${ticketsList.length - 1})</span>
+        </div>
+        ${ticketsList.filter(t => t.id !== ticket.id).map(t => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #E2E8F0;">
+            <span>Boleta: <b>${escapeHtml(t.numbers.join(' - '))}</b> (${t.status})</span>
+            <a href="/boleta?phone=${encodeURIComponent(phone)}&ticketId=${t.id}" style="color: #000; font-weight: 700; text-decoration: none; font-size: 13px;">Ver →</a>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    <a href="https://api.whatsapp.com/send?text=${encodeURIComponent('🎟️ ¡Hola! Mira mi boleta oficial para la rifa ' + raffle.title + ' con los números ' + opportunitiesText + ': ' + baseUrl + '/boleta?phone=' + ticket.buyerPhone)}" class="btn-share" target="_blank">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
+      <span>Compartir por WhatsApp</span>
+    </a>
+
+    <div class="footer-text">
+      Documento oficial de participación en la rifa "${escapeHtml(raffle.title)}".<br>
+      <b>${escapeHtml(companyName)}</b> • NIT ${escapeHtml(company.nit || 'Oficial')}.<br>
+      Aplican términos y condiciones.
+    </div>
+  </main>
+
+  <a href="https://wa.me/${waContact}?text=${encodeURIComponent('Hola, tengo una consulta sobre mi boleta ' + opportunitiesText)}" class="wa-float" target="_blank" title="Contactar por WhatsApp">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
+  </a>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.carousel-slide');
+    const badge = document.getElementById('carouselBadge');
+
+    function showSlide(idx) {
+      if (!slides.length) return;
+      slides.forEach(s => s.classList.remove('active'));
+      currentSlide = (idx + slides.length) % slides.length;
+      slides[currentSlide].classList.add('active');
+      if (badge) badge.innerText = (currentSlide + 1) + ' / ' + slides.length;
+    }
+
+    function prevSlide() { showSlide(currentSlide - 1); }
+    function nextSlide() { showSlide(currentSlide + 1); }
+
+    // Touch swipe en móviles
+    let touchStartX = 0;
+    const track = document.getElementById('carouselTrack');
+    if (track) {
+      track.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
+      track.addEventListener('touchend', e => {
+        const touchEndX = e.changedTouches[0].screenX;
+        if (touchStartX - touchEndX > 40) nextSlide();
+        if (touchEndX - touchStartX > 40) prevSlide();
+      }, { passive: true });
+    }
+  </script>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// PORTAL PÚBLICO DEL COMPRADOR (Estilo Los Plata: consulta por teléfono o boleta)
+// ---------------------------------------------------------------------------
+app.get(['/boleta', '/consulta'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const rawPhone = String(req.query.phone || '').trim();
+  const ticketId = String(req.query.ticketId || '').trim();
+  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+
+  if (!cleanPhone && !ticketId) {
+    return res.send(renderBuyerPortalHtml({}));
+  }
+
+  // Buscar boletas que coincidan con el teléfono (terminación de 10 dígitos o completo)
+  const tickets = (db.tickets || []).filter(t => {
+    if (t.status === 'DISPONIBLE') return false;
+    if (ticketId && t.id === ticketId) return true;
+    if (cleanPhone) {
+      const tPhone = String(t.buyerPhone || '').replace(/[^0-9]/g, '');
+      if (tPhone && (tPhone.endsWith(cleanPhone) || cleanPhone.endsWith(tPhone))) return true;
+    }
+    return false;
+  });
+
+  if (tickets.length === 0) {
+    return res.send(renderBuyerPortalHtml({
+      error: `No encontramos ninguna boleta activa registrada con el teléfono ${cleanPhone}. Verifica que esté bien escrito o comunícate con tu asesor.`,
+      phone: rawPhone
+    }));
+  }
+
+  // Seleccionar la boleta especificada o la más reciente
+  const selectedTicket = ticketId ? (tickets.find(t => t.id === ticketId) || tickets[0]) : tickets[0];
+  const raffle = (db.raffles || []).find(r => r.id === selectedTicket.raffleId) || {};
+  const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+  res.send(renderBuyerPortalHtml({
+    ticket: selectedTicket,
+    raffle,
+    company,
+    ticketsList: tickets,
+    phone: rawPhone,
+    baseUrl
+  }));
+});
+
+// Verificación por código QR /verificar/:code (muestra el portal completo del comprador)
 app.get('/verificar/:code', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (verifyRateLimited(req.ip || '')) {
-    return res.status(429).send(verificationPage({ ok: false, title: 'Demasiadas consultas', note: 'Intente de nuevo en un minuto.' }));
+    return res.status(429).send(renderBuyerPortalHtml({ error: 'Demasiadas consultas. Intente de nuevo en un minuto.' }));
   }
   const code = String(req.params.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const formatted = code.length === 10 ? `${code.slice(0, 5)}-${code.slice(5)}` : null;
   const ticket = formatted ? (db.tickets || []).find(t => t.status !== 'DISPONIBLE' && ticketVerificationCode(t) === formatted) : null;
+  
   if (!ticket) {
-    return res.status(404).send(verificationPage({
-      ok: false,
-      title: 'Comprobante no válido',
-      rows: [['Código consultado', formatted || req.params.code]],
-      note: 'Este código no corresponde a ninguna boleta vigente. Puede ser falso, o la venta fue anulada o modificada. Comuníquese con el vendedor o la organización de la rifa.'
+    return res.status(404).send(renderBuyerPortalHtml({
+      error: `El código consultado (${formatted || req.params.code}) no corresponde a ninguna boleta vigente. Puede ser falso o haber sido anulado.`
     }));
   }
+
   const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId) || {};
   const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
-  const statusLabel = { RESERVADA: 'Apartada / Fiada', ABONO_PARCIAL: 'Abono parcial', PAGADA: 'Pagada', CONFIRMADA: 'Pagada y confirmada' }[ticket.status] || ticket.status;
-  const money = v => `$${Math.round(v || 0).toLocaleString('es-CO')}`;
-  const drawDate = formatRaffleDate(raffle.mainDrawDate, false);
-  const fullyPaid = (ticket.balancePending || 0) <= 0 && (ticket.totalPaid || 0) > 0;
-  res.send(verificationPage({
-    ok: true,
-    color: fullyPaid ? '#059669' : '#D97706',
-    title: fullyPaid ? 'Boleta auténtica y pagada' : 'Boleta auténtica — con saldo pendiente',
-    rows: [
-      ['Rifa', raffle.title || '—'],
-      ['Organiza', company.name || '—'],
-      ['Número(s)', (ticket.numbers || []).join(' - ')],
-      ['Comprador', maskName(ticket.buyerName) || '—'],
-      ['Estado', statusLabel],
-      ['Abonado', money(ticket.totalPaid)],
-      ['Saldo pendiente', money(ticket.balancePending)],
-      ['Juega el día', drawDate],
-      ['Lotería', mainLotteryOf(raffle) || '—'],
-      ['Código', formatted]
-    ],
-    note: `Consulta realizada el ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}. Los datos se leen en este momento del sistema de la rifa.`,
-    terms: renderTerms(company.termsTemplate, raffle, company)
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+  res.send(renderBuyerPortalHtml({
+    ticket,
+    raffle,
+    company,
+    ticketsList: [ticket],
+    baseUrl
   }));
 });
 
@@ -3221,6 +3638,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
     }
   }
   if (req.body.description !== undefined) raffle.description = req.body.description;
+  if (Array.isArray(req.body.prizeImages)) raffle.prizeImages = req.body.prizeImages;
   if (req.body.mainDrawDate !== undefined) raffle.mainDrawDate = req.body.mainDrawDate;
   if (req.body.weeklyPrizesStartDate !== undefined) raffle.weeklyPrizesStartDate = req.body.weeklyPrizesStartDate;
   if (req.body.assignedAdvisorIds !== undefined) raffle.assignedAdvisorIds = req.body.assignedAdvisorIds;

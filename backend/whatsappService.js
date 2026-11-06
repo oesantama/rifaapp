@@ -150,8 +150,63 @@ async function sendTextMessage(instanceName, number, text) {
   });
 }
 
-// Memoria a corto plazo de última consulta por usuario { 'senderPhone': { lastTicketId, lastRaffleId, timestamp } }
+// Memoria a corto plazo de última consulta por usuario { 'senderPhone': { lastTicketId, lastRaffleId, lastOpportunity, waitingData, lastImageAt, timestamp } }
 const lastUserInquiry = new Map();
+
+/**
+ * Extrae datos del perfil del comprador para facturación electrónica y registro legal
+ */
+function extractBuyerProfile(text) {
+  const result = {
+    name: '',
+    document: '',
+    email: '',
+    city: ''
+  };
+
+  // 1. Correo electrónico
+  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) {
+    result.email = emailMatch[0].toLowerCase();
+  }
+
+  // 2. Cédula / NIT
+  const docMatchWithPrefix = text.match(/(?:cc|c\.c\.|nit|c[eé]dula|id|doc|identificaci[oó]n)[:\s]*([0-9]{6,12})/i);
+  if (docMatchWithPrefix) {
+    result.document = docMatchWithPrefix[1];
+  } else {
+    const allNums = text.match(/\b\d{6,11}\b/g) || [];
+    const nonCell = allNums.find(n => !(n.length === 10 && n.startsWith('3')));
+    if (nonCell) {
+      result.document = nonCell;
+    }
+  }
+
+  // 3. Ciudad
+  const cityMatch = text.match(/(?:ciudad|municipio|ubicaci[oó]n|vive en)[:\s]*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{3,30})/i);
+  if (cityMatch) {
+    result.city = cityMatch[1].trim();
+  }
+
+  // 4. Nombre
+  const nameMatchWithPrefix = text.match(/(?:nombre|titular|razon social)[:\s]*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{4,45})/i);
+  if (nameMatchWithPrefix) {
+    result.name = nameMatchWithPrefix[1].trim();
+  } else {
+    let cleaned = text
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
+      .replace(/(?:cc|c\.c\.|nit|c[eé]dula|id|ciudad|pais|correo|email)[:\s]*/gi, '')
+      .replace(/\b\d{5,12}\b/g, '')
+      .replace(/[,;.\n]+/g, ' ')
+      .trim();
+    const words = cleaned.split(/\s+/).filter(w => w.length > 2);
+    if (words.length >= 2 && words.length <= 6) {
+      result.name = words.join(' ');
+    }
+  }
+
+  return result;
+}
 
 /**
  * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde de forma inteligente
@@ -172,7 +227,6 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
 
   const senderJid = key.remoteJid || '';
   if (senderJid.endsWith('@g.us')) {
-    // Ignorar grupos
     return { ignored: true };
   }
 
@@ -226,7 +280,6 @@ Si deseas una asesoría personalizada, responde *ASESOR* y un comercial te conta
       return { handled: true };
     }
 
-    // Saludo General SuperAdmin
     const greetingSuper = 
 `👋 ¡Hola! Bienvenido a *Rifa Master Oficial* 🏆
 El sistema profesional para gestión de rifas, boletas concurrentes para +100 asesores, caja y bots de WhatsApp.
@@ -249,7 +302,7 @@ _(Escribe el número de la opción o tu consulta)_`;
 
   if (instance.startsWith('asesor_')) {
     const advId = instance.replace('asesor_', '');
-    advisor = (db.advisors || []).find(a => a.id === advId || a.username === advId);
+    advisor = (db.advisors || []).find(a => a.id === advId || a.username === advId || (a.code && a.code.toLowerCase() === advId));
     if (advisor) {
       company = (db.companies || []).find(c => c.id === advisor.companyId);
     }
@@ -262,13 +315,11 @@ _(Escribe el número de la opción o tu consulta)_`;
     );
   }
 
-  // Fallback a primera empresa si no se encuentra
   if (!company && db.companies && db.companies.length > 0) {
     company = db.companies[0];
   }
 
   const companyName = company?.name || company?.companyName || 'Rifa Master';
-  const companyCode = company?.code || '';
 
   // Buscar rifas activas de la empresa
   const activeRaffles = (db.raffles || []).filter(r => 
@@ -278,7 +329,6 @@ _(Escribe el número de la opción o tu consulta)_`;
   );
   const mainRaffle = activeRaffles[0];
 
-  // Si no hay rifas creadas aún
   if (!mainRaffle) {
     let noRaffleMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n\n`;
     noRaffleMsg += `Actualmente estamos afinando los detalles de nuestro próximo gran sorteo.\n`;
@@ -288,7 +338,6 @@ _(Escribe el número de la opción o tu consulta)_`;
     return { handled: true };
   }
 
-  // Contexto inteligente de la rifa activa
   const digits = mainRaffle.digits || 4;
   const opportunities = mainRaffle.opportunitiesPerTicket || 1;
   const ticketPrice = Number(mainRaffle.ticketPrice || 0);
@@ -302,27 +351,119 @@ _(Escribe el número de la opción o tu consulta)_`;
 
   // 1. RECEPCIÓN DE COMPROBANTES DE PAGO / TRANSFERENCIA (FOTO)
   if (hasImage) {
-    const receiptReply = 
-`📸 *¡Comprobante de transferencia recibido con éxito!* ✅
-Hemos recibido la imagen de tu pago para *${companyName}*.
+    const inquiry = lastUserInquiry.get(senderPhone);
+    let targetTicket = null;
+    let numberIdentified = '';
 
-📋 *Para procesar tu boleta más rápido, por favor indícanos:*
-1️⃣ Tu *Nombre y Apellidos completos*.
-2️⃣ El *número de boleta o cifras* que compraste o abonaste.
+    if (inquiry && inquiry.lastTicketId) {
+      targetTicket = (db.tickets || []).find(t => t.id === inquiry.lastTicketId);
+      numberIdentified = inquiry.lastOpportunity || (targetTicket ? targetTicket.numbers[0] : '');
+    }
 
-Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia y te emitiremos tu boleta oficial con código QR y respaldo digital. 🍀`;
+    let receiptReply = `📸 *¡Comprobante de transferencia recibido con éxito!* ✅\nHemos recibido la imagen de tu pago para *${companyName}*.\n\n`;
+
+    if (numberIdentified && targetTicket) {
+      receiptReply += `🎟️ *Boleta identificada de la conversación:* *${numberIdentified}* (Boleta #${targetTicket.ticketNumber})\n`;
+      receiptReply += `_(Si deseas cambiar de número, solo escribe el nuevo número que deseas)._\n\n`;
+    }
+
+    receiptReply += `📋 *Para el registro legal, emisión de boleta con QR y facturación electrónica, indícanos:*
+1️⃣ *Nombre y Apellidos completos* (o Razón Social)
+2️⃣ *Cédula de Ciudadanía o NIT*
+3️⃣ *Correo electrónico* (para el envío de tu boleta y factura)
+4️⃣ *Ciudad y País* (ej: San Martín, Colombia)
+${!numberIdentified ? '5️⃣ *Número de boleta o cifras que estás jugando*\n' : ''}
+✍️ *Puedes responder con todos tus datos en un solo mensaje.*
+Nuestro equipo validará la transferencia y asentará tu pago de inmediato. 🍀`;
+
+    lastUserInquiry.set(senderPhone, {
+      ...(inquiry || { lastRaffleId: mainRaffle.id }),
+      lastTicketId: targetTicket ? targetTicket.id : (inquiry?.lastTicketId || null),
+      lastOpportunity: numberIdentified,
+      waitingData: true,
+      lastImageAt: Date.now()
+    });
+
     await sendTextMessage(instance, senderPhone, receiptReply);
     return { handled: true };
   }
 
-  // 2. CONSULTA DE MEDIOS DE PAGO / CUENTAS
+  // 2. PARSEO DE DATOS DEL COMPRADOR (Si responde con sus datos: Nombre, Cédula, Correo, Ciudad)
+  const inquiry = lastUserInquiry.get(senderPhone);
+  const profile = extractBuyerProfile(userText);
+  const hasProfileData = (profile.name && (profile.document || profile.email)) || (profile.document && profile.email);
+
+  if (hasProfileData && inquiry && inquiry.lastTicketId) {
+    const tickets = (db.tickets || []).filter(t => t.raffleId === inquiry.lastRaffleId);
+    const targetTicket = tickets.find(t => t.id === inquiry.lastTicketId);
+
+    if (targetTicket) {
+      if (profile.name) targetTicket.buyerName = profile.name;
+      if (profile.document) targetTicket.buyerDocument = profile.document;
+      if (profile.email) targetTicket.buyerEmail = profile.email;
+      if (profile.city) targetTicket.buyerCity = profile.city;
+      targetTicket.buyerPhone = senderPhone;
+      targetTicket.saleChannel = 'WhatsApp';
+      targetTicket.assignedDate = targetTicket.assignedDate || new Date().toISOString();
+      if (advisor) {
+        targetTicket.advisorId = advisor.id;
+        targetTicket.advisorName = advisor.name;
+      }
+      if (targetTicket.status === 'DISPONIBLE') {
+        targetTicket.status = 'RESERVADA';
+      }
+
+      if (typeof saveDBCallback === 'function') {
+        saveDBCallback(inquiry.lastRaffleId);
+      }
+
+      const confirmMsg = 
+`🎉 *¡DATOS VINCULADOS A TU BOLETA CON ÉXITO!* ✅
+
+🎟️ *Boleta:* #${targetTicket.ticketNumber}
+🔢 *Tus números:* ${targetTicket.numbers.join('  •  ')}
+👤 *Titular:* ${targetTicket.buyerName || 'Registrado'}
+🪪 *Cédula / NIT:* ${targetTicket.buyerDocument || 'Registrada'}
+📧 *Correo Electrónico:* ${targetTicket.buyerEmail || 'Registrado'}
+📍 *Ciudad:* ${targetTicket.buyerCity || 'Registrada'}
+${advisor ? `👤 *Asesor:* ${advisor.name}\n` : ''}📱 *WhatsApp:* ${senderPhone}
+💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP
+
+🌐 *Consulta tu boleta oficial en línea:*
+http://45.137.192.195/boleta?phone=${senderPhone}
+
+Tus datos han quedado registrados para el sorteo y la emisión de tu boleta digital oficial con verificación QR. ¡Mucha suerte! 🍀`;
+
+      lastUserInquiry.set(senderPhone, {
+        ...inquiry,
+        waitingData: false,
+        profileCaptured: true
+      });
+
+      await sendTextMessage(instance, senderPhone, confirmMsg);
+      return { handled: true };
+    }
+  }
+
+  // 3. CONSULTA DE MEDIOS DE PAGO / CUENTAS (Priorizando cuentas de la rifa)
   if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
       cleanLower.includes('nequi') || cleanLower.includes('bancolombia') || cleanLower.includes('daviplata') ||
       cleanLower.includes('donde pago') || cleanLower.includes('transferencia')) {
     
-    const bankAccounts = (db.banks || []).filter(b => !company || b.companyId === company.id || !b.companyId);
+    let bankAccounts = [];
+    if (Array.isArray(mainRaffle.transferAccounts) && mainRaffle.transferAccounts.length > 0) {
+      bankAccounts = mainRaffle.transferAccounts.map(a => ({
+        name: a.bankName || a.bank || 'Banco',
+        accountNumber: a.accountNumber || a.number || '',
+        type: a.accountType || a.type || 'Ahorros',
+        holder: a.holderName || a.holder || companyName
+      }));
+    } else {
+      bankAccounts = (db.banks || []).filter(b => !company || b.companyId === company.id || !b.companyId);
+    }
+
     let bankMsg = `💳 *MEDIOS DE PAGO OFICIALES - ${companyName}* 🏦\n\n`;
-    bankMsg += `Puedes realizar tu pago o abono a través de:\n\n`;
+    bankMsg += `Para asegurar tus números en *${mainRaffle.title}*, transfiere a:\n\n`;
     
     if (bankAccounts.length > 0) {
       bankAccounts.forEach(b => {
@@ -332,7 +473,7 @@ Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia
     } else {
       bankMsg += `• *Nequi / Bancolombia / Daviplata*\n`;
       bankMsg += `  Titular: *${companyName}*\n`;
-      bankMsg += `  Pide los datos de transferencia a nuestro administrador aquí mismo.\n\n`;
+      bankMsg += `  Pide los datos de transferencia a nuestro asesor aquí mismo.\n\n`;
     }
 
     bankMsg += `📌 *Importante:* Una vez realizada la transferencia, envía la *foto del comprobante aquí mismo* para validar tu pago y registrar tu boleta con QR oficial.`;
@@ -340,15 +481,18 @@ Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia
     return { handled: true };
   }
 
-  // 3. CONSULTA DE PLAN DE PREMIOS / PREMIO MAYOR
-  if (cleanLower.includes('premio') || cleanLower.includes('que se gana') || cleanLower.includes('gana') || cleanLower.includes('mayor')) {
+  // 4. CONSULTA DE PLAN DE PREMIOS / PREMIOS ACUMULADOS / SEMANALES
+  if (cleanLower.includes('premio') || cleanLower.includes('que se gana') || cleanLower.includes('gana') || cleanLower.includes('mayor') || cleanLower.includes('acumulado')) {
     let prizeMsg = `🏆 *PLAN DE PREMIOS - ${mainRaffle.title}* 🎁\n\n`;
-    prizeMsg += `🌟 *Premio Mayor:*\n${mainRaffle.description || 'Gran Premio Oficial'}\n\n`;
+    prizeMsg += `🌟 *Premio Mayor:*\n${mainRaffle.description || 'Gran Premio Oficial del Sorteo'}\n\n`;
     
+    const winners = (db.winners || []).filter(w => w.raffleId === mainRaffle.id);
     if (mainRaffle.weeklyPrizes && mainRaffle.weeklyPrizes.length > 0) {
-      prizeMsg += `🎁 *Premios Anticipados / Semanales:*\n`;
+      prizeMsg += `🎁 *Sorteos Semanales / Anticipados:*\n`;
       mainRaffle.weeklyPrizes.forEach(p => {
-        prizeMsg += `• *${p.name || 'Premio Semanal'}:* $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha programada'})\n`;
+        const winner = winners.find(w => w.prizeName === p.name || w.prizeId === p.id);
+        const statusText = winner ? `✅ Ganador: ${winner.winnerName || 'Entregado'}` : (p.isAccumulative ? '⏳ Acumulado' : '🗓️ Por jugar');
+        prizeMsg += `• *${p.name || 'Premio Semanal'}:* $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha'}) - [${statusText}]\n`;
       });
       prizeMsg += '\n';
     }
@@ -356,13 +500,13 @@ Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia
     prizeMsg += `🎯 *Juega con:* ${lotteryName}\n`;
     prizeMsg += `📅 *Fecha del Gran Sorteo:* ${drawDateFormatted}\n`;
     prizeMsg += `💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP (${opportunities} oportunidades de ${digits} cifras)\n\n`;
-    prizeMsg += `💡 *Escribe un número de ${digits} cifras (ej: ${digits === 4 ? '3456' : '428'}) para verificar si está disponible.*`;
+    prizeMsg += `💡 *Escribe un número de ${digits} cifras (ej: ${digits === 4 ? '3456' : '428'}) o escribe DISPONIBLES para ver opciones libres.*`;
 
     await sendTextMessage(instance, senderPhone, prizeMsg);
     return { handled: true };
   }
 
-  // 4. CONSULTA DE FECHA, LOTERÍA Y CONDICIONES
+  // 5. CONSULTA DE FECHA, LOTERÍA Y CONDICIONES
   if (cleanLower.includes('fecha') || cleanLower.includes('cuando juega') || cleanLower.includes('loteria') || cleanLower.includes('con que juega')) {
     let dateMsg = `📅 *FECHA Y LOTERÍA DEL SORTEO* 🎰\n\n`;
     dateMsg += `🎯 *Rifa:* ${mainRaffle.title}\n`;
@@ -370,121 +514,87 @@ Nuestro equipo administrativo confirmará la transacción en Nequi / Bancolombia
     dateMsg += `🗓️ *Fecha:* ${drawDateFormatted}\n`;
     dateMsg += `🔢 *Modalidad:* Sorteo de *${digits} cifras* (${mainRaffle.winningDigitsPosition === 'PRIMERAS' ? 'Primeras cifras' : 'Últimas cifras'} del premio mayor).\n`;
     dateMsg += `💵 *Precio:* $${ticketPrice.toLocaleString('es-CO')} COP\n\n`;
-    dateMsg += `👉 Escribe cualquier número de ${digits} cifras para ver si está libre.`;
+    dateMsg += `👉 Escribe un número de ${digits} cifras o escribe *DISPONIBLES* para ver números para jugar.`;
 
     await sendTextMessage(instance, senderPhone, dateMsg);
     return { handled: true };
   }
 
-  // 5. CONSULTA DE POLÍTICAS Y REGLAS
+  // 6. CONSULTA DE POLÍTICAS Y REGLAS
   if (cleanLower.includes('politica') || cleanLower.includes('regla') || cleanLower.includes('termino') || cleanLower.includes('condicion') || cleanLower.includes('como funciona')) {
     let rulesMsg = `📜 *TÉRMINOS Y CONDICIONES - ${companyName}* 📋\n\n`;
     rulesMsg += `1️⃣ *Condición de Ganador:* La boleta debe encontrarse 100% cancelada antes del inicio del sorteo oficial de ${lotteryName}.\n`;
     rulesMsg += `2️⃣ *Apartados:* Las boletas apartadas sin abono tienen vigencia temporal fijada por la administración.\n`;
     rulesMsg += `3️⃣ *Transparencia:* Cada boleta cuenta con registro criptográfico, serial único y código QR de verificación.\n`;
     rulesMsg += `4️⃣ *Reclamo:* El titular ganador deberá identificarse con su cédula de ciudadanía coincidente con el registro del sistema.\n\n`;
-    rulesMsg += `¿Tienes dudas con un número? Escribe el número que buscas para consultar su disponibilidad.`;
+    rulesMsg += `¿Quieres ver números libres? Escribe *DISPONIBLES* o escribe el número que buscas.`;
 
     await sendTextMessage(instance, senderPhone, rulesMsg);
     return { handled: true };
   }
 
-  // 6. INTENCIÓN DE RESERVAR / APARTAR CON NOMBRE TRAS CONSULTAR
-  const isNameReservation = cleanLower.startsWith('apartar a ') || cleanLower.startsWith('mi nombre es ') || cleanLower.startsWith('reservar a ');
-  if (isNameReservation && lastUserInquiry.has(senderPhone)) {
-    const inquiry = lastUserInquiry.get(senderPhone);
-    const candidateName = userText.replace(/^(apartar a|mi nombre es|reservar a)\s*/i, '').trim();
-    if (candidateName.length >= 3) {
-      const tickets = (db.tickets || []).filter(t => t.raffleId === inquiry.lastRaffleId);
-      const targetTicket = tickets.find(t => t.id === inquiry.lastTicketId && t.status === 'DISPONIBLE');
-      if (targetTicket) {
-        targetTicket.status = 'RESERVADA';
-        targetTicket.buyerName = candidateName;
-        targetTicket.buyerPhone = senderPhone;
-        targetTicket.saleChannel = 'WhatsApp';
-        targetTicket.assignedDate = new Date().toISOString();
-        targetTicket.abonos.push({
-          id: `ab-bot-${Date.now()}`,
-          amount: 0,
-          date: new Date().toISOString(),
-          sellerId: advisor ? advisor.id : 'bot',
-          sellerName: advisor ? advisor.name : 'Bot WhatsApp',
-          note: `Apartada automáticamente vía WhatsApp Bot por ${candidateName}`,
-          metodoPago: 'efectivo'
-        });
-
-        if (typeof saveDBCallback === 'function') {
-          saveDBCallback(inquiry.lastRaffleId);
-        }
-
-        const confirmMsg = 
-`🎉 *¡BOLETA APARTADA CON ÉXITO!* ✅
-
-🎟️ *Boleta:* #${targetTicket.ticketNumber}
-🔢 *Tus números:* ${targetTicket.numbers.join('  •  ')}
-👤 *Titular:* ${candidateName}
-📱 *Teléfono:* ${senderPhone}
-💵 *Saldo Pendiente:* $${ticketPrice.toLocaleString('es-CO')} COP
-
-📌 *Siguiente paso:*
-Para asegurar tu boleta, puedes realizar tu pago a nuestras cuentas (escribe *CUENTAS*) y enviar la foto del comprobante aquí mismo. ¡Muchos éxitos! 🍀`;
-        
-        lastUserInquiry.delete(senderPhone);
-        await sendTextMessage(instance, senderPhone, confirmMsg);
-        return { handled: true };
-      }
+  // 7. MOSTRAR NÚMEROS DISPONIBLES AL AZAR
+  if (cleanLower.includes('disponible') || cleanLower.includes('libres') || cleanLower.includes('que numeros hay') || 
+      cleanLower.includes('muestrame') || cleanLower.includes('azar') || cleanLower.includes('que queda') || cleanLower === 'numeros') {
+    const availableTickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id && t.status === 'DISPONIBLE');
+    if (availableTickets.length === 0) {
+      await sendTextMessage(instance, senderPhone, `❌ *¡Boletas agotadas!* No quedan números disponibles para esta rifa.`);
+      return { handled: true };
     }
+    const shuffled = [...availableTickets].sort(() => 0.5 - Math.random()).slice(0, 8);
+    let dispMsg = `🎲 *NÚMEROS DISPONIBLES - ${mainRaffle.title}* 🎟️\n\n`;
+    dispMsg += `Aquí tienes opciones de números libres para jugar (${opportunities} números por boleta):\n\n`;
+    shuffled.forEach(t => {
+      dispMsg += `• Boleta *#${t.ticketNumber}:* ${t.numbers.join('  •  ')}\n`;
+    });
+    dispMsg += `\n💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
+    dispMsg += `\n✍️ *Para apartar cualquiera de ellos,* solo responde con el número que deseas (ejemplo: *${shuffled[0].numbers[0]}*).`;
+    await sendTextMessage(instance, senderPhone, dispMsg);
+    return { handled: true };
   }
 
-  // 7. BÚSQUEDA Y CONSULTA DE NÚMERO (INTELIGENTE: 2, 3 o 4 CIFRAS)
+  // 8. BÚSQUEDA Y CONSULTA DE NÚMERO (ESTRICTAMENTE EN OPORTUNIDADES t.numbers)
   const numbersFound = userText.match(/\d+/g);
   if (numbersFound && numbersFound.length > 0) {
     const rawNumber = numbersFound[0];
     const tickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id);
 
-    // Buscar coincidencia exacta en las oportunidades de la boleta o en el ticketNumber
-    let matchedTicket = tickets.find(t => {
-      if (Array.isArray(t.numbers) && t.numbers.includes(rawNumber)) return true;
-      if (String(t.ticketNumber) === rawNumber) return true;
-      return false;
-    });
+    // BÚSQUEDA ESTRICTA DE LA OPORTUNIDAD: Se busca ÚNICAMENTE dentro de t.numbers
+    let matchedTicket = tickets.find(t => Array.isArray(t.numbers) && t.numbers.includes(rawNumber));
 
-    // Si no encontró coincidencia exacta y el usuario escribió menos cifras de las requeridas,
-    // rellenar con ceros a la izquierda (ej: 345 -> 0345 si digits=4)
+    // Si no encontró coincidencia exacta y el usuario escribió menos cifras, rellenar con ceros (ej: 345 -> 0345)
     let paddedNumber = rawNumber;
     if (!matchedTicket && rawNumber.length < digits) {
       paddedNumber = rawNumber.padStart(digits, '0');
-      matchedTicket = tickets.find(t => {
-        if (Array.isArray(t.numbers) && t.numbers.includes(paddedNumber)) return true;
-        return false;
-      });
+      matchedTicket = tickets.find(t => Array.isArray(t.numbers) && t.numbers.includes(paddedNumber));
     }
 
     if (matchedTicket) {
-      // Guardar en memoria para que el usuario pueda apartar con su nombre en el siguiente mensaje
       lastUserInquiry.set(senderPhone, {
         lastTicketId: matchedTicket.id,
         lastRaffleId: mainRaffle.id,
+        lastOpportunity: paddedNumber,
+        waitingData: false,
         timestamp: Date.now()
       });
 
       if (matchedTicket.status === 'DISPONIBLE') {
+        const otherOpportunities = matchedTicket.numbers.filter(n => n !== paddedNumber);
         const availReply = 
 `✅ *¡EL NÚMERO ${paddedNumber} ESTÁ DISPONIBLE!* 🎉
 
 🎟️ *Boleta:* #${matchedTicket.ticketNumber}
-🔢 *Oportunidades que juegas:* ${matchedTicket.numbers.join('  y  ')} (${opportunities} números por boleta)
+🔢 *Juegas con:* *${paddedNumber}* ${otherOpportunities.length > 0 ? `(y también con *${otherOpportunities.join(', ')}*)` : ''}
 💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
 ${mainRaffle.minAbono ? `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n` : ''}🎯 *Sorteo:* ${mainRaffle.title}
 🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}
 
 ✍️ *¿Deseas apartarlo ahora mismo?*
-Responde con tu *NOMBRE COMPLETO* (ejemplo: _Apartar a Juan Pérez_) para reservártelo de inmediato a este número de WhatsApp.`;
+Indícanos tu *NOMBRE COMPLETO y CÉDULA* (ej: _Apartar a Juan Pérez CC 1121837405_) para reservártelo de inmediato a este número de WhatsApp.`;
 
         await sendTextMessage(instance, senderPhone, availReply);
         return { handled: true };
       } else {
-        // Buscar 3 boletas alternativas disponibles
         const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
         let statusText = 'APARTADO';
         if (matchedTicket.status === 'PAGADA' || matchedTicket.status === 'CONFIRMADA') statusText = 'VENDIDO';
@@ -496,7 +606,7 @@ Responde con tu *NOMBRE COMPLETO* (ejemplo: _Apartar a Juan Pérez_) para reserv
           availableAlts.forEach(a => {
             busyReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
           });
-          busyReply += `\n¿Te gustaría apartar alguno de ellos? Escribe el número que prefieras.`;
+          busyReply += `\n¿Te gustaría apartar alguno de ellos? Escribe el número que prefieras o escribe *DISPONIBLES*.`;
         } else {
           busyReply += `💡 Puedes escribir otro número de ${digits} cifras para verificar si está libre.`;
         }
@@ -505,22 +615,21 @@ Responde con tu *NOMBRE COMPLETO* (ejemplo: _Apartar a Juan Pérez_) para reserv
         return { handled: true };
       }
     } else {
-      // Si el número no existe en la rifa, avisarle con amabilidad y sugerir opciones
       const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
-      let notFoundReply = `ℹ️ El número *${rawNumber}* no pertenece al rango de esta rifa (*sorteo de ${digits} cifras*).\n\n`;
+      let notFoundReply = `ℹ️ El número *${rawNumber}* no se encuentra en las oportunidades de este sorteo (*juega con ${digits} cifras*).\n\n`;
       if (availableAlts.length > 0) {
-        notFoundReply += `🎲 *Te sugerimos estos números disponibles:*\n`;
+        notFoundReply += `🎲 *Te sugerimos estos números que sí están disponibles:*\n`;
         availableAlts.forEach(a => {
           notFoundReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
         });
-        notFoundReply += `\nEscribe el número que desees consultar.`;
+        notFoundReply += `\nEscribe el número que desees consultar o escribe *DISPONIBLES*.`;
       }
       await sendTextMessage(instance, senderPhone, notFoundReply);
       return { handled: true };
     }
   }
 
-  // 8. SALUDO GENERAL Y MENÚ INFORMATIVO
+  // 9. SALUDO GENERAL Y MENÚ INFORMATIVO
   let welcomeMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n`;
   if (advisor) {
     welcomeMsg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🎟️\n`;
@@ -535,6 +644,7 @@ Responde con tu *NOMBRE COMPLETO* (ejemplo: _Apartar a Juan Pérez_) para reserv
   welcomeMsg += 
 `\n📌 *¿Qué deseas hacer?*
 • Escribe cualquier *número de ${digits} cifras* para consultar si está libre (ej: *${digits === 4 ? '3456' : '428'}*).
+• Escribe *DISPONIBLES* para ver números libres al azar.
 • Escribe *PREMIOS* para conocer el plan de premios completo.
 • Escribe *CUENTAS* para ver los datos de Nequi / Bancolombia.
 • Envía la *foto de tu comprobante* si ya realizaste tu pago.`;

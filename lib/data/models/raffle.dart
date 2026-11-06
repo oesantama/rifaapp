@@ -135,6 +135,7 @@ class Raffle {
   /// Metadata of stored template images by type ('poster', 'ticket'); images are fetched separately.
   final Map<String, dynamic> templates;
   final String createdAt;
+  final List<String> prizeImages;
 
   Raffle({
     required this.id,
@@ -177,6 +178,7 @@ class Raffle {
     this.isIndependentBook = false,
     this.templates = const {},
     required this.createdAt,
+    this.prizeImages = const [],
   });
 
   factory Raffle.fromJson(Map<String, dynamic> json) {
@@ -230,6 +232,7 @@ class Raffle {
       isIndependentBook: json['isIndependentBook'] == true,
       templates: json['templates'] is Map ? Map<String, dynamic>.from(json['templates']) : const {},
       createdAt: json['createdAt'] ?? '',
+      prizeImages: [for (final img in (json['prizeImages'] as List? ?? [])) img.toString()],
     );
   }
 
@@ -237,6 +240,7 @@ class Raffle {
         'id': id,
         'title': title,
         'description': description,
+        'prizeImages': prizeImages,
         'mainDrawDate': mainDrawDate,
         'weeklyPrizesStartDate': weeklyPrizesStartDate,
         'digits': digits,

@@ -28,6 +28,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
+  late TextEditingController _prizeImagesController;
 
   late bool _isActive;
   late List<String> _selectedAdvisorIds;
@@ -58,6 +59,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     super.initState();
     _titleController = TextEditingController(text: widget.raffle.title);
     _descriptionController = TextEditingController(text: widget.raffle.description);
+    _prizeImagesController = TextEditingController(text: widget.raffle.prizeImages.join('\n'));
     _mainDrawDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.mainDrawDate));
     _weeklyPrizesStartDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.weeklyPrizesStartDate));
     _isActive = widget.raffle.status == 'ACTIVA';
@@ -82,6 +84,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _prizeImagesController.dispose();
     _mainDrawDateController.dispose();
     _weeklyPrizesStartDateController.dispose();
     _commissionValueController.dispose();
@@ -511,7 +514,20 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
                 TextFormField(
                   controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Descripción', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Descripción del Premio', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+
+                TextFormField(
+                  controller: _prizeImagesController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Fotos del Premio (Galería Web)',
+                    hintText: 'Pega URLs de imágenes separadas por línea (ej: https://...jpg)',
+                    helperText: 'Estas fotos aparecerán en el carrusel de la boleta web que ve el cliente.',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.photo_library_outlined),
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -1107,6 +1123,11 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           bool ok = await raffleVM.updateRaffle(widget.raffle.id, {
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
+                            'prizeImages': _prizeImagesController.text
+                                .split(RegExp(r'[\n,]+'))
+                                .map((e) => e.trim())
+                                .where((e) => e.isNotEmpty)
+                                .toList(),
                             'mainDrawDate': DateFormatterColombia.toIsoString(_mainDrawDateController.text),
                             'weeklyPrizesStartDate': DateFormatterColombia.toIsoString(_weeklyPrizesStartDateController.text),
                             'status': _isActive ? 'ACTIVA' : 'INACTIVA',
