@@ -527,7 +527,7 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   const companyPhone = company ? (company.phone || company.code || '') : '';
   const waContact = whatsappService.formatPhoneNumber(companyPhone) || '573212300050';
 
-  // Si no hay boleta seleccionada, mostrar buscador estilo Los Plata
+  // Si no hay boleta seleccionada, mostrar buscador con estética oficial RifaApp
   if (!ticket) {
     return `<!doctype html>
 <html lang="es">
@@ -541,12 +541,15 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
     body { background-color: #F8FAFC; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; }
-    header { background: #000000; color: #FFFFFF; padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; }
-    .brand { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+    header { background: #0F172A; color: #FFFFFF; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1E293B; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-badge { background: #F59E0B; color: #000000; font-weight: 900; font-size: 11px; padding: 4px 8px; border-radius: 6px; letter-spacing: 0.5px; }
+    .company-badge { color: #FFFFFF; font-weight: 700; font-size: 14px; }
+    .portal-badge { background: #1E293B; color: #10B981; font-weight: 700; font-size: 11.5px; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(16,185,129,.3); }
     main { flex: 1; max-width: 480px; width: 100%; margin: 0 auto; padding: 24px 16px; }
     .subhead { font-size: 11px; font-weight: 800; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
-    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 18px; }
-    .banner { background: #000000; color: #FFFFFF; border-radius: 16px; padding: 18px; margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start; }
+    h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 18px; color: #0F172A; }
+    .banner { background: #0F172A; color: #FFFFFF; border-radius: 16px; padding: 18px; margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start; border: 1px solid #1E293B; box-shadow: 0 4px 20px rgba(15,23,42,.08); }
     .badge-icon { background: #10B981; color: #FFFFFF; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; margin-top: 2px; }
     .banner-text b { font-size: 11px; letter-spacing: 1px; color: #10B981; text-transform: uppercase; display: block; margin-bottom: 4px; }
     .banner-text p { font-size: 13.5px; line-height: 1.45; color: #E2E8F0; }
@@ -554,11 +557,11 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
     label { display: block; font-size: 13.5px; font-weight: 700; margin-bottom: 8px; color: #1E293B; }
     .phone-input-row { display: flex; gap: 8px; }
     .country-box { background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; width: 105px; flex-shrink: 0; }
-    .input-box { flex: 1; background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 600; color: #0F172A; outline: none; transition: border-color .2s; }
-    .input-box:focus { border-color: #0F172A; }
+    .input-box { flex: 1; background: #FFFFFF; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 12px 16px; font-size: 15px; font-weight: 600; color: #0F172A; outline: none; transition: all .2s; }
+    .input-box:focus { border-color: #10B981; box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
     .hint { font-size: 12px; color: #64748B; margin-top: 6px; }
-    .btn-submit { width: 100%; background: #E2E8F0; color: #0F172A; font-size: 15px; font-weight: 700; padding: 14px; border: none; border-radius: 14px; cursor: pointer; transition: all .2s; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .btn-submit.active { background: #000000; color: #FFFFFF; }
+    .btn-submit { width: 100%; background: #10B981; color: #FFFFFF; font-size: 15px; font-weight: 800; padding: 15px; border: none; border-radius: 14px; cursor: pointer; transition: all .2s; margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 14px rgba(16,185,129,.35); }
+    .btn-submit:hover { background: #059669; transform: translateY(-1px); }
     .error-card { background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; padding: 14px 16px; border-radius: 12px; font-size: 13px; margin-bottom: 20px; line-height: 1.4; }
     .wa-float { position: fixed; bottom: 24px; right: 24px; background: #25D366; color: #FFFFFF; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(37,211,102,.4); text-decoration: none; z-index: 99; transition: transform .2s; }
     .wa-float:hover { transform: scale(1.08); }
@@ -566,18 +569,21 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
 </head>
 <body>
   <header>
-    <div class="brand">${escapeHtml(companyName)}</div>
-    <div style="font-size: 13px; font-weight: 600;">Ver mi boleta</div>
+    <div class="brand">
+      <span class="brand-badge">🎟️ RIFA MASTER</span>
+      <span class="company-badge">${escapeHtml(companyName)}</span>
+    </div>
+    <div class="portal-badge">Consulta Oficial</div>
   </header>
   <main>
-    <div class="subhead">Consultar Boleta</div>
+    <div class="subhead">PORTAL DEL COMPRADOR</div>
     <h1>Encontremos tu boleta</h1>
 
     <div class="banner">
-      <div class="badge-icon">i</div>
+      <div class="badge-icon">✓</div>
       <div class="banner-text">
-        <b>IMPORTANTE</b>
-        <p>Usa el teléfono o el usuario de WhatsApp con el que quedó registrada tu boleta.</p>
+        <b>CONSULTA RÁPIDA</b>
+        <p>Escribe tu número de celular / WhatsApp o el número de tu boleta para ver tu estado de pago y respaldo digital oficial.</p>
       </div>
     </div>
 
@@ -585,19 +591,12 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
 
     <form method="GET" action="/boleta">
       <div class="form-group">
-        <label>Buscar por</label>
-        <select class="input-box" style="width: 100%;">
-          <option selected>Número de teléfono</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>¿Cuál es tu número de teléfono?</label>
+        <label>¿Cuál es tu número de teléfono / WhatsApp?</label>
         <div class="phone-input-row">
           <div class="country-box">🇨🇴 +57</div>
-          <input type="tel" name="phone" id="phoneInput" class="input-box" placeholder="0000000000" value="${escapeHtml(phone)}" required autofocus>
+          <input type="tel" name="phone" id="phoneInput" class="input-box" placeholder="3212300050" value="${escapeHtml(phone)}" required autofocus>
         </div>
-        <div class="hint">Ejemplo: 3107334957</div>
+        <div class="hint">Ingresa tus 10 dígitos (ej: 3107334957) o busca directamente por número de boleta.</div>
       </div>
 
       <button type="submit" id="btnSubmit" class="btn-submit">
@@ -610,19 +609,6 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   <a href="https://wa.me/${waContact}?text=${encodeURIComponent('Hola, necesito ayuda para consultar mi boleta en ' + companyName)}" class="wa-float" target="_blank" title="Contactar por WhatsApp">
     <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
   </a>
-
-  <script>
-    const input = document.getElementById('phoneInput');
-    const btn = document.getElementById('btnSubmit');
-    input.addEventListener('input', () => {
-      if (input.value.trim().length >= 7) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
-    });
-    if (input.value.trim().length >= 7) btn.classList.add('active');
-  </script>
 </body>
 </html>`;
   }
@@ -907,40 +893,56 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
 }
 
 // ---------------------------------------------------------------------------
-// PORTAL PÚBLICO DEL COMPRADOR (Estilo Los Plata: consulta por teléfono o boleta)
+// PORTAL PÚBLICO DEL COMPRADOR (Estética Oficial RifaApp: consulta por teléfono o boleta)
 // ---------------------------------------------------------------------------
 app.get(['/boleta', '/consulta'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const rawPhone = String(req.query.phone || '').trim();
+  const rawQuery = String(req.query.phone || req.query.q || req.query.numero || '').trim();
   const ticketId = String(req.query.ticketId || '').trim();
-  const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+  const cleanDigits = rawQuery.replace(/[^0-9]/g, '');
 
-  if (!cleanPhone && !ticketId) {
-    return res.send(renderBuyerPortalHtml({}));
+  const mainComp = (db.companies || [])[0] || {};
+
+  if (!cleanDigits && !ticketId) {
+    return res.send(renderBuyerPortalHtml({ company: mainComp }));
   }
 
-  // Buscar boletas que coincidan con el teléfono (terminación de 10 dígitos o completo)
+  // Buscar boletas que coincidan con el teléfono (10 dígitos finales o completo) O por oportunidad/boleta
   const tickets = (db.tickets || []).filter(t => {
     if (t.status === 'DISPONIBLE') return false;
     if (ticketId && t.id === ticketId) return true;
-    if (cleanPhone) {
-      const tPhone = String(t.buyerPhone || '').replace(/[^0-9]/g, '');
-      if (tPhone && (tPhone.endsWith(cleanPhone) || cleanPhone.endsWith(tPhone))) return true;
+    if (cleanDigits) {
+      // 1. Búsqueda por número de teléfono (7 a 13 dígitos)
+      if (cleanDigits.length >= 7) {
+        const tPhone = String(t.buyerPhone || '').replace(/[^0-9]/g, '');
+        if (tPhone) {
+          const s10 = cleanDigits.slice(-10);
+          const t10 = tPhone.slice(-10);
+          if (s10 && t10 && s10 === t10) return true;
+          if (tPhone === cleanDigits || tPhone.endsWith(cleanDigits) || cleanDigits.endsWith(tPhone)) return true;
+        }
+      }
+      // 2. Búsqueda por oportunidad o serial de boleta (1 a 5 dígitos, ej: 3567 o boleta #1)
+      if (cleanDigits.length <= 5) {
+        if (String(t.ticketNumber) === cleanDigits) return true;
+        if (Array.isArray(t.numbers) && (t.numbers.includes(cleanDigits) || t.numbers.includes(cleanDigits.padStart(4, '0')))) return true;
+      }
     }
     return false;
   });
 
   if (tickets.length === 0) {
     return res.send(renderBuyerPortalHtml({
-      error: `No encontramos ninguna boleta activa registrada con el teléfono ${cleanPhone}. Verifica que esté bien escrito o comunícate con tu asesor.`,
-      phone: rawPhone
+      company: mainComp,
+      error: `No encontramos ninguna boleta activa registrada con "${rawQuery}". Verifica que esté bien escrito o comunícate con nosotros por WhatsApp.`,
+      phone: rawQuery
     }));
   }
 
   // Seleccionar la boleta especificada o la más reciente
   const selectedTicket = ticketId ? (tickets.find(t => t.id === ticketId) || tickets[0]) : tickets[0];
   const raffle = (db.raffles || []).find(r => r.id === selectedTicket.raffleId) || {};
-  const company = (db.companies || []).find(c => c.id === raffle.companyId) || {};
+  const company = (db.companies || []).find(c => c.id === raffle.companyId) || mainComp;
   const baseUrl = `${req.protocol}://${req.get('host')}`;
 
   res.send(renderBuyerPortalHtml({
@@ -948,7 +950,7 @@ app.get(['/boleta', '/consulta'], (req, res) => {
     raffle,
     company,
     ticketsList: tickets,
-    phone: rawPhone,
+    phone: rawQuery,
     baseUrl
   }));
 });
