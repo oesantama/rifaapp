@@ -5499,9 +5499,23 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
       note: note || 'Abono registrado',
       ...paymentDetails
     };
-    // Cash collected by the admin is already in the company's hands
-    if (payMethod === 'efectivo' && (!sellerId || sellerId === 'admin')) {
+    // Cash collected or transfer verified directly by admin is immediately settled/legalized
+    const isAdminRegistrar = req.auth.role === 'admin' || req.auth.role === 'superadmin' || !sellerId || sellerId === 'admin';
+    if (payMethod === 'efectivo' && isAdminRegistrar) {
       newAbono.received = { by: sellerName || 'Administrador', at: newAbono.date, method: 'efectivo', auto: true };
+    } else if (payMethod === 'transferencia') {
+      if (isAdminRegistrar) {
+        // Legalizada directamente en caja por el administrador
+        newAbono.verification = {
+          status: 'VALIDADA',
+          by: actorName(req),
+          at: newAbono.date,
+          note: 'Legalizada en caja directamente por el administrador'
+        };
+      } else {
+        // Registrada por asesor: queda pendiente de legalizar por el administrador en Caja Admin
+        delete newAbono.verification;
+      }
     }
     ticket.abonos.push(newAbono);
     ticket.totalPaid += abonoAmount;

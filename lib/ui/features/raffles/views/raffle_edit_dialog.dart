@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/features/raffles/views/winning_rule_fields.dart';
@@ -119,6 +118,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _titleController = TextEditingController(text: widget.raffle.title);
     _descriptionController = TextEditingController(text: widget.raffle.description);
     _prizeImagesController = TextEditingController(text: widget.raffle.prizeImages.join('\n'));
+    _prizeImagesController.addListener(_refreshPrizeImages);
     _mainDrawDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.mainDrawDate));
     _weeklyPrizesStartDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.weeklyPrizesStartDate));
     _isActive = widget.raffle.status == 'ACTIVA';
@@ -139,8 +139,13 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _transferAccounts = List.from(widget.raffle.transferAccounts);
   }
 
+  void _refreshPrizeImages() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _prizeImagesController.removeListener(_refreshPrizeImages);
     _titleController.dispose();
     _descriptionController.dispose();
     _prizeImagesController.dispose();
@@ -190,15 +195,25 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     }
   }
 
-  void _showAddPrizeDialog() {
-    final nameCtrl = TextEditingController(text: 'Sorteo Semanal #${_weeklyPrizes.length + 1}');
-    final amountCtrl = TextEditingController(text: '1000000');
-    final dateCtrl =
-        TextEditingController(text: DateTime.now().add(Duration(days: 7 * (_weeklyPrizes.length + 1))).toIso8601String().substring(0, 10));
-    final lotteryCtrl = TextEditingController(text: _lotteryName);
-    String minType = _weeklyMinAbonoType;
-    final minValCtrl = TextEditingController(text: _weeklyMinAbonoValueController.text);
-    bool accumulative = _isWeeklyPrizeAccumulative;
+  void _showAddPrizeDialog({WeeklyPrize? editPrize, int? editIndex}) {
+    final nameCtrl = TextEditingController(text: editPrize?.name ?? 'Sorteo Anticipado #${_weeklyPrizes.length + 1}');
+    final amountCtrl = TextEditingController(text: editPrize != null ? editPrize.amount.toStringAsFixed(0) : '1000000');
+    final dateCtrl = TextEditingController(
+      text: editPrize?.drawDate ??
+          DateTime.now().add(Duration(days: 7 * (_weeklyPrizes.length + 1))).toIso8601String().substring(0, 10),
+    );
+    final lotteryCtrl = TextEditingController(
+      text: (editPrize?.lotteryName ?? '').isNotEmpty
+          ? editPrize!.lotteryName
+          : (_lotteryName.isNotEmpty ? _lotteryName : (_mainLotteryName.isNotEmpty ? _mainLotteryName : 'Lotería del Meta')),
+    );
+    String minType = editPrize?.minAbonoType ?? 'VALOR_FIJO';
+    final minValCtrl = TextEditingController(
+      text: editPrize != null
+          ? editPrize.minAbonoValue.toStringAsFixed(0)
+          : (_weeklyMinAbonoValueController.text.isNotEmpty ? _weeklyMinAbonoValueController.text : '30000'),
+    );
+    bool accumulative = editPrize?.isAccumulative ?? _isWeeklyPrizeAccumulative;
 
     showDialog(
       context: context,
@@ -206,34 +221,44 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
         return StatefulBuilder(
           builder: (context, setDlgState) {
             return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
-                children: const [
-                  Icon(Icons.stars, color: Colors.purple),
-                  SizedBox(width: 8),
-                  Text('Agregar Nuevo Sorteo / Premio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                children: [
+                  const Icon(Icons.event_available, color: Colors.purple),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      editPrize != null ? 'Editar Fecha y Abono Mínimo' : '📅 Agregar Fecha y Abono Mínimo',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Nombre del Sorteo / Premio *', border: OutlineInputBorder()),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: const Text(
+                        'Indique la fecha en la que se jugará el sorteo anticipado, qué se sortea y cuánto debe tener abonado el cliente para participar en esa fecha.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.purple),
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: amountCtrl,
-                      decoration: const InputDecoration(labelText: 'Valor del Premio (\$ COP) *', border: OutlineInputBorder()),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 14),
                     TextFormField(
                       controller: dateCtrl,
                       readOnly: true,
                       onTap: () => DateFormatterColombia.selectDate(context, dateCtrl),
                       decoration: InputDecoration(
                         labelText: 'Fecha del Sorteo (dd/mm/aaaa) *',
+                        hintText: 'dd/mm/aaaa',
                         border: const OutlineInputBorder(),
                         prefixIcon: const Icon(Icons.event),
                         suffixIcon: IconButton(
@@ -242,33 +267,56 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     TextField(
-                      controller: lotteryCtrl,
-                      decoration: const InputDecoration(labelText: 'Lotería o Mecánica del Sorteo', border: OutlineInputBorder()),
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Premio o Nombre del Sorteo *',
+                        hintText: 'Ej: Sorteo Anticipado #1 o Moto Boxer CT100',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.card_giftcard),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Flex(
-                      direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
-                      crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
+                    TextField(
+                      controller: amountCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Valor del Premio (\$ COP) *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.attach_money),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: lotteryCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Lotería Oficial del Sorteo',
+                        hintText: 'Ej: Lotería del Meta o Lotería de Medellín',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.casino),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Condición de Abono Mínimo a esta Fecha:',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    Row(
                       children: [
-                        ResponsiveFlexChild(
-                          expand: !isNarrowScreen(context),
+                        Expanded(
                           child: RadioListTile<String>(
-                            value: 'PORCENTAJE',
+                            value: 'VALOR_FIJO',
                             groupValue: minType,
-                            title: const Text('Porcentaje %', style: TextStyle(fontSize: 11)),
+                            title: const Text('Valor Fijo (\$ COP)', style: TextStyle(fontSize: 11)),
                             onChanged: (v) => setDlgState(() => minType = v!),
                             dense: true,
                             contentPadding: EdgeInsets.zero,
                           ),
                         ),
-                        ResponsiveFlexChild(
-                          expand: !isNarrowScreen(context),
+                        Expanded(
                           child: RadioListTile<String>(
-                            value: 'VALOR_FIJO',
+                            value: 'PORCENTAJE',
                             groupValue: minType,
-                            title: const Text('Valor Fijo \$', style: TextStyle(fontSize: 11)),
+                            title: const Text('Porcentaje (%)', style: TextStyle(fontSize: 11)),
                             onChanged: (v) => setDlgState(() => minType = v!),
                             dense: true,
                             contentPadding: EdgeInsets.zero,
@@ -279,19 +327,28 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     TextField(
                       controller: minValCtrl,
                       decoration: InputDecoration(
-                        labelText: minType == 'PORCENTAJE' ? 'Mínimo Abono (%) Requerido' : 'Mínimo Abono (\$ COP) Requerido',
+                        labelText: minType == 'PORCENTAJE'
+                            ? 'Mínimo Abono (%) Requerido'
+                            : 'Mínimo Abono (\$ COP) Requerido',
+                        helperText: minType == 'PORCENTAJE'
+                            ? 'Ej: 50% = Debe haber abonado el 50% o más de la boleta.'
+                            : 'Ej: \$30.000 COP = Debe haber abonado \$30.000 o más a esta fecha.',
                         border: const OutlineInputBorder(),
+                        prefixIcon: Icon(minType == 'PORCENTAJE' ? Icons.percent : Icons.attach_money),
                       ),
                       keyboardType: TextInputType.number,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     SwitchListTile(
                       title: const Text('¿El Premio se Acumula?', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      subtitle: Text(accumulative ? 'Sí. Se acumula si no cumple abonado.' : 'No se acumula.'),
+                      subtitle: Text(accumulative
+                          ? 'Sí. Si el número ganador no cumplió el abono mínimo, el premio se acumula.'
+                          : 'No se acumula.'),
                       value: accumulative,
                       activeColor: Colors.purple,
                       onChanged: (v) => setDlgState(() => accumulative = v),
                       dense: true,
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ],
                 ),
@@ -301,24 +358,35 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 ElevatedButton(
                   onPressed: () {
                     if (nameCtrl.text.trim().isEmpty) return;
-                    final newPrize = WeeklyPrize(
-                      id: 'wp-${DateTime.now().millisecondsSinceEpoch}',
+                    final prizeObj = WeeklyPrize(
+                      id: editPrize?.id ?? 'wp-${DateTime.now().millisecondsSinceEpoch}',
                       name: nameCtrl.text.trim(),
                       amount: double.tryParse(amountCtrl.text) ?? 0.0,
                       drawDate: dateCtrl.text.trim(),
                       lotteryName: lotteryCtrl.text.trim(),
                       minAbonoType: minType,
-                      minAbonoValue: double.tryParse(minValCtrl.text) ?? 50.0,
+                      minAbonoValue: double.tryParse(minValCtrl.text) ?? 30000.0,
                       isAccumulative: accumulative,
-                      status: 'PENDIENTE',
+                      status: editPrize?.status ?? 'PENDIENTE',
+                      winningTicketNumber: editPrize?.winningTicketNumber,
+                      winnerName: editPrize?.winnerName,
                     );
                     setState(() {
-                      _weeklyPrizes.add(newPrize);
+                      if (editIndex != null && editIndex < _weeklyPrizes.length) {
+                        _weeklyPrizes[editIndex] = prizeObj;
+                      } else {
+                        _weeklyPrizes.add(prizeObj);
+                      }
+                      _weeklyPrizes.sort((a, b) => a.drawDate.compareTo(b.drawDate));
                     });
                     Navigator.pop(ctx);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.purple),
-                  child: const Text('AGREGAR SORTEO'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(editPrize != null ? 'GUARDAR FECHA' : 'AGREGAR FECHA'),
                 ),
               ],
             );
@@ -598,6 +666,83 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     label: Text(_uploadingMedia ? 'Subiendo a Google Drive...' : 'Subir Foto / Video desde Dispositivo (Drive)'),
                     onPressed: _uploadingMedia ? null : _uploadMediaFromDevice,
                   ),
+                ),
+                Builder(
+                  builder: (context) {
+                    final prizeUrls = _prizeImagesController.text
+                        .split('\n')
+                        .map((u) => u.trim())
+                        .where((u) => u.isNotEmpty)
+                        .toList();
+                    if (prizeUrls.isEmpty) return const SizedBox.shrink();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        Text(
+                          '📷 Fotos cargadas (${prizeUrls.length}) - Toca ✖ para quitar:',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 90,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: prizeUrls.length,
+                            separatorBuilder: (_, __) => const SizedBox(width: 8),
+                            itemBuilder: (ctx, idx) {
+                              final url = prizeUrls[idx];
+                              final isVideo = url.toLowerCase().contains('.mp4') || url.toLowerCase().contains('.mov');
+                              return Stack(
+                                children: [
+                                  Container(
+                                    width: 90,
+                                    height: 90,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.3), width: 1.5),
+                                      color: Colors.grey.shade100,
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: isVideo
+                                        ? const Center(child: Icon(Icons.videocam, color: AppTheme.primaryBlue, size: 36))
+                                        : Image.network(
+                                            url,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => const Center(
+                                              child: Icon(Icons.broken_image, color: Colors.grey, size: 28),
+                                            ),
+                                          ),
+                                  ),
+                                  Positioned(
+                                    top: 3,
+                                    right: 3,
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          prizeUrls.removeAt(idx);
+                                          _prizeImagesController.text = prizeUrls.join('\n');
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black87,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.close, color: Colors.white, size: 13),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
 
@@ -1037,153 +1182,213 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   ),
                   const SizedBox(height: 12),
 
-                  // REQUISITO MÍNIMO DE ABONO
-                  const Text('📊 Condición Mínima de Abono para Participar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Flex(
-                    direction: isNarrowScreen(context) ? Axis.vertical : Axis.horizontal,
-                    crossAxisAlignment: isNarrowScreen(context) ? CrossAxisAlignment.stretch : CrossAxisAlignment.center,
-                    children: [
-                      ResponsiveFlexChild(
-                        expand: !isNarrowScreen(context),
-                        child: RadioListTile<String>(
-                          value: 'PORCENTAJE',
-                          groupValue: _weeklyMinAbonoType,
-                          title: const Text('Porcentaje (%)', style: TextStyle(fontSize: 12)),
-                          onChanged: (v) => setState(() => _weeklyMinAbonoType = v!),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                      ResponsiveFlexChild(
-                        expand: !isNarrowScreen(context),
-                        child: RadioListTile<String>(
-                          value: 'VALOR_FIJO',
-                          groupValue: _weeklyMinAbonoType,
-                          title: const Text('Valor Fijo (\$ COP)', style: TextStyle(fontSize: 12)),
-                          onChanged: (v) => setState(() => _weeklyMinAbonoType = v!),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ],
-                  ),
-                  TextFormField(
-                    controller: _weeklyMinAbonoValueController,
-                    decoration: InputDecoration(
-                      labelText: _weeklyMinAbonoType == 'PORCENTAJE' ? 'Mínimo Pago / Abono (%) *' : 'Mínimo Pago / Abono (\$ COP) *',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: Icon(_weeklyMinAbonoType == 'PORCENTAJE' ? Icons.percent : Icons.attach_money),
-                      helperText: _weeklyMinAbonoType == 'PORCENTAJE'
-                          ? 'Ejemplo: 50% de \$50.000 = Debe haber abonado \$25.000 o más para participar.'
-                          : 'Ejemplo: \$50.000 COP = Debe haber abonado \$50.000 o más para participar.',
+                  // SECCIÓN CRONOGRAMA DE FECHAS Y ABONOS MÍNIMOS PARA PARTICIPAR
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50.withOpacity(0.35),
+                      border: Border.all(color: Colors.purple.shade200, width: 1.5),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ACUMULACIÓN DEL PREMIO
-                  SwitchListTile(
-                    title: const Text('¿El Premio Semanal se Acumula?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: Text(_isWeeklyPrizeAccumulative
-                        ? '✓ Sí. Si la boleta ganadora no ha abonado el mínimo o no se ha vendido, el valor se acumula para el próximo sorteo.'
-                        : '❌ No. Si el ganador no califica, el premio no se acumula.'),
-                    value: _isWeeklyPrizeAccumulative,
-                    activeColor: Colors.amber.shade800,
-                    onChanged: (val) => setState(() => _isWeeklyPrizeAccumulative = val),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // LISTADO Y GESTIÓN DE PREMIOS ADICIONALES
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 10,
-                    runSpacing: 8,
-                    children: [
-                      Text('Premios / Sorteos Registrados (${_weeklyPrizes.length}):',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      ElevatedButton.icon(
-                        onPressed: _showAddPrizeDialog,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Aplicar Más Sorteos / Premios', style: TextStyle(fontSize: 11)),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.purple.shade700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (_weeklyPrizes.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: Text('No hay premios o sorteos adicionales configurados.',
-                          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
-                    )
-                  else
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      decoration: BoxDecoration(
-                        color: Colors.purple.shade50.withOpacity(0.3),
-                        border: Border.all(color: Colors.purple.shade200),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: _weeklyPrizes.length,
-                        separatorBuilder: (context, i) => const Divider(height: 1),
-                        itemBuilder: (context, i) {
-                          final p = _weeklyPrizes[i];
-                          final isPending = p.status == 'PENDIENTE';
-                          final isWon = p.status == 'GANADO';
-
-                          Color tagColor = isPending ? Colors.orange : (isWon ? Colors.green : Colors.purple);
-
-                          return ListTile(
-                            dense: true,
-                            title: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_month, color: Colors.purple, size: 22),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                '📅 Cronograma de Fechas y Abonos Mínimos para Participar',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.purple),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Configure las diferentes fechas de sorteos anticipados o semanales y cuánto debe tener abonado como mínimo el participante para entrar a jugar en cada fecha hasta llegar al sorteo del premio mayor.',
+                          style: TextStyle(fontSize: 11.5, color: Colors.black87),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showAddPrizeDialog(),
+                            icon: const Icon(Icons.add_circle_outline, size: 18),
+                            label: const Text(
+                              '+ AGREGAR FECHA CON ABONO MÍNIMO Y PREMIO',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_weeklyPrizes.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
                               children: [
-                                Expanded(
-                                  child: Text('${p.name} — \$${p.amount.toStringAsFixed(0)} COP',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Icon(Icons.event_note, size: 36, color: Colors.grey.shade400),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Aún no has configurado fechas con abonos mínimos.',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.grey),
+                                  textAlign: TextAlign.center,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(color: tagColor.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
-                                  child: Text(
-                                    p.status,
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: tagColor),
-                                  ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Toca en "+ AGREGAR FECHA CON ABONO MÍNIMO Y PREMIO" para programar las fechas en que juegan los clientes (ej: 15 Nov -> \$30.000, 30 Nov -> \$60.000, etc.).',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                             ),
-                            subtitle: Text(
-                              'Fecha: ${p.drawDate} • Lotería: ${p.lotteryName} • Mín. Abono: ${p.minAbonoType == 'PORCENTAJE' ? '${p.minAbonoValue}%' : '\$${p.minAbonoValue.toStringAsFixed(0)}'}${p.isAccumulative ? ' • Acumulable' : ''}${p.winnerName != null ? '\n🏆 Ganador: ${p.winnerName} (Boleta #${p.winningTicketNumber})' : ''}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isPending)
-                                  IconButton(
-                                    icon: const Icon(Icons.emoji_events_outlined, color: Colors.amber, size: 20),
-                                    tooltip: 'Evaluar / Marcar Ganador o Acumulado',
-                                    onPressed: () => _showEvaluateDrawWinnerDialog(p, i),
-                                  ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-                                  tooltip: 'Eliminar Sorteo',
-                                  onPressed: () {
-                                    setState(() {
-                                      _weeklyPrizes.removeAt(i);
-                                    });
-                                  },
+                          )
+                        else
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _weeklyPrizes.length,
+                            separatorBuilder: (context, i) => const SizedBox(height: 8),
+                            itemBuilder: (context, i) {
+                              final p = _weeklyPrizes[i];
+                              final isPending = p.status == 'PENDIENTE';
+                              final isWon = p.status == 'GANADO';
+                              Color tagColor = isPending ? Colors.orange : (isWon ? Colors.green : Colors.purple);
+
+                              final reqAbonoStr = p.minAbonoType == 'PORCENTAJE'
+                                  ? '${p.minAbonoValue.toStringAsFixed(0)}% del valor de la boleta'
+                                  : '\$${p.minAbonoValue.toStringAsFixed(0)} COP';
+
+                              return Card(
+                                elevation: 1,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: BorderSide(color: Colors.purple.shade100),
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.shade100,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '🗓️ ${p.drawDate}',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: Colors.purple.shade900),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              p.name,
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                                color: tagColor.withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(4)),
+                                            child: Text(
+                                              p.status,
+                                              style: TextStyle(
+                                                  fontSize: 10, fontWeight: FontWeight.bold, color: tagColor),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '💰 Abono Mínimo Requerido: $reqAbonoStr',
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.black87),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '🎁 Premio: \$${p.amount.toStringAsFixed(0)} COP • Lotería: ${p.lotteryName}${p.isAccumulative ? ' • Acumulable' : ''}',
+                                                  style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+                                                ),
+                                                if (p.winnerName != null)
+                                                  Text(
+                                                    '🏆 Ganador: ${p.winnerName} (Boleta #${p.winningTicketNumber})',
+                                                    style: const TextStyle(
+                                                        fontSize: 11.5,
+                                                        color: Colors.green,
+                                                        fontWeight: FontWeight.bold),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (isPending)
+                                                IconButton(
+                                                  icon: const Icon(Icons.emoji_events_outlined,
+                                                      color: Colors.amber, size: 22),
+                                                  tooltip: 'Evaluar / Marcar Ganador',
+                                                  onPressed: () => _showEvaluateDrawWinnerDialog(p, i),
+                                                ),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit_outlined,
+                                                    color: Colors.blue, size: 20),
+                                                tooltip: 'Editar Fecha y Requisitos',
+                                                onPressed: () => _showAddPrizeDialog(editPrize: p, editIndex: i),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline,
+                                                    color: Colors.red, size: 20),
+                                                tooltip: 'Eliminar Fecha',
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _weeklyPrizes.removeAt(i);
+                                                  });
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
                     ),
+                  ),
                 ],
 
                 const SizedBox(height: 24),

@@ -329,7 +329,7 @@ class _TransfersTab extends StatelessWidget {
                                 ElevatedButton.icon(
                                   onPressed: () => onValidate(p),
                                   icon: const Icon(Icons.verified, size: 18),
-                                  label: const Text('Validar (llegó a la cuenta)'),
+                                  label: const Text('Legalizar en Caja (Confirmar en Banco)'),
                                   style:
                                       ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
                                 ),

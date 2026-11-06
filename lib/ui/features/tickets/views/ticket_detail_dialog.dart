@@ -971,7 +971,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                 ),
                                 icon: const Icon(Icons.check_circle_outline, size: 18),
-                                label: const Text('VALIDAR Y CONFIRMAR EN BANCO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                label: const Text('LEGALIZAR EN CAJA (CONFIRMAR EN BANCO)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                                 onPressed: () => _validateTransfer(pt),
                               ),
                             ),
@@ -989,9 +989,25 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           ],
                         )
                       else
-                        Text(
-                          '⏳ Pendiente de validación por el administrador en extracto bancario.',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontStyle: FontStyle.italic),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.orange.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.hourglass_top, size: 16, color: Colors.orange.shade800),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Transferencia reportada: pendiente de legalizar por el Administrador en Caja.',
+                                  style: TextStyle(fontSize: 11.5, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                     ],
                   ),
