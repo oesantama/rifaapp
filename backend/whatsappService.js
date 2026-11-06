@@ -180,7 +180,16 @@ function updateSession(senderPhone, data, db, saveDBCallback, raffleId) {
 }
 
 /**
- * Extrae datos del perfil del comprador para facturación electrónica (DIAN) y registro legal
+ * Normaliza nombres a formato Capitalizado (Title Case)
+ */
+function cleanTitle(str) {
+  if (!str) return '';
+  return str.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+/**
+ * Extrae datos del perfil del comprador para soporte digital de compra y registro legal
+ * Soporta entradas separadas por comas, saltos de línea, etiquetas o texto fluido
  */
 function extractBuyerProfile(text) {
   const result = {
@@ -193,56 +202,82 @@ function extractBuyerProfile(text) {
 
   if (!text || typeof text !== 'string') return result;
 
-  // 1. Correo electrónico
-  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) {
-    result.email = emailMatch[0].toLowerCase();
+  // 1. Detección por etiquetas explícitas (ej: "Nombre: ...", "CC: ...", "Correo: ...", "Ciudad: ...")
+  const nameLabel = text.match(/(?:nombre(?: y apellidos)?|titular|raz[oó]n social|a nombre de|apartar a)[:\s]+([^,\n;]+)/i);
+  if (nameLabel) result.name = cleanTitle(nameLabel[1]);
+
+  const docLabel = text.match(/(?:cc|c\.c\.|nit|c[eé]dula|id|doc|identificaci[oó]n|ti|pasaporte)[:\s#]+([0-9]{6,12})/i);
+  if (docLabel) result.document = docLabel[1].trim();
+
+  const emailLabel = text.match(/(?:correo|email|e-mail)[:\s]+([^\s,\n;]+)/i);
+  if (emailLabel) {
+    let em = emailLabel[1].trim().toLowerCase();
+    if (em && !em.includes('@') && em.includes('.')) em += '@gmail.com';
+    result.email = em;
   }
 
-  // 2. Cédula / NIT / Documento de identidad
-  const docMatchWithPrefix = text.match(/(?:cc|c\.c\.|nit|c[eé]dula|id|doc|identificaci[oó]n|ti|pasaporte)[:\s#]*([0-9]{6,12})/i);
-  if (docMatchWithPrefix) {
-    result.document = docMatchWithPrefix[1];
-  } else {
-    // Buscar números de 6 a 11 dígitos que no sean celular (3XX...)
-    const allNums = text.match(/\b\d{6,11}\b/g) || [];
+  const cityLabel = text.match(/(?:ciudad|municipio|ubicaci[oó]n|vive en|de)[:\s]+([^,\n;]+)/i);
+  if (cityLabel) result.city = cleanTitle(cityLabel[1]);
+
+  const countryLabel = text.match(/(?:pa[ií]s)[:\s]+([^,\n;]+)/i);
+  if (countryLabel) result.country = cleanTitle(countryLabel[1]);
+
+  // 2. Correo electrónico completo en cualquier parte del texto
+  if (!result.email) {
+    const fullEmailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (fullEmailMatch) {
+      result.email = fullEmailMatch[0].toLowerCase();
+    }
+  }
+
+  // 3. Documento de 6 a 12 dígitos en cualquier parte (que no sea celular 3XX...)
+  if (!result.document) {
+    const allNums = text.match(/\b\d{6,12}\b/g) || [];
     const nonCell = allNums.find(n => !(n.length === 10 && n.startsWith('3')));
     if (nonCell) {
       result.document = nonCell;
     }
   }
 
-  // 3. País
-  const countryMatch = text.match(/(?:pa[ií]s)[:\s]*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{3,25})/i);
-  if (countryMatch) {
-    result.country = countryMatch[1].trim();
-  } else if (/colombia/i.test(text)) {
-    result.country = 'Colombia';
-  }
-
-  // 4. Ciudad / Municipio
-  const cityMatch = text.match(/(?:ciudad|municipio|ubicaci[oó]n|vive en|de)[:\s]*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{3,30})/i);
-  if (cityMatch) {
-    result.city = cityMatch[1].trim();
-  }
-
-  // 5. Nombre y Apellidos / Razón Social
-  const nameMatchWithPrefix = text.match(/(?:nombre|titular|raz[oó]n social|a nombre de|apartar a)[:\s]*([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{3,45})/i);
-  if (nameMatchWithPrefix) {
-    result.name = nameMatchWithPrefix[1].trim();
-  } else {
-    // Si viene en líneas separadas
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    for (const line of lines) {
-      if (!line.includes('@') && !/\d/.test(line) && !/(?:ciudad|municipio|pais|correo|email|cedula|nit|apartar|boleta|transferencia)/i.test(line)) {
-        const words = line.split(/\s+/).filter(w => w.length >= 2);
-        if (words.length >= 2 && words.length <= 5) {
-          result.name = words.join(' ');
-          break;
-        }
+  // 4. Procesamiento inteligente por delimitadores (comas, punto y coma, saltos de línea, plecas)
+  // Ej: "oscar santamaria, 1121837405 ,oscars.santamaria, san martin"
+  const rawSegments = text.split(/[,;\n|]+/).map(s => s.trim()).filter(Boolean);
+  if (rawSegments.length >= 2) {
+    const unassigned = [];
+    for (const seg of rawSegments) {
+      // ¿Es documento numérico?
+      const docClean = seg.replace(/[^0-9]/g, '');
+      if (docClean.length >= 6 && docClean.length <= 12 && (!result.document || result.document === docClean)) {
+        if (!result.document) result.document = docClean;
+        continue;
       }
+
+      // ¿Es email o usuario con punto (ej: "oscars.santamaria")?
+      if (!result.email && (seg.includes('@') || (!seg.includes(' ') && seg.includes('.') && /[a-zA-Z]/.test(seg)))) {
+        let em = seg.toLowerCase().replace(/^(?:correo|email|e-mail)[:\s]*/i, '').trim();
+        if (!em.includes('@')) em += '@gmail.com';
+        result.email = em;
+        continue;
+      }
+
+      // ¿Es mención clara de ciudad conocida de Colombia?
+      if (!result.city && /(?:bogot[aá]|medell[ií]n|cali|barranquilla|cartagena|bucaramanga|villavicencio|san mart[ií]n|ibagu[eé]|pereira|manizales|c[uú]cuta|santa marta|valledupar|monter[ií]a|pasto|armenia|neiva|popay[aá]|sincelejo|riohacha|tunja|florencia|yopal|quibd[oó]|in[ií]rida|mit[uú]|mocoa|puerto carre[ñn]o)/i.test(seg)) {
+        result.city = cleanTitle(seg);
+        continue;
+      }
+
+      unassigned.push(seg);
     }
 
+    // Asignar los segmentos no asignados restantes en orden posicional (1º Nombre, 2º Ciudad si falta)
+    if (!result.name && unassigned.length > 0) {
+      result.name = cleanTitle(unassigned.shift());
+    }
+    if (!result.city && unassigned.length > 0) {
+      result.city = cleanTitle(unassigned.shift());
+    }
+  } else {
+    // Si viene texto libre continuo sin comas
     if (!result.name) {
       let cleaned = text
         .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
@@ -250,12 +285,15 @@ function extractBuyerProfile(text) {
         .replace(/\b\d{4,12}\b/g, '')
         .replace(/[,;.\n]+/g, ' ')
         .trim();
-      const words = cleaned.split(/\s+/).filter(w => w.length > 2);
+      const words = cleaned.split(/\s+/).filter(w => w.length >= 2);
       if (words.length >= 2 && words.length <= 6) {
-        result.name = words.join(' ');
+        result.name = cleanTitle(words.join(' '));
       }
     }
   }
+
+  // País por defecto
+  if (/colombia/i.test(text)) result.country = 'Colombia';
 
   return result;
 }
@@ -412,6 +450,22 @@ _(Escribe el número de la opción o tu consulta)_`;
       targetTicket = (db.tickets || []).find(t => t.id === session.lastTicketId);
       numberIdentified = session.lastOpportunity || (targetTicket ? targetTicket.numbers[0] : '');
     }
+    if (!targetTicket) {
+      targetTicket = (db.tickets || []).find(t => t.buyerPhone === senderPhone && t.raffleId === mainRaffle.id);
+      if (targetTicket) numberIdentified = targetTicket.numbers[0];
+    }
+
+    const knownName = targetTicket?.buyerName || session?.buyerName || '';
+    const knownDoc = targetTicket?.buyerDocument || session?.buyerDocument || '';
+    const knownEmail = targetTicket?.buyerEmail || session?.buyerEmail || '';
+    const knownCity = targetTicket?.buyerCity || session?.buyerCity || '';
+    const knownCountry = targetTicket?.buyerCountry || session?.buyerCountry || 'Colombia';
+
+    const missing = [];
+    if (!knownName) missing.push('Nombre y Apellidos completos (o Razón Social)');
+    if (!knownDoc) missing.push('Cédula de Ciudadanía o NIT');
+    if (!knownEmail) missing.push('Correo electrónico (para envío de soporte de compra)');
+    if (!knownCity) missing.push('Ciudad y País (ej: San Martín, Meta)');
 
     let receiptReply = `📸 *¡Comprobante de transferencia recibido con éxito!* ✅\nHemos recibido la imagen de tu pago para *${companyName}*.\n\n`;
 
@@ -420,20 +474,41 @@ _(Escribe el número de la opción o tu consulta)_`;
       receiptReply += `_(¿Deseas cambiar este número? Solo escribe el nuevo número que prefieres antes de confirmar).\n\n`;
     }
 
-    receiptReply += `📋 *Para el registro legal, emisión de boleta con QR y FACTURACIÓN ELECTRÓNICA (DIAN), indícanos:*
-1️⃣ *Nombre y Apellidos completos* (o Razón Social)
-2️⃣ *Cédula de Ciudadanía o NIT*
-3️⃣ *Correo electrónico* (para el envío de tu boleta y factura electrónica)
-4️⃣ *Ciudad y País* (ej: San Martín, Meta - Colombia)
-${!numberIdentified ? '5️⃣ *Número de boleta o cifras que estás jugando*\n' : ''}
-✍️ *Puedes responder con todos tus datos en un solo mensaje.*
-Nuestro equipo validará la transferencia en banco y te emitirá tu boleta oficial. 🍀`;
+    if (missing.length === 0) {
+      receiptReply += `👤 *Titular:* ${knownName}\n`;
+      receiptReply += `🪪 *Cédula/NIT:* ${knownDoc}\n`;
+      receiptReply += `📧 *Correo:* ${knownEmail}\n`;
+      receiptReply += `📍 *Ciudad:* ${knownCity}, ${knownCountry}\n\n`;
+      receiptReply += `✨ *Todos tus datos ya están completos y vinculados.* Nuestro equipo administrativo validará la transferencia en banco y activará tu boleta oficial.\n\n`;
+      receiptReply += `🌐 *Puedes consultar tu boleta y Soporte Digital de Compra aquí:*\n`;
+      receiptReply += `https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}\n\n`;
+      receiptReply += `¡Muchas gracias y mucha suerte en el sorteo! 🍀`;
+    } else {
+      let registeredLines = [];
+      if (knownName) registeredLines.push(`• *Titular:* ${knownName}`);
+      if (knownDoc) registeredLines.push(`• *Cédula/NIT:* ${knownDoc}`);
+      if (knownEmail) registeredLines.push(`• *Correo:* ${knownEmail}`);
+      if (knownCity) registeredLines.push(`• *Ciudad:* ${knownCity}`);
+
+      if (registeredLines.length > 0) {
+        receiptReply += `✅ *Datos ya registrados:*\n${registeredLines.join('\n')}\n\n`;
+      }
+
+      receiptReply += `📋 *Para completar tu Soporte Digital de Compra y registro legal, indícanos únicamente:*\n`;
+      missing.forEach((m, idx) => {
+        receiptReply += `${idx + 1}️⃣ *${m}*\n`;
+      });
+      if (!numberIdentified) {
+        receiptReply += `5️⃣ *Número de boleta o cifras que compraste*\n`;
+      }
+      receiptReply += `\n✍️ *Por favor indícanos ${missing.length === 1 ? 'este dato' : 'estos datos faltantes'} en un solo mensaje.*`;
+    }
 
     updateSession(senderPhone, {
       lastRaffleId: mainRaffle.id,
       lastTicketId: targetTicket ? targetTicket.id : (session?.lastTicketId || null),
       lastOpportunity: numberIdentified,
-      waitingData: true,
+      waitingData: missing.length > 0,
       lastImageAt: Date.now()
     }, db, saveDBCallback, mainRaffle.id);
 
@@ -448,9 +523,15 @@ Nuestro equipo validará la transferencia en banco y te emitirá tu boleta ofici
                          (profile.document && profile.email) || 
                          (session && session.waitingData && (profile.name || profile.document || profile.email || profile.city));
 
-  if (hasProfileData && session && session.lastTicketId) {
+  if (hasProfileData && session && (session.lastTicketId || session.lastOpportunity)) {
     const tickets = (db.tickets || []).filter(t => t.raffleId === (session.lastRaffleId || mainRaffle.id));
-    const targetTicket = tickets.find(t => t.id === session.lastTicketId);
+    let targetTicket = session.lastTicketId ? tickets.find(t => t.id === session.lastTicketId) : null;
+    if (!targetTicket && session.lastOpportunity) {
+      targetTicket = tickets.find(t => (t.numbers || []).includes(session.lastOpportunity));
+    }
+    if (!targetTicket) {
+      targetTicket = tickets.find(t => t.buyerPhone === senderPhone);
+    }
 
     if (targetTicket) {
       if (profile.name) targetTicket.buyerName = profile.name;
@@ -473,8 +554,16 @@ Nuestro equipo validará la transferencia en banco y te emitirá tu boleta ofici
         saveDBCallback(session.lastRaffleId || mainRaffle.id);
       }
 
-      const confirmMsg = 
-`🎉 *¡DATOS VINCULADOS A TU BOLETA Y FACTURACIÓN!* ✅
+      const missingAfter = [];
+      if (!targetTicket.buyerName) missingAfter.push('Nombre y Apellidos completos');
+      if (!targetTicket.buyerDocument) missingAfter.push('Cédula de Ciudadanía o NIT');
+      if (!targetTicket.buyerEmail) missingAfter.push('Correo electrónico');
+      if (!targetTicket.buyerCity) missingAfter.push('Ciudad y País');
+
+      let replyMsg = '';
+      if (missingAfter.length === 0) {
+        replyMsg = 
+`🎉 *¡DATOS VINCULADOS A TU BOLETA Y SOPORTE DE COMPRA!* ✅
 
 🎟️ *Boleta:* #${targetTicket.ticketNumber}
 🔢 *Tus números:* ${targetTicket.numbers.join('  •  ')}
@@ -485,15 +574,26 @@ Nuestro equipo validará la transferencia en banco y te emitirá tu boleta ofici
 ${advisor ? `👤 *Asesor:* ${advisor.name}\n` : ''}📱 *WhatsApp:* ${senderPhone}
 💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP
 
-🌐 *Consulta tu boleta digital oficial (100% Segura SSL):*
+🌐 *Consulta tu boleta digital oficial y soporte de compra:*
 https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}
 
-Tus datos han quedado formalmente registrados para el sorteo y la expedición de tu factura electrónica. Nuestro equipo validará el comprobante bancario para emitir la certificación oficial.
+Tus datos han quedado formalmente registrados para el sorteo y la emisión de tu soporte de compra. Nuestro equipo validará el comprobante bancario para emitir la certificación oficial.
 _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha suerte! 🍀`;
+      } else {
+        replyMsg = 
+`✅ *¡Datos recibidos y actualizados con éxito!*
+
+🎟️ *Boleta:* #${targetTicket.ticketNumber} (${targetTicket.numbers.join(' • ')})
+${targetTicket.buyerName ? `• *Titular:* ${targetTicket.buyerName}\n` : ''}${targetTicket.buyerDocument ? `• *Cédula/NIT:* ${targetTicket.buyerDocument}\n` : ''}${targetTicket.buyerEmail ? `• *Correo:* ${targetTicket.buyerEmail}\n` : ''}${targetTicket.buyerCity ? `• *Ciudad:* ${targetTicket.buyerCity}\n` : ''}
+📋 *Para completar tu Soporte Digital de Compra, solo indícanos:*
+${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
+
+✍️ *Por favor indícanos ${missingAfter.length === 1 ? 'este dato' : 'estos datos faltantes'} para finalizar.*`;
+      }
 
       updateSession(senderPhone, {
-        waitingData: false,
-        profileCaptured: true,
+        waitingData: missingAfter.length > 0,
+        profileCaptured: missingAfter.length === 0,
         buyerName: targetTicket.buyerName,
         buyerDocument: targetTicket.buyerDocument,
         buyerEmail: targetTicket.buyerEmail,
@@ -501,10 +601,12 @@ _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha s
         buyerCountry: targetTicket.buyerCountry
       }, db, saveDBCallback, mainRaffle.id);
 
-      await sendTextMessage(instance, senderPhone, confirmMsg);
+      await sendTextMessage(instance, senderPhone, replyMsg);
       return { handled: true };
     }
   }
+
+
 
   // 3. CONSULTA DE MEDIOS DE PAGO / CUENTAS (Priorizando cuentas de la rifa)
   if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
@@ -686,7 +788,7 @@ _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha s
 ${matchedTicket.buyerName ? `👤 *Titular:* ${matchedTicket.buyerName}\n` : ''}${matchedTicket.buyerDocument ? `🪪 *Cédula/NIT:* ${matchedTicket.buyerDocument}\n` : ''}💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
 🎯 *Sorteo:* ${mainRaffle.title} el ${drawDateFormatted}
 
-${!matchedTicket.buyerDocument ? '📋 *Por favor indícanos tu Nombre, Cédula/NIT, Correo electrónico y Ciudad* para vincular tus datos a la facturación electrónica y tu boleta digital oficial.' : `🌐 *Puedes consultar tu boleta actualizada:* https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}`}
+${!matchedTicket.buyerDocument ? '📋 *Por favor indícanos tu Nombre, Cédula/NIT, Correo electrónico y Ciudad* para vincular tus datos al soporte digital de compra y tu boleta oficial.' : `🌐 *Puedes consultar tu boleta actualizada:* https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}`}
 _(Si deseas cambiar a otro número, solo escribe el nuevo número)._ 🍀`;
 
           await sendTextMessage(instance, senderPhone, changeMsg);
@@ -773,5 +875,6 @@ module.exports = {
   connectInstance,
   disconnectInstance,
   sendTextMessage,
-  handleWebhookEvent
+  handleWebhookEvent,
+  extractBuyerProfile
 };

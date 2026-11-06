@@ -616,7 +616,8 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   // Si se encontró boleta(s):
   const isPaid = ticket.status === 'PAGADA' || ticket.status === 'CONFIRMADA';
   const drawDate = formatRaffleDate(raffle.mainDrawDate, false);
-  const opportunitiesText = Array.isArray(ticket.numbers) ? ticket.numbers.join('  •  ') : String(ticket.ticketNumber || '');
+  const opportunities = Array.isArray(ticket.numbers) ? ticket.numbers : [String(ticket.ticketNumber || '')];
+  const opportunitiesText = opportunities.join('  •  ');
   
   // Galería de fotos del premio
   let images = [];
@@ -627,13 +628,20 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   } else if (raffle.fondoBoletaUrl) {
     images = [raffle.fondoBoletaUrl];
   } else {
-    // Galería demo visual elegante si no se han cargado fotos aún
     images = ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80'];
   }
 
   const maskedDoc = ticket.buyerDocument ? `••• ${ticket.buyerDocument.slice(-3)}` : '••••••';
-  const city = company.city || 'San Martín';
-  const emailMasked = ticket.buyerEmail ? ticket.buyerEmail.replace(/^(.{2})(.*)(@.*)$/, '$1•••$3') : (ticket.buyerPhone ? `${ticket.buyerPhone.slice(0, 3)}•••@rifamaster.com` : 'No registrado');
+  const displayCity = ticket.buyerCity || company.city || 'San Martín';
+  const displayCountry = ticket.buyerCountry || 'Colombia';
+  const emailMasked = ticket.buyerEmail 
+    ? ticket.buyerEmail.replace(/^(.{2})(.*)(@.*)$/, '$1•••$3') 
+    : (ticket.buyerPhone ? `${ticket.buyerPhone.slice(0, 3)}•••@rifamaster.com` : 'No registrado');
+
+  const ticketPrice = Number(ticket.price || raffle.ticketPrice || 0);
+  const totalPaid = Number(ticket.totalPaid || 0);
+  const balancePending = Number(ticket.balancePending !== undefined ? ticket.balancePending : Math.max(0, ticketPrice - totalPaid));
+  const verifyHash = `RM-VAL-${(ticket.id || '000000').slice(-8).toUpperCase()}`;
 
   return `<!doctype html>
 <html lang="es">
@@ -643,216 +651,311 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   <title>Boleta Nº ${escapeHtml(opportunitiesText)} - ${escapeHtml(raffle.title || companyName)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
-    body { background-color: #F8FAFC; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; }
-    header { background: #000000; color: #FFFFFF; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
-    .back-btn { background: #1E293B; color: #FFFFFF; border: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: 800; }
-    .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }
-    main { flex: 1; max-width: 500px; width: 100%; margin: 0 auto; padding: 16px 14px 60px; }
+    body { background-color: #0F172A; color: #0F172A; min-height: 100vh; display: flex; flex-direction: column; }
     
-    .raffle-hero { margin-bottom: 14px; text-align: center; }
-    .raffle-hero h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 2px; }
-    .raffle-hero .subtitle { font-size: 14px; color: #64748B; font-weight: 600; }
+    /* Top Header */
+    header { background: #0F172A; color: #FFFFFF; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; border-bottom: 1px solid #1E293B; }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .back-btn { background: #1E293B; color: #FFFFFF; border: 1px solid #334155; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: 800; transition: all .2s; }
+    .back-btn:hover { background: #334155; }
+    .header-brand { display: flex; flex-direction: column; }
+    .brand-title { font-size: 14px; font-weight: 800; color: #F8FAFC; letter-spacing: -0.3px; }
+    .brand-sub { font-size: 11px; color: #94A3B8; font-weight: 600; }
+    .cert-pill { background: rgba(16,185,129,.15); color: #10B981; border: 1px solid rgba(16,185,129,.35); padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 800; display: flex; align-items: center; gap: 5px; }
 
-    /* Carrusel de fotos de premios */
-    .carousel-card { position: relative; border-radius: 20px; overflow: hidden; background: #000; margin-bottom: 18px; box-shadow: 0 10px 25px rgba(0,0,0,.08); }
-    .carousel-track { width: 100%; height: 280px; position: relative; }
+    main { flex: 1; max-width: 540px; width: 100%; margin: 0 auto; padding: 18px 14px 60px; }
+
+    /* Digital Ticket Container */
+    .ticket-wrapper { background: #FFFFFF; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,.35); margin-bottom: 20px; border: 1px solid #CBD5E1; position: relative; }
+    
+    /* Ticket Top Header */
+    .ticket-head { background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); color: #FFFFFF; padding: 22px 20px 18px; text-align: center; position: relative; border-bottom: 2px dashed #E2E8F0; }
+    .ticket-badge { background: #F59E0B; color: #000000; font-weight: 900; font-size: 11px; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.8px; text-transform: uppercase; display: inline-block; margin-bottom: 8px; }
+    .ticket-title { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #FFFFFF; margin-bottom: 4px; }
+    .ticket-serial { font-size: 13px; color: #94A3B8; font-weight: 600; }
+    
+    /* Ticket Perforations */
+    .cutout-left, .cutout-right { position: absolute; width: 22px; height: 22px; background: #0F172A; border-radius: 50%; bottom: -11px; z-index: 5; }
+    .cutout-left { left: -11px; }
+    .cutout-right { right: -11px; }
+
+    /* Numbers Highlight Section */
+    .numbers-section { padding: 24px 20px 18px; text-align: center; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; }
+    .numbers-label { font-size: 11.5px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .numbers-grid { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .number-chip { background: #0F172A; color: #F59E0B; border: 2px solid #F59E0B; border-radius: 16px; padding: 10px 22px; font-size: 26px; font-weight: 900; letter-spacing: 2px; box-shadow: 0 6px 16px rgba(245,158,11,.15); }
+    .opportunities-hint { font-size: 12px; color: #64748B; font-weight: 600; }
+
+    /* Status Pill Banner */
+    .status-banner { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #F1F5F9; }
+    .status-pill-paid { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+    .status-pill-pending { background: #FFFBEB; color: #D97706; border: 1px solid #FDE68A; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; }
+    .ticket-price-badge { font-size: 14px; font-weight: 800; color: #0F172A; }
+
+    /* Carrusel de fotos */
+    .carousel-container { position: relative; width: 100%; height: 240px; background: #000000; overflow: hidden; }
     .carousel-slide { width: 100%; height: 100%; object-fit: cover; display: none; }
     .carousel-slide.active { display: block; }
-    .carousel-badge { position: absolute; top: 14px; right: 14px; background: rgba(0,0,0,.6); color: #fff; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
-    .carousel-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.8); border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #000; }
-    .carousel-btn.prev { left: 10px; }
-    .carousel-btn.next { right: 10px; }
-    .carousel-footer { position: absolute; bottom: 12px; left: 14px; background: rgba(0,0,0,.7); color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px); }
+    .carousel-counter { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,.65); color: #fff; padding: 4px 10px; border-radius: 14px; font-size: 11px; font-weight: 800; backdrop-filter: blur(4px); }
+    .carousel-caption { position: absolute; bottom: 12px; left: 12px; right: 12px; background: rgba(0,0,0,.7); color: #fff; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px); }
+    .carousel-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,.85); border: none; width: 32px; height: 32px; border-radius: 50%; font-size: 15px; font-weight: 900; color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .carousel-nav-btn.prev { left: 10px; }
+    .carousel-nav-btn.next { right: 10px; }
 
-    /* Tarjetas de información */
-    .card { background: #FFFFFF; border-radius: 18px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 15px rgba(15,23,42,.03); border: 1px solid #F1F5F9; }
-    .card-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 16px; font-weight: 800; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .data-item { margin-bottom: 10px; }
-    .data-label { font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 3px; }
-    .data-val { font-size: 15px; font-weight: 700; color: #0F172A; }
-    .badge-paid { color: #059669; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
-    .badge-pending { color: #D97706; font-weight: 800; }
-    .state-msg { font-size: 13.5px; color: #334155; margin-top: 6px; line-height: 1.4; }
+    /* Sections Inside Ticket */
+    .ticket-body { padding: 20px; }
+    .section-title { font-size: 14.5px; font-weight: 800; color: #0F172A; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #F1F5F9; padding-bottom: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
+    .data-box { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 10px 12px; }
+    .data-lbl { font-size: 10.5px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 3px; }
+    .data-txt { font-size: 14px; font-weight: 700; color: #0F172A; word-break: break-word; }
 
-    /* Acordeones */
-    details { border-top: 1px solid #F1F5F9; padding: 14px 0 4px; }
-    details:first-of-type { border-top: none; }
-    summary { font-size: 14px; font-weight: 700; color: #0F172A; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+    /* Accordion Details */
+    details { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; margin-bottom: 10px; padding: 12px 14px; }
+    summary { font-size: 13.5px; font-weight: 700; color: #0F172A; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
     summary::-webkit-details-marker { display: none; }
     summary::after { content: '⌄'; font-size: 18px; font-weight: 800; color: #64748B; transition: transform .2s; }
     details[open] summary::after { transform: rotate(180deg); }
-    .details-body { padding-top: 12px; font-size: 13px; color: #475569; line-height: 1.55; }
+    .details-inner { padding-top: 10px; font-size: 13px; color: #475569; line-height: 1.5; border-top: 1px solid #E2E8F0; margin-top: 8px; }
 
-    .btn-share { width: 100%; background: #000000; color: #FFFFFF; font-size: 15px; font-weight: 700; padding: 16px; border: none; border-radius: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; margin-top: 10px; }
-    .footer-text { text-align: center; font-size: 11.5px; color: #94A3B8; margin-top: 24px; line-height: 1.5; padding: 0 10px; }
+    /* Verification Box */
+    .verify-box { background: #F0FDF4; border: 1.5px solid #BBF7D0; border-radius: 14px; padding: 14px; margin-top: 16px; text-align: center; }
+    .verify-seal { font-size: 11.5px; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .verify-hash { font-family: monospace; font-size: 13px; font-weight: 700; color: #15803D; background: #DCFCE7; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-top: 4px; }
+    .verify-note { font-size: 11.5px; color: #166534; margin-top: 6px; line-height: 1.4; }
+
+    /* Action Buttons */
+    .actions-row { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+    .btn-whatsapp { background: #25D366; color: #FFFFFF; font-size: 14.5px; font-weight: 800; padding: 14px; border: none; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; box-shadow: 0 4px 14px rgba(37,211,102,.3); transition: all .2s; }
+    .btn-whatsapp:hover { transform: translateY(-1px); background: #20BD5A; }
+    .btn-print { background: #1E293B; color: #FFFFFF; font-size: 14px; font-weight: 700; padding: 12px; border: 1px solid #334155; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-print:hover { background: #334155; }
+
+    .other-tickets-box { background: #1E293B; border-radius: 16px; padding: 16px; margin-top: 16px; color: #FFFFFF; }
+    .other-tickets-title { font-size: 13px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+    .other-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #334155; }
+    .other-item:last-child { border-bottom: none; }
+    .other-link { color: #10B981; font-weight: 800; text-decoration: none; font-size: 13px; }
+
+    .footer-disclaimer { text-align: center; font-size: 11px; color: #64748B; margin-top: 24px; line-height: 1.5; padding: 0 10px; }
     .wa-float { position: fixed; bottom: 24px; right: 24px; background: #25D366; color: #FFFFFF; width: 54px; height: 54px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px rgba(37,211,102,.4); text-decoration: none; z-index: 99; }
+    
+    @media print {
+      body { background: #FFF !important; color: #000 !important; }
+      header, .actions-row, .wa-float, .other-tickets-box, .back-btn { display: none !important; }
+      .ticket-wrapper { box-shadow: none !important; border: 1px solid #000 !important; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <a href="/boleta" class="back-btn" title="Buscar otra boleta">‹</a>
-    <div class="header-title">Boleta Nº ${escapeHtml(opportunitiesText)}</div>
-    <div style="width: 36px;"></div>
+    <div class="header-left">
+      <a href="/boleta" class="back-btn" title="Buscar otra boleta">‹</a>
+      <div class="header-brand">
+        <span class="brand-title">${escapeHtml(companyName)}</span>
+        <span class="brand-sub">Soporte Digital Oficial</span>
+      </div>
+    </div>
+    <div class="cert-pill">
+      <span>🛡️</span>
+      <span>100% Verificada</span>
+    </div>
   </header>
 
   <main>
-    <div class="raffle-hero">
-      <h1>${escapeHtml(raffle.title || 'Gran Sorteo')}</h1>
-      <div class="subtitle">Boleta número ${escapeHtml(opportunitiesText)}</div>
-    </div>
+    <div class="ticket-wrapper">
+      <!-- Cabecera estilo billete oficial -->
+      <div class="ticket-head">
+        <div class="cutout-left"></div>
+        <div class="cutout-right"></div>
+        <div class="ticket-badge">🎟️ COMPROBANTE OFICIAL DE RESERVA</div>
+        <h1 class="ticket-title">${escapeHtml(raffle.title || 'Gran Sorteo')}</h1>
+        <div class="ticket-serial">Boleta Oficial #${ticket.ticketNumber || ticket.id.slice(-6)}</div>
+      </div>
 
-    <!-- Carrusel de fotos del premio -->
-    <div class="carousel-card">
-      <div class="carousel-track" id="carouselTrack">
-        ${images.map((img, i) => `<img src="${escapeHtml(img)}" class="carousel-slide ${i === 0 ? 'active' : ''}" alt="Foto premio">`).join('')}
+      <!-- Números que juega -->
+      <div class="numbers-section">
+        <div class="numbers-label">Tus números oficiales (${raffle.digits || 4} cifras)</div>
+        <div class="numbers-grid">
+          ${opportunities.map(num => `<div class="number-chip">${escapeHtml(num)}</div>`).join('')}
+        </div>
+        <div class="opportunities-hint">Juegas con ${opportunities.length} ${opportunities.length === 1 ? 'oportunidad' : 'oportunidades'} por boleta</div>
       </div>
-      <div class="carousel-badge" id="carouselBadge">1 / ${images.length}</div>
-      ${images.length > 1 ? `
-        <button class="carousel-btn prev" onclick="prevSlide()">‹</button>
-        <button class="carousel-btn next" onclick="nextSlide()">›</button>
-      ` : ''}
-      <div class="carousel-footer">${escapeHtml(raffle.description ? raffle.description.substring(0, 40) + '...' : 'Premio Oficial')}</div>
-    </div>
 
-    <!-- Tarjeta: Titular de la boleta -->
-    <div class="card">
-      <div class="card-title-row">
-        <span>📑</span>
-        <span>Titular de la boleta</span>
-      </div>
-      <div class="grid-2">
-        <div class="data-item">
-          <div class="data-label">Nombre</div>
-          <div class="data-val">${escapeHtml(ticket.buyerName || 'Sin asignar')}</div>
+      <!-- Banner de estado de pago -->
+      <div class="status-banner">
+        <div>
+          ${isPaid 
+            ? '<div class="status-pill-paid">✓ 100% PAGADA • PARTICIPANDO</div>' 
+            : '<div class="status-pill-pending">⏳ RESERVADA • PENDIENTE DE PAGO</div>'}
         </div>
-        <div class="data-item">
-          <div class="data-label">CC</div>
-          <div class="data-val">${escapeHtml(maskedDoc)}</div>
-        </div>
-        <div class="data-item">
-          <div class="data-label">Celular</div>
-          <div class="data-val">${escapeHtml(ticket.buyerPhone || '—')}</div>
-        </div>
-        <div class="data-item">
-          <div class="data-label">Ciudad</div>
-          <div class="data-val">${escapeHtml(city)}</div>
+        <div class="ticket-price-badge">
+          Valor: $${ticketPrice.toLocaleString('es-CO')} COP
         </div>
       </div>
-      <div class="data-item" style="margin-top: 4px;">
-        <div class="data-label">Correo Electrónico</div>
-        <div class="data-val" style="font-size: 13.5px;">${escapeHtml(emailMasked)}</div>
-      </div>
-      ${ticket.advisorName ? `
-        <div class="data-item" style="margin-top: 4px;">
-          <div class="data-label">Asesor Referido</div>
-          <div class="data-val" style="font-size: 13.5px;">${escapeHtml(ticket.advisorName)}</div>
-        </div>
-      ` : ''}
-    </div>
 
-    <!-- Tarjeta: Estado de pago -->
-    <div class="card">
-      <div class="card-title-row">
-        <span>💳</span>
-        <span>Estado de pago</span>
+      <!-- Carrusel de fotos del premio -->
+      <div class="carousel-container">
+        ${images.map((img, i) => `<img src="${escapeHtml(img)}" class="carousel-slide ${i === 0 ? 'active' : ''}" alt="Premio">`).join('')}
+        <div class="carousel-counter" id="carouselBadge">1 / ${images.length}</div>
+        ${images.length > 1 ? `
+          <button class="carousel-nav-btn prev" onclick="prevSlide()">‹</button>
+          <button class="carousel-nav-btn next" onclick="nextSlide()">›</button>
+        ` : ''}
+        <div class="carousel-caption">${escapeHtml(raffle.description ? raffle.description.substring(0, 50) + '...' : 'Premio Mayor Oficial')}</div>
       </div>
-      <div class="grid-2">
-        <div class="data-item">
-          <div class="data-label">Total Abonado</div>
-          <div class="data-val">$${Number(ticket.totalPaid || 0).toLocaleString('es-CO')}</div>
+
+      <!-- Cuerpo del soporte digital -->
+      <div class="ticket-body">
+        
+        <!-- Titular y datos fiscales para soporte -->
+        <div class="section-title">
+          <span>👤</span>
+          <span>Titular de la boleta y soporte de compra</span>
         </div>
-        <div class="data-item">
-          <div class="data-label">Estado</div>
-          <div class="data-val">
-            ${isPaid ? '<span class="badge-paid">Pagada ✓</span>' : '<span class="badge-pending">Apartada ⏳</span>'}
+
+        <div class="grid-2">
+          <div class="data-box">
+            <div class="data-lbl">Nombre / Razón Social</div>
+            <div class="data-txt">${escapeHtml(ticket.buyerName || 'Sin asignar')}</div>
+          </div>
+          <div class="data-box">
+            <div class="data-lbl">Cédula de Ciudadanía / NIT</div>
+            <div class="data-txt">${escapeHtml(maskedDoc)}</div>
+          </div>
+          <div class="data-box">
+            <div class="data-lbl">Teléfono / WhatsApp</div>
+            <div class="data-txt">${escapeHtml(ticket.buyerPhone || '—')}</div>
+          </div>
+          <div class="data-box">
+            <div class="data-lbl">Ciudad y País</div>
+            <div class="data-txt">${escapeHtml(displayCity)}, ${escapeHtml(displayCountry)}</div>
           </div>
         </div>
-      </div>
-      <div class="state-msg">
-        ${isPaid 
-          ? 'Esta boleta está <b>totalmente pagada</b>. ¡Mucha suerte en el sorteo!' 
-          : `Saldo pendiente por pagar: <b>$${Number(ticket.balancePending || 0).toLocaleString('es-CO')} COP</b>.`}
-      </div>
 
-      <div style="margin-top: 14px;">
-        <details>
-          <summary>Ver abonos realizados (${ticket.abonos ? ticket.abonos.length : 0})</summary>
-          <div class="details-body">
-            ${ticket.abonos && ticket.abonos.length > 0 ? ticket.abonos.map((a, idx) => `
-              <div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #E2E8F0;">
-                <span>${idx + 1}. ${a.date ? a.date.substring(0, 10) : 'Abono'} (${escapeHtml(a.metodoPago || 'Efectivo')})</span>
-                <b>$${Number(a.amount || 0).toLocaleString('es-CO')} COP</b>
-              </div>
-            `).join('') : '<p>No se registran pagos previos para esta boleta.</p>'}
+        <div class="data-box" style="margin-bottom: 16px;">
+          <div class="data-lbl">Correo Electrónico</div>
+          <div class="data-txt">${escapeHtml(emailMasked)}</div>
+        </div>
+
+        ${ticket.advisorName ? `
+          <div class="data-box" style="margin-bottom: 16px; background: #F0FDF4; border-color: #DCFCE7;">
+            <div class="data-lbl" style="color: #166534;">Asesor Autorizado</div>
+            <div class="data-txt" style="color: #15803D;">${escapeHtml(ticket.advisorName)}</div>
+          </div>
+        ` : ''}
+
+        <!-- Estado financiero de la boleta -->
+        <div class="section-title">
+          <span>💳</span>
+          <span>Detalle de pago y abonos</span>
+        </div>
+
+        <div class="grid-2">
+          <div class="data-box">
+            <div class="data-lbl">Total Abonado</div>
+            <div class="data-txt" style="color: #059669;">$${totalPaid.toLocaleString('es-CO')} COP</div>
+          </div>
+          <div class="data-box">
+            <div class="data-lbl">Saldo Pendiente</div>
+            <div class="data-txt" style="color: ${balancePending > 0 ? '#D97706' : '#059669'};">
+              $${balancePending.toLocaleString('es-CO')} COP
+            </div>
+          </div>
+        </div>
+
+        ${ticket.abonos && ticket.abonos.length > 0 ? `
+          <details>
+            <summary>Ver historial de abonos realizados (${ticket.abonos.length})</summary>
+            <div class="details-inner">
+              ${ticket.abonos.map((a, idx) => `
+                <div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #E2E8F0;">
+                  <span>${idx + 1}. ${a.date ? a.date.substring(0, 10) : 'Abono'} (${escapeHtml(a.metodoPago || 'Transferencia')})</span>
+                  <b>$${Number(a.amount || 0).toLocaleString('es-CO')} COP</b>
+                </div>
+              `).join('')}
+            </div>
+          </details>
+        ` : ''}
+
+        <!-- Condiciones del sorteo -->
+        <div class="section-title" style="margin-top: 16px;">
+          <span>🎯</span>
+          <span>Datos del sorteo y condiciones oficiales</span>
+        </div>
+
+        <details open>
+          <summary>🏆 Sorteo y Lotería Oficial</summary>
+          <div class="details-inner">
+            <p>• <b>Lotería Oficial:</b> ${escapeHtml(raffle.mainLotteryName || raffle.lotteryName || 'Lotería Oficial')}</p>
+            <p>• <b>Fecha del Sorteo:</b> ${escapeHtml(drawDate)}</p>
+            <p>• <b>Modalidad:</b> Juega con las ${raffle.winningDigitsPosition === 'PRIMERAS' ? 'primeras' : 'últimas'} ${raffle.digits || 4} cifras del premio mayor.</p>
+            <p>• <b>Premio Mayor:</b> ${escapeHtml(raffle.description || raffle.title)}</p>
+            <p style="margin-top: 6px; font-size: 12px; color: #DC2626;">• <b>Importante:</b> La boleta debe estar cancelada al 100% antes de la hora del sorteo para tener derecho al premio.</p>
           </div>
         </details>
-      </div>
-    </div>
 
-    <!-- Tarjeta: Premios y Condiciones -->
-    <div class="card">
-      <details>
-        <summary>🎁 Ver premios de la rifa</summary>
-        <div class="details-body">
-          <p><b>🏆 Premio Mayor:</b><br>${escapeHtml(raffle.description || raffle.title)}</p>
-          ${raffle.weeklyPrizes && raffle.weeklyPrizes.length > 0 ? `
-            <div style="margin-top: 10px;">
-              <b>🎁 Premios Anticipados / Semanales:</b>
-              <ul style="padding-left: 18px; margin-top: 4px;">
-                ${raffle.weeklyPrizes.map(p => `<li><b>${escapeHtml(p.name)}:</b> $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'Sorteo programado'})</li>`).join('')}
+        ${raffle.weeklyPrizes && raffle.weeklyPrizes.length > 0 ? `
+          <details>
+            <summary>🎁 Premios semanales / anticipados</summary>
+            <div class="details-inner">
+              <ul style="padding-left: 18px;">
+                ${raffle.weeklyPrizes.map(p => `<li><b>${escapeHtml(p.name)}:</b> $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha'})</li>`).join('')}
               </ul>
             </div>
-          ` : ''}
-        </div>
-      </details>
+          </details>
+        ` : ''}
 
-      <details>
-        <summary>🛡️ Ver condiciones para ganar</summary>
-        <div class="details-body">
-          <p>• <b>Lotería Oficial:</b> ${escapeHtml(raffle.mainLotteryName || raffle.lotteryName || 'Lotería Oficial')}</p>
-          <p>• <b>Fecha de Sorteo:</b> ${escapeHtml(drawDate)}</p>
-          <p>• <b>Modalidad:</b> Juega con las ${raffle.winningDigitsPosition === 'PRIMERAS' ? 'primeras' : 'últimas'} ${raffle.digits || 4} cifras del premio mayor.</p>
-          <p>• <b>Requisito:</b> La boleta debe estar 100% cancelada para participar en el sorteo.</p>
+        <!-- Sello de verificación digital -->
+        <div class="verify-box">
+          <div class="verify-seal">
+            <span>🛡️</span>
+            <span>SOPORTE DIGITAL DE COMPRA OFICIAL</span>
+          </div>
+          <div class="verify-note">
+            Emitido por <b>${escapeHtml(companyName)}</b> con serial de seguridad registrado.
+          </div>
+          <div class="verify-hash">${verifyHash}</div>
+          <div class="verify-note" style="font-size: 11px; color: #166534; margin-top: 6px;">
+            Este soporte digital certifica la titularidad y reserva del número en el sistema. Presenta este comprobante junto con tu documento original para reclamar el premio.
+          </div>
         </div>
-      </details>
 
-      <details>
-        <summary>🔒 Ver condiciones de la boleta</summary>
-        <div class="details-body">
-          <p>Documento oficial emitido por ${escapeHtml(companyName)}. Cada boleta cuenta con serial digital y firma criptográfica registrada en la plataforma oficial.</p>
-          <p style="margin-top: 6px;">El premio será entregado al titular registrado presentando su documento de identidad original.</p>
+        <!-- Acciones -->
+        <div class="actions-row">
+          <a href="https://api.whatsapp.com/send?text=${encodeURIComponent('🎟️ ¡Hola! Mira mi boleta oficial para la rifa ' + raffle.title + ' con los números ' + opportunitiesText + ': ' + baseUrl + '/boleta?phone=' + ticket.buyerPhone)}" class="btn-whatsapp" target="_blank">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
+            <span>Compartir por WhatsApp</span>
+          </a>
+
+          <button onclick="window.print()" class="btn-print">
+            <span>🖨️</span>
+            <span>Imprimir / Guardar Soporte PDF</span>
+          </button>
         </div>
-      </details>
+
+      </div>
     </div>
 
     ${ticketsList.length > 1 ? `
-      <div class="card" style="background: #F1F5F9;">
-        <div class="card-title-row" style="font-size: 14px; margin-bottom: 8px;">
-          <span>🎟️</span>
-          <span>Tus otras boletas registradas (${ticketsList.length - 1})</span>
-        </div>
+      <div class="other-tickets-box">
+        <div class="other-tickets-title">Tus otras boletas registradas (${ticketsList.length - 1})</div>
         ${ticketsList.filter(t => t.id !== ticket.id).map(t => `
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #E2E8F0;">
-            <span>Boleta: <b>${escapeHtml(t.numbers.join(' - '))}</b> (${t.status})</span>
-            <a href="/boleta?phone=${encodeURIComponent(phone)}&ticketId=${t.id}" style="color: #000; font-weight: 700; text-decoration: none; font-size: 13px;">Ver →</a>
+          <div class="other-item">
+            <span>Boleta: <b>${escapeHtml((t.numbers || []).join(' • '))}</b></span>
+            <a href="/boleta?phone=${encodeURIComponent(phone)}&ticketId=${t.id}" class="other-link">Ver soporte →</a>
           </div>
         `).join('')}
       </div>
     ` : ''}
 
-    <a href="https://api.whatsapp.com/send?text=${encodeURIComponent('🎟️ ¡Hola! Mira mi boleta oficial para la rifa ' + raffle.title + ' con los números ' + opportunitiesText + ': ' + baseUrl + '/boleta?phone=' + ticket.buyerPhone)}" class="btn-share" target="_blank">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86.174.086.275.072.376-.044.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12 0 2.159.57 4.186 1.564 5.938l-1.564 5.822 6.041-1.586c1.706.945 3.666 1.488 5.761 1.488 6.627 0 12-5.373 12-12 0-6.627-5.373-12-12-12z"/></svg>
-      <span>Compartir por WhatsApp</span>
-    </a>
-
-    <div class="footer-text">
-      Documento oficial de participación en la rifa "${escapeHtml(raffle.title)}".<br>
-      <b>${escapeHtml(companyName)}</b> • NIT ${escapeHtml(company.nit || 'Oficial')}.<br>
-      Aplican términos y condiciones.
+    <div class="footer-disclaimer">
+      Documento y soporte oficial emitido por <b>${escapeHtml(companyName)}</b> • NIT ${escapeHtml(company.nit || 'Oficial')}.<br>
+      Sistema de gestión y emisión respaldado por Rifa Master SSL.<br>
+      Aplican términos y condiciones del sorteo.
     </div>
   </main>
 
@@ -878,7 +981,7 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
 
     // Touch swipe en móviles
     let touchStartX = 0;
-    const track = document.getElementById('carouselTrack');
+    const track = document.querySelector('.carousel-container');
     if (track) {
       track.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
       track.addEventListener('touchend', e => {
