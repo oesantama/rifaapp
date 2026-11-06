@@ -37,6 +37,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   late TextEditingController _buyerNameController;
   late TextEditingController _buyerPhoneController;
   late TextEditingController _buyerDocumentController;
+  late TextEditingController _buyerEmailController;
+  late TextEditingController _buyerCityController;
   String? _saleChannel; // how the buyer was reached
   bool _saving = false; // blocks repeated taps while the payment is being saved
   // One id per submission: if the same request reaches the server twice, it is applied once
@@ -68,6 +70,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     _buyerNameController = TextEditingController(text: widget.ticket.buyerName);
     _buyerPhoneController = TextEditingController(text: widget.ticket.buyerPhone);
     _buyerDocumentController = TextEditingController(text: widget.ticket.buyerDocument);
+    _buyerEmailController = TextEditingController(text: widget.ticket.buyerEmail);
+    _buyerCityController = TextEditingController(text: widget.ticket.buyerCity);
     _saleChannel = widget.ticket.saleChannel.isNotEmpty ? widget.ticket.saleChannel : null;
     _amountController = TextEditingController(text: '0');
     _noteController = TextEditingController();
@@ -85,6 +89,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     _buyerNameController.dispose();
     _buyerPhoneController.dispose();
     _buyerDocumentController.dispose();
+    _buyerEmailController.dispose();
+    _buyerCityController.dispose();
     _amountController.dispose();
     _noteController.dispose();
     _cuentaDestinoController.dispose();
@@ -768,6 +774,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
           'buyerName': _buyerNameController.text.trim(),
           'buyerPhone': _buyerPhoneController.text.trim(),
           'buyerDocument': _buyerDocumentController.text.trim(),
+          'buyerEmail': _buyerEmailController.text.trim(),
+          'buyerCity': _buyerCityController.text.trim(),
           if (_saleChannel != null) 'saleChannel': _saleChannel,
           'sellerId': newSellerId,
           'sellerName': authVM.isAsesor
@@ -903,12 +911,31 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                     TextFormField(
                       controller: _buyerDocumentController,
                       decoration: const InputDecoration(
-                        labelText: 'Cédula (opcional)',
+                        labelText: 'Cédula / NIT (Facturación DIAN)',
                         prefixIcon: Icon(Icons.badge_outlined),
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.text,
                       inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')), LengthLimitingTextInputFormatter(20)],
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _buyerEmailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo electrónico (Facturación / DIAN)',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _buyerCityController,
+                      decoration: const InputDecoration(
+                        labelText: 'Ciudad y País (ej: San Martín, Meta)',
+                        prefixIcon: Icon(Icons.location_city_outlined),
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     DropdownButtonFormField<String>(

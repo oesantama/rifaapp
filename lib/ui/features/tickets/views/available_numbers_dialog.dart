@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -137,13 +138,22 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
   Future<void> _downloadImage() async {
     setState(() => _isExporting = true);
     try {
-      await Future.delayed(const Duration(milliseconds: 180));
+      await Future.delayed(const Duration(milliseconds: 200));
       final boundary = _exportBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('No se pudo encontrar el lienzo para generar la imagen.');
       }
 
-      final image = await boundary.toImage(pixelRatio: 2.5);
+      // Safe pixel ratio calculation to guarantee WebGL / HTML5 canvas limits (max 10000px)
+      final size = boundary.size;
+      double targetRatio = 2.0;
+      final maxDim = math.max(size.width, size.height);
+      if (maxDim * targetRatio > 9500) {
+        targetRatio = 9500 / maxDim;
+      }
+      if (targetRatio < 0.4) targetRatio = 0.4;
+
+      final image = await boundary.toImage(pixelRatio: targetRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData == null) {
         throw Exception('Error al codificar la imagen en formato PNG.');
@@ -152,7 +162,7 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
       final pngBytes = byteData.buffer.asUint8List();
 
       await saveAndDownloadBytes(
-        'numeros_disponibles.png',
+        'numeros_disponibles_${widget.raffle.id}.png',
         pngBytes,
         mimeType: 'image/png',
       );
@@ -163,7 +173,7 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
             backgroundColor: AppTheme.secondaryEmerald,
             content: Text(
               kIsWeb
-                  ? '✓ Imagen "numeros_disponibles.png" descargada exitosamente en Alta Resolución.'
+                  ? '✓ Imagen de números disponibles descargada exitosamente en Alta Resolución.'
                   : '✓ Imagen lista: elija dónde guardarla o compartirla.',
             ),
           ),
@@ -1039,7 +1049,10 @@ $advisorHeader
     // Canvas width
     const canvasWidth = 1140.0;
 
-    final ticketsToRender = _showFullBoard ? sortedScoped : sortedAvailable;
+    final allTickets = _showFullBoard ? sortedScoped : sortedAvailable;
+    const maxVisualCount = 200;
+    final hasTruncated = allTickets.length > maxVisualCount;
+    final ticketsToRender = hasTruncated ? allTickets.take(maxVisualCount).toList() : allTickets;
 
     return Container(
       width: canvasWidth,
@@ -1261,6 +1274,33 @@ $advisorHeader
               textMuted: textMuted,
               borderColor: borderColor,
               isFullBoard: _showFullBoard,
+            ),
+
+          if (hasTruncated)
+            Container(
+              margin: const EdgeInsets.only(top: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.accentAmber.withValues(alpha: _darkTheme ? 0.15 : 0.1),
+                border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.6), width: 1.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: AppTheme.accentAmber, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Mostrando las primeras 200 boletas de un total de ${allTickets.length}. Para ver el inventario completo o filtrar por asesor, descargue el archivo Excel (.xlsx) o use el selector de asesores.',
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
 
           const SizedBox(height: 28),

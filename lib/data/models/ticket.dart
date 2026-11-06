@@ -247,8 +247,17 @@ class Ticket {
   final String buyerName;
   final String buyerPhone;
 
-  /// Optional ID number (cédula) of the buyer.
+  /// Optional ID number (cédula / NIT) of the buyer.
   final String buyerDocument;
+
+  /// Optional email of the buyer (for electronic invoice & digital ticket).
+  final String buyerEmail;
+
+  /// Optional city of the buyer.
+  final String buyerCity;
+
+  /// Optional country of the buyer (defaults to Colombia).
+  final String buyerCountry;
 
   /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
   final String saleChannel;
@@ -280,6 +289,9 @@ class Ticket {
     required this.buyerName,
     required this.buyerPhone,
     this.buyerDocument = '',
+    this.buyerEmail = '',
+    this.buyerCity = '',
+    this.buyerCountry = 'Colombia',
     this.saleChannel = '',
     this.annulments = const [],
     this.voidedAbonos = const [],
@@ -313,6 +325,9 @@ class Ticket {
       buyerName: json['buyerName'] ?? '',
       buyerPhone: json['buyerPhone'] ?? '',
       buyerDocument: json['buyerDocument'] ?? '',
+      buyerEmail: json['buyerEmail'] ?? '',
+      buyerCity: json['buyerCity'] ?? '',
+      buyerCountry: json['buyerCountry'] ?? 'Colombia',
       saleChannel: json['saleChannel'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
       verificationCode: json['verificationCode'],
@@ -338,6 +353,9 @@ class Ticket {
         'buyerName': buyerName,
         'buyerPhone': buyerPhone,
         'buyerDocument': buyerDocument,
+        'buyerEmail': buyerEmail,
+        'buyerCity': buyerCity,
+        'buyerCountry': buyerCountry,
         'saleChannel': saleChannel,
         'totalPaid': totalPaid,
         'balancePending': balancePending,

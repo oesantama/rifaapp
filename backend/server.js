@@ -5115,7 +5115,7 @@ app.get('/api/transfers/check', (req, res) => {
 
 app.post('/api/tickets/:id/abono', async (req, res) => {
   const { id } = req.params;
-  const { amount, buyerName, buyerPhone, buyerDocument, sellerId, sellerName, note, saleChannel, requestId, metodoPago, soporteImageBase64, soporteBase64 } = req.body;
+  const { amount, buyerName, buyerPhone, buyerDocument, buyerEmail, buyerCity, buyerCountry, sellerId, sellerName, note, saleChannel, requestId, metodoPago, soporteImageBase64, soporteBase64 } = req.body;
 
   const found = db.tickets.find(t => t.id === id);
   if (!found) {
@@ -5239,6 +5239,9 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (typeof buyerPhone === 'string') ticket.buyerPhone = buyerPhone.trim();
   // Optional ID number (cédula); letters/digits only, as typed
   if (typeof buyerDocument === 'string') ticket.buyerDocument = buyerDocument.replace(/[^0-9A-Za-z]/g, '').slice(0, 20);
+  if (typeof buyerEmail === 'string') ticket.buyerEmail = buyerEmail.trim().toLowerCase();
+  if (typeof buyerCity === 'string') ticket.buyerCity = buyerCity.trim();
+  if (typeof buyerCountry === 'string') ticket.buyerCountry = buyerCountry.trim();
   // How the buyer was reached: an active channel from the SuperAdmin's master list
   if (typeof saleChannel === 'string' && (isActiveSaleChannel(saleChannel) || saleChannel === ticket.saleChannel)) {
     ticket.saleChannel = saleChannel;
