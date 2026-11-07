@@ -11,6 +11,7 @@ import 'ui/core/widgets/app_logo.dart';
 import 'ui/core/widgets/monetization_banners.dart';
 import 'data/repositories/raffle_repository.dart';
 import 'ui/features/auth/view_models/auth_view_model.dart';
+import 'ui/features/agil/views/agil_payments_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/raffles/view_models/raffle_view_model.dart';
 import 'ui/features/tickets/view_models/ticket_view_model.dart';
@@ -120,14 +121,23 @@ class MainShellScreen extends StatefulWidget {
   State<MainShellScreen> createState() => _MainShellScreenState();
 }
 
-class _MainShellScreenState extends State<MainShellScreen> {
+class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingObserver {
   Timer? _updateTimer;
+  Timer? _versionTimer;
   bool _updateBannerShown = false;
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _updateTimer?.cancel();
+    _versionTimer?.cancel();
     super.dispose();
+  }
+
+  /// Al volver a la app/pestaña se revisa si hay una versión nueva.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _checkForUpdate();
   }
 
   /// True when [server] is a newer semantic version than [current] (e.g. 2.1.0 > 2.0.3).
@@ -146,7 +156,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
     try {
       final info = await RaffleRepository().fetchServerInfo();
       final serverVersion = '${info['version'] ?? ''}';
-      if (!mounted || serverVersion.isEmpty || !_isNewer(serverVersion, appVersion)) return;
+      final serverBuild = '${info['build'] ?? ''}';
+      final newerVersion = serverVersion.isNotEmpty && _isNewer(serverVersion, appVersion);
+      // Cada despliegue de la web trae un build distinto, aunque el número de versión sea el mismo
+      final newerBuild = kIsWeb && appBuild.isNotEmpty && serverBuild.isNotEmpty && serverBuild != appBuild;
+      if (!mounted || (!newerVersion && !newerBuild)) return;
       _updateBannerShown = true;
       ScaffoldMessenger.of(context).showMaterialBanner(
         MaterialBanner(
@@ -154,18 +168,24 @@ class _MainShellScreenState extends State<MainShellScreen> {
           leading: const Icon(Icons.system_update, color: AppTheme.accentAmber),
           content: Text(
             kIsWeb
-                ? 'Hay una nueva versión de Rifa Master (v$serverVersion). Recargue para usarla; usted tiene la v$appVersion.'
+                ? (newerVersion
+                    ? 'Hay una nueva versión de Rifa Master (v$serverVersion). Actualice para usarla; usted tiene la v$appVersion.'
+                    : 'Hay una actualización disponible de Rifa Master con mejoras y correcciones. Actualice para usarla.')
                 : 'Hay una nueva versión de Rifa Master (v$serverVersion); usted tiene la v$appVersion. Descárguela e instálela encima '
                     '(no pierde sus datos).',
             style: const TextStyle(color: Colors.black87),
           ),
           actions: [
             TextButton(
-              onPressed: () => ScaffoldMessenger.of(context).hideCurrentMaterialBanner(),
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                // Si lo pospone, el aviso vuelve a salir en 15 minutos
+                Future.delayed(const Duration(minutes: 15), () => _updateBannerShown = false);
+              },
               child: const Text('Más tarde'),
             ),
             if (kIsWeb)
-              ElevatedButton(onPressed: web_launcher.reloadPage, child: const Text('Recargar ahora'))
+              ElevatedButton.icon(onPressed: web_launcher.reloadPage, icon: const Icon(Icons.refresh), label: const Text('Actualizar ahora'))
             else
               ElevatedButton.icon(
                 onPressed: () {
@@ -204,8 +224,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadSessionData());
     // Detects when the server was updated while this app/browser keeps an older version open
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+    WidgetsBinding.instance.addObserver(this);
+    _versionTimer = Timer.periodic(const Duration(minutes: 3), (_) => _checkForUpdate());
     _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      _checkForUpdate();
       if (mounted) {
         final auth = Provider.of<AuthViewModel>(context, listen: false);
         auth.refreshActiveAdvisor();
@@ -273,6 +294,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                     const IndependentDeliveriesView(),
                     const WinnerRegistrationView(),
                     const ControlView(),
+                    const AgilPaymentsView(),
                   ]
                 : [
                     DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
@@ -281,6 +303,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                     const AdminCashView(),
                     const WinnerRegistrationView(),
                     const ControlView(),
+                    const AgilPaymentsView(),
                   ])
             : [
                 DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
@@ -685,6 +708,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                                 selectedIcon: Icon(Icons.fact_check),
                                 label: Text('Control'),
                               ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.receipt_long_outlined),
+                                selectedIcon: Icon(Icons.receipt_long),
+                                label: Text('Pagos'),
+                              ),
                             ]
                           : const [
                               NavigationRailDestination(
@@ -716,6 +744,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
                                 icon: Icon(Icons.fact_check_outlined),
                                 selectedIcon: Icon(Icons.fact_check),
                                 label: Text('Control'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.receipt_long_outlined),
+                                selectedIcon: Icon(Icons.receipt_long),
+                                label: Text('Pagos'),
                               ),
                             ])
                       : const [
@@ -776,6 +809,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                               BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Entregas'),
                               BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                               BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
+                              BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
                             ]
                           : const [
                               BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
@@ -784,6 +818,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
                               BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
                               BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                               BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
+                              BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
                             ])
                       : const [
                           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),

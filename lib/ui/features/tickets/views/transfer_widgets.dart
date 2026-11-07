@@ -364,14 +364,15 @@ class _BankFieldState extends State<BankField> {
 }
 
 /// Shows where an approval number was already used. Returns true when the user decides to continue.
-Future<bool> showApprovalMatchesDialog(BuildContext context, String approvalNumber, List<Map<String, dynamic>> matches) async {
+Future<bool> showApprovalMatchesDialog(BuildContext context, String approvalNumber, List<Map<String, dynamic>> matches,
+    {bool blocked = false, String blockReason = ''}) async {
   final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
   final result = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => AlertDialog(
-      icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 40),
-      title: const Text('Número de aprobación ya registrado'),
+      icon: Icon(blocked ? Icons.block : Icons.warning_amber_rounded, color: blocked ? Colors.red : Colors.orange, size: 40),
+      title: Text(blocked ? 'No se puede registrar este número' : 'Número de aprobación ya registrado'),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -380,10 +381,63 @@ Future<bool> showApprovalMatchesDialog(BuildContext context, String approvalNumb
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'La aprobación "$approvalNumber" aparece en ${matches.length == 1 ? 'otro pago' : '${matches.length} pagos'}. '
-                'Puede ser la misma transferencia registrada dos veces. Revise antes de continuar.',
+                blocked
+                    ? blockReason
+                    : 'La aprobación "$approvalNumber" aparece en ${matches.length == 1 ? 'otro pago' : '${matches.length} pagos'}. '
+                        'Como esa transferencia fue por más que el valor de una boleta, puede corresponder a otra boleta. Revise antes de continuar.',
+                style: TextStyle(fontSize: 13, color: blocked ? Colors.red.shade800 : null, fontWeight: blocked ? FontWeight.w600 : null),
+              ),
+              const SizedBox(height: 12),
+              for (final m in matches) _MatchCard(match: m, currency: currency),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(blocked ? 'Corregir el número' : 'Cancelar y corregir')),
+        if (!blocked)
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+            child: const Text('Continuar de todas formas'),
+          ),
+      ],
+    ),
+  );
+  return result == true;
+}
+
+/// The proof image was already used in other payments. One transfer can pay several tickets, so the user may continue.
+Future<bool> showSupportMatchesDialog(BuildContext context, Map<String, dynamic> info) async {
+  final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
+  final matches = ((info['matches'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+  final sameApproval = info['sameApproval'] == true;
+  final used = (info['usedTotal'] as num?) ?? 0;
+  final now = (info['thisAmount'] as num?) ?? 0;
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: sameApproval ? Colors.orange : Colors.red, size: 40),
+      title: const Text('Este soporte ya se usó'),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                sameApproval
+                    ? 'El mismo comprobante aparece en ${matches.length == 1 ? 'otro pago' : '${matches.length} pagos'} con el mismo número de aprobación. '
+                        'Si es UNA sola transferencia que paga varias boletas, puede continuar: pero la suma (${currency.format(used)} ya registrados + ${currency.format(now)} de este pago) '
+                        'no debe superar el valor de la transferencia.'
+                    : 'El mismo comprobante se usó con OTRO número de aprobación. Es una señal fuerte de que el soporte no corresponde a este pago.',
                 style: const TextStyle(fontSize: 13),
               ),
+              const SizedBox(height: 8),
+              Text('Si continúa, el pago quedará con una alerta de riesgo que el administrador debe revisar antes de validarlo.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700], fontStyle: FontStyle.italic)),
               const SizedBox(height: 12),
               for (final m in matches) _MatchCard(match: m, currency: currency),
             ],
@@ -395,7 +449,7 @@ Future<bool> showApprovalMatchesDialog(BuildContext context, String approvalNumb
         ElevatedButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
-          child: const Text('Continuar de todas formas'),
+          child: const Text('Es un solo pago, continuar'),
         ),
       ],
     ),

@@ -15,6 +15,8 @@ class Abono {
   final String? approvalNumber;
   final String? originBank;
   final bool duplicateApprovalConfirmed; // saved although the approval number already existed
+  final List<Map<String, dynamic>> riskFlags; // risk alerts raised when the transfer was registered
+  final Map<String, dynamic>? riskReview; // admin's decision on the alerts: DESCARTADA / FRAUDE / PENDIENTE
   // Cash control
   final String? transferAccountId;
   final Map<String, dynamic>? verification; // buyer transfer validated / rejected by the admin
@@ -22,6 +24,11 @@ class Abono {
   final String? deliveryId; // in an advisor's delivery waiting for the admin
 
   bool get isTransfer => metodoPago == 'transferencia';
+
+  bool get hasRiskFlags => riskFlags.isNotEmpty;
+  /// Alerts the admin still has to review before validating the transfer.
+  bool get needsRiskReview => hasRiskFlags && (riskReview == null || riskReview!['status'] == 'PENDIENTE');
+  bool get isFraud => riskReview?['status'] == 'FRAUDE';
 
   /// Reconciled in cash (same rule as the server): it can no longer be voided.
   bool get isReconciled {
@@ -64,6 +71,8 @@ class Abono {
     this.approvalNumber,
     this.originBank,
     this.duplicateApprovalConfirmed = false,
+    this.riskFlags = const [],
+    this.riskReview,
     this.transferAccountId,
     this.verification,
     this.received,
@@ -87,6 +96,8 @@ class Abono {
       approvalNumber: json['approvalNumber'],
       originBank: json['originBank'],
       duplicateApprovalConfirmed: json['duplicateApprovalConfirmed'] == true,
+      riskFlags: (json['riskFlags'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
+      riskReview: json['riskReview'] is Map ? Map<String, dynamic>.from(json['riskReview']) : null,
       transferAccountId: json['transferAccountId'],
       verification: json['verification'] is Map ? Map<String, dynamic>.from(json['verification']) : null,
       received: json['received'] is Map ? Map<String, dynamic>.from(json['received']) : null,
@@ -264,6 +275,8 @@ class Ticket {
 
   /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
   final String saleChannel;
+  /// OFICINA (venta de oficina o punto: no comisiona) o CALLE; vacío en ventas anteriores a esta función.
+  final String saleZone;
 
   /// Voided sales of this ticket (oldest first); kept even after it is sold again.
   final List<TicketAnnulment> annulments;
@@ -296,6 +309,7 @@ class Ticket {
     this.buyerCity = '',
     this.buyerCountry = 'Colombia',
     this.saleChannel = '',
+    this.saleZone = '',
     this.annulments = const [],
     this.voidedAbonos = const [],
     this.verificationCode,
@@ -332,6 +346,7 @@ class Ticket {
       buyerCity: json['buyerCity'] ?? '',
       buyerCountry: json['buyerCountry'] ?? 'Colombia',
       saleChannel: json['saleChannel'] ?? '',
+      saleZone: json['saleZone'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
       verificationCode: json['verificationCode'],
       voidedAbonos: (json['voidedAbonos'] as List? ?? []).map((a) => VoidedAbono.fromJson(Map<String, dynamic>.from(a))).toList(),
@@ -360,6 +375,7 @@ class Ticket {
         'buyerCity': buyerCity,
         'buyerCountry': buyerCountry,
         'saleChannel': saleChannel,
+        'saleZone': saleZone,
         'totalPaid': totalPaid,
         'balancePending': balancePending,
         'confirmedByAdmin': confirmedByAdmin,

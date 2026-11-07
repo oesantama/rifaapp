@@ -70,6 +70,88 @@ class _AdminCashViewState extends State<AdminCashView> {
 
   bool _matchesAdvisor(String advisorId) => _advisorId == null || advisorId == _advisorId;
 
+  /// The admin decides on the risk alerts of a transfer: legitimate (discard the alert) or fraud.
+  Future<void> _reviewRisk(CashPayment p) async {
+    final a = p.abono;
+    final noteCtrl = TextEditingController();
+    String? error;
+    final decision = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          icon: Icon(Icons.shield_outlined, color: Colors.orange.shade800, size: 36),
+          title: const Text('Revisar alerta de riesgo'),
+          content: SizedBox(
+            width: 460,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Boleta ${p.ticket.displayNumber} • ${cashCurrency.format(a.amount)} • registró ${a.sellerName}',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+                for (final f in a.riskFlags)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: (f['level'] == 'ALTA' ? Colors.red : Colors.orange).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text.rich(TextSpan(children: [
+                      TextSpan(text: '${f['level'] ?? ''}  ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      TextSpan(text: '${f['detail'] ?? ''}', style: const TextStyle(fontSize: 13)),
+                    ])),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  'Compare el soporte con el extracto o la app de su banco. Sin convenio con el banco, esta verificación es manual.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: noteCtrl,
+                  maxLines: 2,
+                  decoration: const InputDecoration(labelText: 'Explique su decisión *', border: OutlineInputBorder()),
+                ),
+                if (error != null) Text(error!, style: const TextStyle(color: AppTheme.dangerRose, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(
+              onPressed: () {
+                if (noteCtrl.text.trim().length < 5) {
+                  setD(() => error = 'Escriba el motivo (mínimo 5 caracteres).');
+                  return;
+                }
+                Navigator.pop(ctx, 'FRAUDE');
+              },
+              child: const Text('Es fraude', style: TextStyle(color: AppTheme.dangerRose)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (noteCtrl.text.trim().length < 5) {
+                  setD(() => error = 'Escriba el motivo (mínimo 5 caracteres).');
+                  return;
+                }
+                Navigator.pop(ctx, 'DESCARTADA');
+              },
+              child: const Text('Es legítimo, descartar alerta'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final note = noteCtrl.text.trim();
+    noteCtrl.dispose();
+    if (decision == null || !mounted) return;
+    await _after(
+      await context.read<CashViewModel>().reviewRisk(p.ticket.id, a.id, decision, note, raffleId: _raffleId),
+      decision == 'FRAUDE' ? 'Marcada como fraude. Recházela para anularla.' : 'Alerta descartada: ya puede validarla.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tickets = context.watch<TicketViewModel>().tickets;
@@ -183,6 +265,7 @@ class _AdminCashViewState extends State<AdminCashView> {
               payments: transfers,
               showRejected: _showRejected,
               onToggleRejected: (v) => setState(() => _showRejected = v),
+              onReviewRisk: (p) => _reviewRisk(p),
               onValidate: (p) async => _after(
                 await context.read<CashViewModel>().verifyTransfer(p.ticket.id, p.abono.id, 'validar', raffleId: _raffleId),
                 'Transferencia validada.',
@@ -252,6 +335,7 @@ class _TransfersTab extends StatelessWidget {
   final ValueChanged<bool> onToggleRejected;
   final void Function(CashPayment) onValidate;
   final void Function(CashPayment) onReject;
+  final void Function(CashPayment) onReviewRisk;
 
   const _TransfersTab({
     required this.payments,
@@ -259,6 +343,7 @@ class _TransfersTab extends StatelessWidget {
     required this.onToggleRejected,
     required this.onValidate,
     required this.onReject,
+    required this.onReviewRisk,
   });
 
   @override
@@ -299,6 +384,8 @@ class _TransfersTab extends StatelessWidget {
                                 Text(cashCurrency.format(a.amount),
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.deepPurple)),
                                 if (rejected) CashChip('RECHAZADA', Colors.red.shade700),
+                                if (p.ticket.saleZone == 'OFICINA') CashChip('VENTA DE OFICINA • sin comisión', Colors.blueGrey, icon: Icons.business),
+                                if (p.ticket.saleZone == 'CALLE') CashChip('VENTA EN CALLE', Colors.teal, icon: Icons.directions_walk),
                                 if (!hasProof) CashChip('SIN SOPORTE', Colors.orange.shade800, icon: Icons.warning_amber),
                                 if (a.amount > p.ticket.price)
                                   CashChip('EXCEDENTE: ${cashCurrency.format(a.amount - p.ticket.price)}', Colors.deepPurple, icon: Icons.call_split),
@@ -313,6 +400,25 @@ class _TransfersTab extends StatelessWidget {
                             CashInfoLine('Cuenta destino', a.cuentaDestino ?? ''),
                             if (a.duplicateApprovalConfirmed)
                               CashChip('APROBACIÓN REPETIDA (confirmada al registrar)', Colors.orange.shade800),
+                            if (a.hasRiskFlags) ...[
+                              const SizedBox(height: 4),
+                              Wrap(spacing: 6, runSpacing: 4, children: [
+                                for (final f in a.riskFlags)
+                                  Tooltip(
+                                    message: '${f['detail'] ?? ''}',
+                                    child: CashChip(
+                                      '${f['code'] ?? 'RIESGO'}'.replaceAll('_', ' '),
+                                      f['level'] == 'ALTA' ? Colors.red.shade700 : Colors.orange.shade800,
+                                      icon: Icons.shield_outlined,
+                                    ),
+                                  ),
+                                if (a.isFraud) CashChip('MARCADA COMO FRAUDE', Colors.red.shade900, icon: Icons.gpp_bad_outlined),
+                                if (!a.needsRiskReview && !a.isFraud)
+                                  CashChip('ALERTA REVISADA', AppTheme.secondaryEmerald, icon: Icons.verified_user_outlined),
+                              ]),
+                              if (a.riskReview != null && a.riskReview!['note'] != null)
+                                CashInfoLine('Revisión', '${a.riskReview!['by'] ?? ''}: ${a.riskReview!['note']}'),
+                            ],
                             if (rejected) CashInfoLine('Motivo del rechazo', (a.verification?['note'] ?? '').toString()),
                             const SizedBox(height: 8),
                             Wrap(
@@ -329,13 +435,21 @@ class _TransfersTab extends StatelessWidget {
                                     icon: const Icon(Icons.image_search, size: 18),
                                     label: const Text('Ver soporte'),
                                   ),
-                                ElevatedButton.icon(
-                                  onPressed: () => onValidate(p),
-                                  icon: const Icon(Icons.verified, size: 18),
-                                  label: const Text('Legalizar en Caja (Confirmar en Banco)'),
-                                  style:
-                                      ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
-                                ),
+                                if (a.needsRiskReview)
+                                  ElevatedButton.icon(
+                                    onPressed: () => onReviewRisk(p),
+                                    icon: const Icon(Icons.shield_outlined, size: 18),
+                                    label: const Text('Revisar alerta de riesgo'),
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                                  )
+                                else if (!a.isFraud)
+                                  ElevatedButton.icon(
+                                    onPressed: () => onValidate(p),
+                                    icon: const Icon(Icons.verified, size: 18),
+                                    label: const Text('Legalizar en Caja (Confirmar en Banco)'),
+                                    style:
+                                        ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald, foregroundColor: Colors.white),
+                                  ),
                                 if (a.amount > p.ticket.price)
                                   OutlinedButton.icon(
                                     onPressed: () {

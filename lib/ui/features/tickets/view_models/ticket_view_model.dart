@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:rifaapp/data/services/auth_http.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 
@@ -82,11 +83,14 @@ class TicketViewModel extends ChangeNotifier {
   }
 
   /// Sales of each advisor in the loaded raffle, by status (key: advisorId).
-  Map<String, AdvisorSales> salesByAdvisor() {
+  Map<String, AdvisorSales> salesByAdvisor({Map<String, String> advisorTypes = const {}}) {
     final result = <String, AdvisorSales>{};
     for (final t in _tickets) {
       if (t.status == 'DISPONIBLE' || t.advisorId.isEmpty) continue;
       final s = result.putIfAbsent(t.advisorId, () => AdvisorSales());
+      // Zona de la venta: la guardada o, en ventas anteriores, la que corresponde al tipo del asesor
+      final zone = t.saleZone.isNotEmpty ? t.saleZone : (advisorTypes[t.advisorId] == 'PUNTO' ? 'OFICINA' : 'CALLE');
+      zone == 'OFICINA' ? s.oficina++ : s.calle++;
       switch (t.status) {
         case 'RESERVADA':
           s.reservadas++;
@@ -144,10 +148,16 @@ class TicketViewModel extends ChangeNotifier {
 
   /// Reason the last save failed, as explained by the server (or a connection problem).
   String? get lastError => _lastError;
+  String? _lastErrorCode;
+  Map<String, dynamic>? _lastErrorData;
+  String? get lastErrorCode => _lastErrorCode;
+  Map<String, dynamic>? get lastErrorData => _lastErrorData;
 
   Future<bool> addAbono(String ticketId, Map<String, dynamic> body, {String? raffleId}) async {
     _isLoading = true;
     _lastError = null;
+    _lastErrorCode = null;
+    _lastErrorData = null;
     notifyListeners();
 
     try {
@@ -157,6 +167,10 @@ class TicketViewModel extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error al registrar abono: $e');
       _lastError = e.toString();
+      if (e is ApiException) {
+        _lastErrorCode = e.code;
+        _lastErrorData = e.data;
+      }
       return false;
     } finally {
       _isLoading = false;
@@ -165,8 +179,11 @@ class TicketViewModel extends ChangeNotifier {
   }
 
   /// Payments already registered with this transfer approval number; throws if the check fails.
-  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) =>
-      _repository.checkTransferApproval(raffleId, approvalNumber);
+  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber, {String? ticketId}) =>
+      _repository.checkTransferApproval(raffleId, approvalNumber, ticketId: ticketId);
+
+  /// Reads the proof image on the server (reference, amount, bank).
+  Future<Map<String, dynamic>> readTransferProof(String imageDataUri) => _repository.readTransferProof(imageDataUri);
 
   /// The company's WhatsApp message for a saved ticket ('receipt' or 'reminder'); throws if it fails.
   Future<Map<String, dynamic>> fetchWhatsAppMessage(String ticketId, {String kind = 'receipt'}) =>
@@ -254,6 +271,9 @@ class AdvisorSales {
   int reservadas = 0;
   int abonadas = 0;
   int pagadas = 0;
+  /// Ventas de oficina/punto (no comisionan) y de calle.
+  int oficina = 0;
+  int calle = 0;
   double collected = 0;
   double confirmed = 0;
 

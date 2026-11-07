@@ -5,7 +5,9 @@
 const EVOLUTION_URL = process.env.EVOLUTION_URL || 'http://evolution_api:8080';
 const EVOLUTION_APIKEY = process.env.EVOLUTION_APIKEY || 'rifaapp_evo_secret_key_2026';
 const PUBLIC_WEBHOOK_URL = process.env.PUBLIC_WEBHOOK_URL || 'http://45.137.192.195/api/whatsapp/webhook';
-const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://45-137-192-195.sslip.io").replace(/\/+$/, "");
+const botBrain = require('./botBrain');
+const driveService = require('./driveService');
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://williamrifas.santamariapp.com').replace(/\/+$/, '');
 
 /**
  * Normaliza números telefónicos para WhatsApp:
@@ -58,6 +60,28 @@ async function evoRequest(endpoint, options = {}) {
   }
 }
 
+// Cada llamada a /instance/connect abre un socket nuevo de Baileys. Si se llama en cada consulta de estado
+// (el front consulta cada pocos segundos) los sockets se "reemplazan" entre sí (conflict/replaced) en un bucle
+// infinito y la sesión se cae y se reconecta sola. Por eso se limita a 1 llamada cada 40 s por instancia y se
+// reutiliza el último QR.
+const CONNECT_MIN_INTERVAL_MS = 40000;
+const connectCache = new Map(); // instanceName -> { at, qrcode, pairingCode }
+
+async function requestConnect(instanceName, query = '', force = false) {
+  const cached = connectCache.get(instanceName);
+  if (!force && cached && Date.now() - cached.at < CONNECT_MIN_INTERVAL_MS) {
+    return { qrcode: cached.qrcode, pairingCode: cached.pairingCode, cached: true };
+  }
+  const connectRes = await evoRequest(`/instance/connect/${instanceName}${query}`);
+  const entry = {
+    at: Date.now(),
+    qrcode: connectRes.data?.base64 || null,
+    pairingCode: connectRes.data?.pairingCode || null
+  };
+  connectCache.set(instanceName, entry);
+  return { qrcode: entry.qrcode, pairingCode: entry.pairingCode, cached: false };
+}
+
 /**
  * Obtiene el estado actual de la instancia WhatsApp y el QR si está pendiente de conexión.
  */
@@ -73,24 +97,26 @@ async function getStatus(instanceName) {
   const state = stateRes.data?.instance?.state || 'close';
 
   if (state === 'open') {
+    connectCache.delete(instanceName);
+    // El estado de conexión no trae el número: se consulta la instancia (ownerJid = número vinculado)
+    let number = stateRes.data?.instance?.owner || null;
+    let profileName = null;
+    const info = await evoRequest(`/instance/fetchInstances?instanceName=${encodeURIComponent(instanceName)}`);
+    const rec = Array.isArray(info.data) ? info.data[0] : info.data;
+    const jid = rec?.ownerJid || rec?.instance?.owner || rec?.owner;
+    if (jid) number = String(jid).split('@')[0].split(':')[0];
+    profileName = rec?.profileName || rec?.instance?.profileName || null;
     return {
       state: 'open',
       instanceName,
       qrcode: null,
-      number: stateRes.data?.instance?.owner || null
+      number,
+      profileName
     };
   }
 
-  const connectRes = await evoRequest(`/instance/connect/${instanceName}`);
-  const qrcode = connectRes.data?.base64 || null;
-  const pairingCode = connectRes.data?.pairingCode || null;
-
-  return {
-    state,
-    instanceName,
-    qrcode,
-    pairingCode
-  };
+  const { qrcode, pairingCode } = await requestConnect(instanceName);
+  return { state, instanceName, qrcode, pairingCode };
 }
 
 /**
@@ -117,24 +143,68 @@ async function connectInstance(instanceName, phoneNumber = null) {
   });
 
   const query = formattedNumber ? `?number=${encodeURIComponent(formattedNumber)}` : '';
-  const connectRes = await evoRequest(`/instance/connect/${instanceName}${query}`);
+  const { qrcode, pairingCode } = await requestConnect(instanceName, query);
 
   return {
     state: 'connecting',
     instanceName,
-    qrcode: connectRes.data?.base64 || null,
-    pairingCode: connectRes.data?.pairingCode || null
+    qrcode,
+    pairingCode
   };
 }
 
 /**
- * Desconecta la sesión de WhatsApp
+ * Desconecta la sesión de WhatsApp y VERIFICA que realmente quedó cerrada. Si Evolution sigue reportando
+ * la sesión abierta/conectando (sesión pegada), elimina la instancia para forzar un QR nuevo al reconectar.
  */
 async function disconnectInstance(instanceName) {
-  const res = await evoRequest(`/instance/logout/${instanceName}`, {
-    method: 'DELETE'
+  connectCache.delete(instanceName);
+  const res = await evoRequest(`/instance/logout/${instanceName}`, { method: 'DELETE' });
+  let state = 'unknown';
+  for (let i = 0; i < 4; i++) {
+    await new Promise(r => setTimeout(r, 1500));
+    const st = await evoRequest(`/instance/connectionState/${instanceName}`);
+    state = st.ok ? (st.data?.instance?.state || 'close') : (st.status === 404 ? 'not_created' : 'unknown');
+    if (state === 'close' || state === 'not_created') break;
+  }
+  let deleted = false;
+  if (state !== 'close' && state !== 'not_created') {
+    const del = await evoRequest(`/instance/delete/${instanceName}`, { method: 'DELETE' });
+    deleted = del.ok;
+    state = deleted ? 'not_created' : state;
+  }
+  connectCache.delete(instanceName);
+  return { ok: state === 'close' || state === 'not_created', state, forcedDelete: deleted, data: res.data };
+}
+
+/**
+ * Envía un archivo (ej: el Excel de pagos) por WhatsApp. buffer = contenido del archivo.
+ */
+async function sendDocument(instanceName, number, { buffer, fileName, caption = '', mimetype = 'application/octet-stream' }) {
+  return evoRequest(`/message/sendMedia/${instanceName}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      number: formatPhoneNumber(number),
+      mediatype: 'document',
+      mimetype,
+      caption,
+      fileName,
+      media: Buffer.from(buffer).toString('base64')
+    })
   });
-  return { ok: res.ok, data: res.data };
+}
+
+// Quien necesite recibir documentos (ej: el Excel devuelto de AGIL) se registra aquí
+let documentHandler = null;
+function setDocumentHandler(fn) { documentHandler = fn; }
+
+/** Descarga el contenido de un archivo recibido cuando el webhook no lo trae en base64. */
+async function fetchMediaBase64(instanceName, key) {
+  const res = await evoRequest(`/chat/getBase64FromMediaMessage/${instanceName}`, {
+    method: 'POST',
+    body: JSON.stringify({ message: { key }, convertToMp4: false })
+  });
+  return (res.ok && res.data && res.data.base64) || null;
 }
 
 /**
@@ -243,31 +313,13 @@ function buildMainMenuMessage(companyName, advisor = null) {
   if (advisor) {
     msg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🏢✨\n`;
   }
-  msg += `_Constructora • Inmobiliaria • Rifas y Eventos_\n\n`;
-  msg += `Con gusto te atendemos. Por favor elige el área de tu interés:\n\n`;
+  msg += `_Rifas y Sorteos Oficiales_\n\n`;
+  msg += `Con gusto te atendemos. Por favor elige una opción:\n\n`;
   msg += `1️⃣ 🎟️ *Rifas y Sorteos Oficiales*\n`;
   msg += `   (Consulta de boletas, números disponibles, plan de premios y pagos)\n\n`;
-  msg += `2️⃣ 🏗️ *Constructora y Proyectos*\n`;
-  msg += `   (Construcción de viviendas, obras civiles, venta de lotes, remodelaciones y presupuestos)\n\n`;
-  msg += `3️⃣ 👤 *Hablar con un Asesor*\n`;
+  msg += `2️⃣ 👤 *Hablar con un Asesor*\n`;
   msg += `   (Atención humana personalizada para cualquier consulta)\n\n`;
-  msg += `👉 _Responde con el número de tu opción (*1*, *2* o *3*) o cuéntanos qué necesitas._`;
-  return msg;
-}
-
-function buildConstructoraMessage(companyName) {
-  let msg = `🏗️ *CONSTRUCTORA Y PROYECTOS - ${companyName}* 🏡✨\n`;
-  msg += `_Diseño, planeación y construcción de obras civiles e inmobiliarias con garantía y cumplimiento legal._\n\n`;
-  msg += `🛠️ *Nuestros Servicios Principales:*\n`;
-  msg += `• 🏠 *Construcción de Viviendas:* Casas campestres, urbanas, cabañas y fincas (llave en mano, obra gris o acabados de lujo).\n`;
-  msg += `• 📐 *Diseños y Planos Arquitectónicos:* Modelado 3D, cálculos estructurales y gestión de licencias.\n`;
-  msg += `• 🔨 *Remodelaciones y Obra Civil:* Fachadas, pisos, cocinas integrales, cubiertas, pintura y estructuras.\n`;
-  msg += `• 🏞️ *Venta de Lotes y Parcelas:* Terrenos disponibles para proyectos residenciales y campestres en la región.\n`;
-  msg += `• 🏊‍♂️ *Piscinas, Kioscos y Zonas Sociales.*\n\n`;
-  msg += `📋 *¿En qué te podemos colaborar hoy?*\n`;
-  msg += `• Escribe *COTIZAR* indicando el tipo de obra, medidas o ubicación para formular una propuesta.\n`;
-  msg += `• Escribe *ASESOR* para hablar directamente con nuestro director de proyectos o arquitecto.\n`;
-  msg += `• Escribe *MENU* para volver al menú de opciones.`;
+  msg += `👉 _Responde con el número de tu opción (*1* o *2*) o cuéntanos qué necesitas._`;
   return msg;
 }
 
@@ -472,6 +524,130 @@ function checkDuplicateApprovalNumber(approvalNumber, currentTicketId, db) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Entrenamiento del bot: preguntas sin respuesta, pase a asesor y "¿cómo se enteró?"
+// ---------------------------------------------------------------------------
+const ADVISOR_REF_QUESTION = '🤝 *¿Te recomendó algún asesor de nuestro equipo?*\nIndícanos su nombre o código (o escribe *Ninguno* si compraste directamente).';
+const MAX_UNANSWERED = 300;
+const MAX_HANDOFFS = 300;
+
+function logUnanswered(db, company, phone, text) {
+  const clean = String(text || '').trim();
+  if (!clean) return;
+  db.botUnanswered = db.botUnanswered || [];
+  const norm = botBrain.normalize(clean);
+  if (!norm) return;
+  const companyId = company ? company.id : null;
+  const now = new Date().toISOString();
+  const existing = db.botUnanswered.find(u => u.companyId === companyId && u.norm === norm);
+  if (existing) {
+    existing.count = (existing.count || 1) + 1;
+    existing.lastAt = now;
+    existing.phone = phone;
+    return;
+  }
+  db.botUnanswered.unshift({
+    id: `unans-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    companyId, phone, text: clean.slice(0, 300), norm, count: 1, at: now, lastAt: now
+  });
+  if (db.botUnanswered.length > MAX_UNANSWERED) db.botUnanswered.length = MAX_UNANSWERED;
+}
+
+function resolveHandoffsFor(db, companyId, phone, by) {
+  (db.botHandoffs || []).forEach(h => {
+    if (h.companyId === companyId && h.phone === phone && h.status === 'PENDIENTE') {
+      h.status = 'ATENDIDO';
+      h.resolvedAt = new Date().toISOString();
+      h.resolvedBy = by;
+    }
+  });
+}
+
+const HANDOFF_REASONS = {
+  SOLICITUD: 'Pidió hablar con un asesor',
+  NO_ENTENDIDO: 'El bot no entendió sus mensajes'
+};
+
+/**
+ * Pasa el chat a una persona: el bot se calla, queda en la lista "Chats por atender" del panel
+ * y (si está configurado) se avisa por WhatsApp al número del administrador.
+ */
+async function startHandoff({ instance, senderPhone, company, advisor, cfg, db, saveDBCallback, raffleId, reason, lastText, intro }) {
+  updateSession(senderPhone, { humanAssisted: true, humanAssistedAt: Date.now(), failCount: 0 }, db, saveDBCallback, raffleId || null);
+  db.botHandoffs = db.botHandoffs || [];
+  const companyId = company ? company.id : null;
+  const now = new Date().toISOString();
+  const ticket = (db.tickets || []).find(t => t.buyerPhone === senderPhone);
+  const customerName = (ticket && ticket.buyerName) || '';
+  let rec = db.botHandoffs.find(h => h.companyId === companyId && h.phone === senderPhone && h.status === 'PENDIENTE');
+  if (rec) {
+    rec.lastMessage = String(lastText || '').slice(0, 300);
+    rec.updatedAt = now;
+  } else {
+    rec = {
+      id: `hand-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      companyId, phone: senderPhone, name: customerName, reason: reason || 'SOLICITUD',
+      lastMessage: String(lastText || '').slice(0, 300), status: 'PENDIENTE', at: now, updatedAt: now
+    };
+    db.botHandoffs.unshift(rec);
+    if (db.botHandoffs.length > MAX_HANDOFFS) db.botHandoffs.length = MAX_HANDOFFS;
+  }
+
+  const companyName = getBusinessDisplayName(company);
+  const body = cfg.handoff.message
+    ? botBrain.fillPlaceholders(cfg.handoff.message, { empresa: companyName })
+    : buildAdvisorHandOffMessage(companyName, advisor);
+  await sendTextMessage(instance, senderPhone, `${intro ? `${intro}\n\n` : ''}${body}`);
+
+  const notify = cfg.handoff.notifyNumber;
+  if (notify && formatPhoneNumber(notify) !== formatPhoneNumber(senderPhone)) {
+    await sendTextMessage(instance, notify,
+`🔔 *Un cliente necesita un asesor*
+👤 ${customerName || 'Cliente'}
+📱 +${formatPhoneNumber(senderPhone)}
+📝 ${HANDOFF_REASONS[rec.reason] || HANDOFF_REASONS.SOLICITUD}
+💬 "${rec.lastMessage}"
+
+Respóndele desde WhatsApp. Al terminar, márcalo como atendido en Control → Entrenar Bot.`).catch(() => {});
+  }
+  if (typeof saveDBCallback === 'function') saveDBCallback(raffleId || null);
+}
+
+function buildHowHeardQuestion(options) {
+  const nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+  return `📣 *Una última pregunta:* ¿por qué medio te enteraste de nosotros?\n${options.map((o, i) => `${nums[i] || `${i + 1}.`} ${o}`).join('\n')}\n\n_(Responde con el número o escribe el medio)_`;
+}
+
+/** Guarda la respuesta a "¿cómo se enteró?". Devuelve true si el mensaje era esa respuesta. */
+async function handleHowHeardAnswer({ instance, senderPhone, cfg, db, saveDBCallback, session, userText }) {
+  const expired = !session.awaitingHowHeardAt || Date.now() - session.awaitingHowHeardAt > 24 * 3600 * 1000;
+  const text = String(userText || '').trim();
+  const norm = botBrain.normalize(text);
+  // Un número suelto aquí es la opción elegida (no la opción 2 del menú principal)
+  const isCommand = !norm || ['menu', 'bot', 'volver', 'reiniciar'].includes(norm) || (!/^\d{1,2}$/.test(text) && botBrain.isHandoffRequest(cfg, text));
+  let answer = null;
+  if (!expired && !isCommand) {
+    const options = cfg.howHeard.options;
+    if (/^\d{1,2}$/.test(text)) {
+      answer = options[parseInt(text, 10) - 1] || null;
+    } else {
+      answer = options.find(o => botBrain.normalize(o) === norm) ||
+               options.find(o => norm.length >= 3 && botBrain.normalize(o).includes(norm)) || null;
+      if (!answer && text.length <= 60 && !/\d{4,}/.test(text)) answer = text;
+    }
+  }
+  updateSession(senderPhone, { awaitingHowHeard: false }, db, saveDBCallback, null);
+  if (!answer) return false;
+  (db.tickets || []).forEach(t => {
+    if (t.buyerPhone === senderPhone) { t.howHeard = answer; t.howHeardAt = new Date().toISOString(); }
+  });
+  updateSession(senderPhone, { howHeard: answer }, db, saveDBCallback, null);
+  if (typeof saveDBCallback === 'function') saveDBCallback(null);
+  await sendTextMessage(instance, senderPhone, `🙌 ¡Gracias! Anotamos: *${answer}*.\nEscribe *MENU* cuando quieras ver las opciones.`);
+  return true;
+}
+
+
 /**
  * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde de forma inteligente
  */
@@ -496,8 +672,24 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
 
   const rawSender = (key.remoteJid || '').split('@')[0].split(':')[0];
   const senderPhone = formatPhoneNumber(rawSender);
-  const userText = (msgData.conversation || msgData.extendedTextMessage?.text || '').trim();
+
+  // Documentos (Excel devuelto de AGIL): los atiende quien se registró con setDocumentHandler
+  const docMsg = msgData.documentMessage || msgData.documentWithCaptionMessage?.message?.documentMessage;
+  if (docMsg && documentHandler) {
+    const fileName = docMsg.fileName || docMsg.title || '';
+    let base64 = msgData.base64 || body.data?.message?.base64 || body.data?.base64 || docMsg.base64 || null;
+    if (!base64 && /\.xlsx?$/i.test(fileName)) base64 = await fetchMediaBase64(instance, key);
+    const handled = await documentHandler({ instance, senderPhone, fileName, base64, mimetype: docMsg.mimetype });
+    if (handled && handled.handled) return { handled: true, document: true };
+    return { ignored: true };
+  }
+  const userText = (msgData.conversation || msgData.extendedTextMessage?.text || msgData.imageMessage?.caption || '').trim();
   const hasImage = !!msgData.imageMessage;
+  // Evolution entrega la imagen en base64 cuando el webhook lo permite
+  const receiptMedia = hasImage ? {
+    base64: msgData.base64 || body.data?.message?.base64 || body.data?.base64 || msgData.imageMessage?.base64 || null,
+    mimeType: msgData.imageMessage?.mimetype || 'image/jpeg'
+  } : null;
   const cleanLower = userText.toLowerCase();
 
   console.log(`💬 [WhatsApp Bot (${instance})] Mensaje de ${senderPhone}: "${userText}" ${hasImage ? '[IMAGEN COMPROBANTE]' : ''}`);
@@ -586,6 +778,7 @@ _(Escribe el número de la opción o tu consulta)_`;
 
   const companyName = getBusinessDisplayName(company);
   const session = getSession(senderPhone, db);
+  const cfg = botBrain.getBotConfig(company);
 
   // 0. Si el chat está actualmente en atención manual por un asesor humano:
   if (session?.humanAssisted) {
@@ -594,11 +787,22 @@ _(Escribe el número de la opción o tu consulta)_`;
                                 cleanLower === '1' || cleanLower === '2' || cleanLower === '3';
     const hoursSinceAssisted = (Date.now() - (session.humanAssistedAt || 0)) / (1000 * 60 * 60);
 
-    if (!isHumanResetCommand && hoursSinceAssisted < 12) {
+    if (!isHumanResetCommand && hoursSinceAssisted < cfg.handoff.resumeHours) {
+      // Mantener al día el último mensaje del cliente en la lista de chats por atender
+      const pending = (db.botHandoffs || []).find(h => h.companyId === (company ? company.id : null) && h.phone === senderPhone && h.status === 'PENDIENTE');
+      if (pending && userText) { pending.lastMessage = String(userText).slice(0, 300); pending.updatedAt = new Date().toISOString(); }
       console.log(`👤 [WhatsApp Bot (${instance})] Chat ${senderPhone} en atención humana activa (hace ${hoursSinceAssisted.toFixed(1)}h); se omite auto-respuesta.`);
       return { handled: true, humanAssisted: true };
     } else {
+      resolveHandoffsFor(db, company ? company.id : null, senderPhone, 'bot-reanudado');
       updateSession(senderPhone, { humanAssisted: false }, db, saveDBCallback, null);
+    }
+  }
+
+  // 0.1 Respuesta a "¿por qué medio te enteraste de nosotros?"
+  if (session?.awaitingHowHeard) {
+    if (await handleHowHeardAnswer({ instance, senderPhone, cfg, db, saveDBCallback, session, userText })) {
+      return { handled: true };
     }
   }
 
@@ -610,18 +814,52 @@ _(Escribe el número de la opción o tu consulta)_`;
   );
   const mainRaffle = activeRaffles[0];
 
+  // Respuestas personalizadas del administrador y pase a asesor
+  const raffleVars = mainRaffle ? {
+    empresa: companyName,
+    rifa: mainRaffle.title || '',
+    precio: `$${Number(mainRaffle.ticketPrice || 0).toLocaleString('es-CO')}`,
+    fecha: mainRaffle.mainDrawDate ? mainRaffle.mainDrawDate.substring(0, 10).split('-').reverse().join('/') : ''
+  } : { empresa: companyName };
+  const customIntents = async () => {
+    const faq = botBrain.matchFaq(cfg, userText);
+    if (faq) {
+      faq.hits = (faq.hits || 0) + 1;
+      updateSession(senderPhone, { failCount: 0 }, db, saveDBCallback, mainRaffle?.id);
+      await sendTextMessage(instance, senderPhone, botBrain.fillPlaceholders(faq.answer, raffleVars));
+      return true;
+    }
+    if (botBrain.isHandoffRequest(cfg, userText)) {
+      await startHandoff({ instance, senderPhone, company, advisor, cfg, db, saveDBCallback, raffleId: mainRaffle?.id, reason: 'SOLICITUD', lastText: userText });
+      return true;
+    }
+    return false;
+  };
+  // Mensaje que el bot no entendió: se guarda para que el administrador lo convierta en respuesta y,
+  // tras varios intentos seguidos, se pasa a un asesor.
+  const fallbackReply = async (defaultText) => {
+    const text = cfg.greeting ? botBrain.fillPlaceholders(cfg.greeting, raffleVars) : defaultText;
+    if (botBrain.isGreeting(userText)) {
+      updateSession(senderPhone, { failCount: 0 }, db, saveDBCallback, mainRaffle?.id);
+      await sendTextMessage(instance, senderPhone, text);
+      return;
+    }
+    logUnanswered(db, company, senderPhone, userText);
+    const s = getSession(senderPhone, db) || {};
+    const recent = s.lastFailAt && Date.now() - s.lastFailAt < 30 * 60 * 1000;
+    const fails = (recent ? (s.failCount || 0) : 0) + 1;
+    const limit = cfg.handoff.autoAfterFails;
+    if (cfg.handoff.enabled && limit > 0 && fails >= limit) {
+      await startHandoff({ instance, senderPhone, company, advisor, cfg, db, saveDBCallback, raffleId: mainRaffle?.id, reason: 'NO_ENTENDIDO', lastText: userText, intro: '🤔 No logré entender tu mensaje, así que te comunico con una persona.' });
+      return;
+    }
+    updateSession(senderPhone, { failCount: fails, lastFailAt: Date.now() }, db, saveDBCallback, mainRaffle?.id);
+    await sendTextMessage(instance, senderPhone, text);
+  };
+
   if (!mainRaffle) {
-    if (cleanLower === '2' || cleanLower.includes('constructora') || cleanLower.includes('obra')) {
-      await sendTextMessage(instance, senderPhone, buildConstructoraMessage(companyName));
-      return { handled: true };
-    }
-    if (cleanLower === '3' || cleanLower.includes('asesor') || cleanLower.includes('humano')) {
-      updateSession(senderPhone, { humanAssisted: true, humanAssistedAt: Date.now() }, db, saveDBCallback, null);
-      await sendTextMessage(instance, senderPhone, buildAdvisorHandOffMessage(companyName, advisor));
-      return { handled: true };
-    }
-    const noRaffleMsg = buildMainMenuMessage(companyName, advisor);
-    await sendTextMessage(instance, senderPhone, noRaffleMsg);
+    if (await customIntents()) return { handled: true };
+    await fallbackReply(buildMainMenuMessage(companyName, advisor));
     return { handled: true };
   }
 
@@ -636,213 +874,57 @@ _(Escribe el número de la opción o tu consulta)_`;
     if (parts.length === 3) drawDateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
 
-  // 1. RECEPCIÓN DE COMPROBANTES DE PAGO / TRANSFERENCIA (FOTO)
+  // Contexto de los flujos con confirmación (apartar, cambiar, registrar pagos)
+  const flowCtx = {
+    instance, senderPhone, userText, db, saveDBCallback, session: getSession(senderPhone, db),
+    mainRaffle, company, companyName, advisor, cfg, digits, ticketPrice, lotteryName, drawDateFormatted, opportunities
+  };
+
+  // 0.2 Respuesta del cliente a una confirmación pendiente (SÍ/NO, opción de una lista, valor del pago)
+  if (!hasImage && await handlePendingFlow(flowCtx)) return { handled: true };
+
+  // 1. COMPROBANTES DE PAGO (FOTO): se valida a qué boleta corresponde y por cuánto, y el cliente confirma
   if (hasImage) {
-    // Si la imagen viene acompañada de texto sobre obra o el usuario estaba en constructora:
-    if (session?.currentTopic === 'constructora' || cleanLower.includes('obra') || cleanLower.includes('constructora') || cleanLower.includes('anticipo') || cleanLower.includes('material')) {
-      const receiptReply = 
-`📸 *¡Comprobante para Constructora recibido con éxito!* 🏗️✅
-
-Hemos registrado el soporte de pago para *${companyName} Constructora y Proyectos*.
-Nuestro equipo administrativo validará la transferencia en cuenta y emitirá tu soporte de anticipo / abono oficial de obra.
-
-Un asesor se pondrá en contacto contigo para coordinar el avance o visita técnica.
-_(Escribe *MENU* para volver al menú de opciones)._`;
-      await sendTextMessage(instance, senderPhone, receiptReply);
-      return { handled: true };
+    const text = String(userText || '');
+    const infoText = extractTransferInfo(text);
+    const sess = flowCtx.session || {};
+    const mine = myTickets(db, mainRaffle.id, senderPhone);
+    let hint = '';
+    for (const run of (text.match(/\d{3,}/g) || [])) {
+      const candidate = run.length < digits ? run.padStart(digits, '0') : run;
+      if (mine.some(t => (t.numbers || []).includes(candidate))) { hint = candidate; break; }
     }
-
-    let targetTicket = null;
-    let numberIdentified = '';
-
-    if (session && session.lastTicketId) {
-      targetTicket = (db.tickets || []).find(t => t.id === session.lastTicketId);
-      numberIdentified = session.lastOpportunity || (targetTicket ? targetTicket.numbers[0] : '');
-    }
-    if (!targetTicket) {
-      targetTicket = (db.tickets || []).find(t => t.buyerPhone === senderPhone && t.raffleId === mainRaffle.id);
-      if (targetTicket) numberIdentified = targetTicket.numbers[0];
-    }
-    // Si aún no hay boleta asignada, apartar automáticamente la primera disponible
-    if (!targetTicket) {
-      const freeTicket = (db.tickets || []).find(t => t.raffleId === mainRaffle.id && t.status === 'DISPONIBLE');
-      if (freeTicket) {
-        targetTicket = freeTicket;
-        numberIdentified = freeTicket.numbers[0];
-        targetTicket.status = 'RESERVADA';
-        targetTicket.buyerPhone = senderPhone;
-        targetTicket.soldByBot = true;
-        targetTicket.saleChannel = 'Bot WhatsApp';
-        targetTicket.assignedDate = new Date().toISOString();
-        const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
-        if (assignedAdv) {
-          targetTicket.advisorId = assignedAdv.id;
-          targetTicket.advisorName = assignedAdv.name;
-        }
-      }
-    }
-
-    // Extraer datos financieros del comprobante (monto, número de comprobante, banco)
-    const transferInfo = extractTransferInfo(userText);
-    const detectedAmount = transferInfo.amount || session?.pendingAmount || ticketPrice;
-    const detectedApproval = transferInfo.approvalNumber || session?.pendingApproval || '';
-    const detectedBank = transferInfo.bank || session?.pendingBank || 'Transferencia Bancaria';
-
-    // Anti-fraude: Validar si este comprobante ya fue usado
-    const duplicateVoucher = detectedApproval ? checkDuplicateApprovalNumber(detectedApproval, targetTicket?.id, db) : null;
-
-    if (targetTicket) {
-      targetTicket.soldByBot = true;
-      targetTicket.saleChannel = targetTicket.saleChannel || 'Bot WhatsApp';
-      const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
-      if (assignedAdv) {
-        targetTicket.advisorId = assignedAdv.id;
-        targetTicket.advisorName = assignedAdv.name;
-      }
-
-      targetTicket.abonos = targetTicket.abonos || [];
-      let existingAbono = targetTicket.abonos.find(a => a.isTransfer || a.metodoPago === 'transferencia');
-      if (!existingAbono) {
-        existingAbono = {
-          id: `abn-${Date.now()}`,
-          amount: detectedAmount,
-          metodoPago: 'transferencia',
-          date: new Date().toISOString(),
-          sellerId: targetTicket.advisorId || (assignedAdv ? assignedAdv.id : ''),
-          sellerName: targetTicket.advisorName ? `${targetTicket.advisorName} (🤖 Bot WhatsApp)` : '🤖 Bot WhatsApp',
-          note: `Transferencia reportada por WhatsApp${detectedApproval ? ` (Comprobante: #${detectedApproval})` : ''}`,
-          approvalNumber: detectedApproval,
-          originBank: detectedBank,
-          transferDate: new Date().toISOString(),
-          soporteWebViewUrl: null,
-          duplicateApprovalConfirmed: !!duplicateVoucher
-          // Sin objeto 'verification' para que cashState sea POR_VALIDAR
-        };
-        targetTicket.abonos.push(existingAbono);
-      } else {
-        if (transferInfo.amount) existingAbono.amount = transferInfo.amount;
-        if (transferInfo.approvalNumber) existingAbono.approvalNumber = transferInfo.approvalNumber;
-        if (transferInfo.bank) existingAbono.originBank = transferInfo.bank;
-        if (targetTicket.advisorName) existingAbono.sellerName = `${targetTicket.advisorName} (🤖 Bot WhatsApp)`;
-      }
-
-      targetTicket.auditLogs = targetTicket.auditLogs || [];
-      targetTicket.auditLogs.push({
-        id: `log-${Date.now()}`,
-        date: new Date().toISOString(),
-        user: '🤖 Bot WhatsApp',
-        action: 'VENTA_BOT',
-        description: `Comprobante de pago ($${Number(detectedAmount).toLocaleString('es-CO')}) reportado vía Bot WhatsApp${targetTicket.advisorName ? ` • Asesor: ${targetTicket.advisorName}` : ''}`
-      });
-
-      targetTicket.pendingTransferValidation = true;
-      targetTicket.totalPaid = (targetTicket.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
-      if (targetTicket.status === 'DISPONIBLE') {
-        targetTicket.status = 'RESERVADA';
-      }
-
-      if (typeof saveDBCallback === 'function') {
-        saveDBCallback(mainRaffle.id);
-      }
-    }
-
-    const knownName = targetTicket?.buyerName || session?.buyerName || '';
-    const knownDoc = targetTicket?.buyerDocument || session?.buyerDocument || '';
-    const knownEmail = targetTicket?.buyerEmail || session?.buyerEmail || '';
-    const knownCity = targetTicket?.buyerCity || session?.buyerCity || '';
-    const knownCountry = targetTicket?.buyerCountry || session?.buyerCountry || 'Colombia';
-    const hasAdvisor = targetTicket?.advisorName && targetTicket.advisorName !== 'Venta WhatsApp';
-
-    const missing = [];
-    if (!knownName) missing.push('Nombre y Apellidos completos (o Razón Social)');
-    if (!knownDoc) missing.push('Cédula de Ciudadanía o NIT');
-    if (!knownEmail) missing.push('Correo electrónico (para envío de soporte de compra)');
-    if (!knownCity) missing.push('Ciudad y País (ej: San Martín, Meta)');
-
-    let receiptReply = `📸 *¡Comprobante de transferencia recibido con éxito!* ✅\nHemos registrado tu comprobante en el sistema para *${companyName}*.\n\n`;
-
-    if (numberIdentified && targetTicket) {
-      receiptReply += `🎟️ *Boleta identificada:* *${numberIdentified}* (Boleta #${targetTicket.ticketNumber})\n`;
-      receiptReply += `_(¿Deseas cambiar este número? Solo escribe el nuevo número que prefieres antes de confirmar).\n\n`;
-    }
-
-    // Reporte de monto y validación de excedente si paga más de una boleta
-    receiptReply += `💵 *Valor reportado:* $${detectedAmount.toLocaleString('es-CO')} COP\n`;
-    if (detectedApproval) receiptReply += `🧾 *Comprobante No.:* ${detectedApproval}\n`;
-    if (detectedBank) receiptReply += `🏛️ *Medio / Banco:* ${detectedBank}\n`;
-
-    if (detectedAmount > ticketPrice) {
-      const surplus = detectedAmount - ticketPrice;
-      const extraTickets = Math.floor(surplus / ticketPrice);
-      const leftover = surplus % ticketPrice;
-      receiptReply += `\n💡 *¡Tienes un excedente a tu favor de $${surplus.toLocaleString('es-CO')} COP!*\n`;
-      receiptReply += `El valor de la boleta #${targetTicket.ticketNumber} es de $${ticketPrice.toLocaleString('es-CO')} COP. `;
-      if (extraTickets > 0) {
-        receiptReply += `¡Tu pago cubre *${extraTickets} boleta(s) adicional(es) completa(s)*${leftover > 0 ? ` y un abono de $${leftover.toLocaleString('es-CO')}` : ''}!\n`;
-        receiptReply += `👉 *¿Deseas elegir tus números adicionales ahora?* Responde con los números que deseas apartar o escribe *DISPONIBLES*.\n`;
-      }
-    }
-
-    if (duplicateVoucher) {
-      receiptReply += `\n🚨 *ALERTA DE SEGURIDAD:* Este número de comprobante (#${detectedApproval}) ya figura registrado en otra boleta. Nuestro equipo administrativo cotejará el extracto bancario antes de la activación.\n`;
-    }
-
-    // Preguntar por asesor si aún no está asignado
-    if (!hasAdvisor) {
-      receiptReply += `\n🤝 *¿Te recomendó algún asesor de nuestro equipo?*\nIndícanos su nombre o código (o escribe *Ninguno* si compraste directamente).\n`;
-    }
-
-    if (missing.length === 0) {
-      receiptReply += `\n👤 *Titular:* ${knownName}\n`;
-      receiptReply += `🪪 *Cédula/NIT:* ${knownDoc}\n`;
-      receiptReply += `📧 *Correo:* ${knownEmail}\n`;
-      receiptReply += `📍 *Ciudad:* ${knownCity}, ${knownCountry}\n\n`;
-      receiptReply += `✨ *Todos tus datos ya están completos y vinculados.* Nuestro equipo administrativo validará la transferencia en cuenta bancaria y activará tu boleta oficial.\n\n`;
-      receiptReply += `🌐 *Puedes consultar tu boleta y Soporte Digital de Compra aquí:*\n`;
-      receiptReply += `${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}\n\n`;
-      receiptReply += `¡Muchas gracias y mucha suerte en el sorteo! 🍀`;
-    } else {
-      let registeredLines = [];
-      if (knownName) registeredLines.push(`• *Titular:* ${knownName}`);
-      if (knownDoc) registeredLines.push(`• *Cédula/NIT:* ${knownDoc}`);
-      if (knownEmail) registeredLines.push(`• *Correo:* ${knownEmail}`);
-      if (knownCity) registeredLines.push(`• *Ciudad:* ${knownCity}`);
-
-      if (registeredLines.length > 0) {
-        receiptReply += `\n✅ *Datos ya registrados:*\n${registeredLines.join('\n')}\n\n`;
-      }
-
-      receiptReply += `\n📋 *Para completar tu Soporte Digital de Compra oficial, indícanos únicamente:*\n`;
-      missing.forEach((m, idx) => {
-        receiptReply += `${idx + 1}️⃣ *${m}*\n`;
-      });
-      receiptReply += `\n✍️ *Por favor indícanos ${missing.length === 1 ? 'este dato' : 'estos datos faltantes'} en tu siguiente mensaje.*`;
-    }
-
-    updateSession(senderPhone, {
-      lastRaffleId: mainRaffle.id,
-      lastTicketId: targetTicket ? targetTicket.id : (session?.lastTicketId || null),
-      lastOpportunity: numberIdentified,
-      waitingData: missing.length > 0,
-      lastImageAt: Date.now(),
-      pendingAmount: detectedAmount,
-      pendingApproval: detectedApproval,
-      pendingBank: detectedBank
-    }, db, saveDBCallback, mainRaffle.id);
-
-    await sendTextMessage(instance, senderPhone, receiptReply);
+    if (!receiptMedia.base64) console.log(`ℹ️ [WhatsApp Bot] Comprobante de ${senderPhone} sin imagen en base64 (revisar webhook de Evolution).`);
+    await startReceiptFlow(flowCtx, {
+      amount: detectAmount(text) || sess.pendingAmount || null,
+      approval: infoText.approvalNumber || sess.pendingApproval || '',
+      bank: infoText.bank || sess.pendingBank || '',
+      hintNumber: hint,
+      media: receiptMedia
+    });
     return { handled: true };
   }
 
   // 1.5. RESPUESTA SOBRE ASESOR RECOMENDADO / REFERIDO
   const refreshedSession = getSession(senderPhone, db);
   const targetTkt = refreshedSession?.lastTicketId ? (db.tickets || []).find(t => t.id === refreshedSession.lastTicketId) : (db.tickets || []).find(t => t.buyerPhone === senderPhone);
-  if (targetTkt && (!targetTkt.advisorName || targetTkt.advisorName === 'Venta WhatsApp')) {
+  const waitingAdvisorRef = refreshedSession?.awaitingAdvisorRef === true &&
+    Date.now() - (refreshedSession.awaitingAdvisorRefAt || 0) < 24 * 3600 * 1000;
+  if (waitingAdvisorRef && targetTkt && (!targetTkt.advisorName || targetTkt.advisorName === 'Venta WhatsApp')) {
+    // Tras responder, se pregunta (una sola vez) por qué medio se enteró
+    const followUp = () => {
+      if (cfg.howHeard.enabled && !targetTkt.howHeard && !refreshedSession?.howHeard) {
+        updateSession(senderPhone, { awaitingAdvisorRef: false, awaitingHowHeard: true, awaitingHowHeardAt: Date.now() }, db, saveDBCallback, mainRaffle.id);
+        return `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
+      }
+      updateSession(senderPhone, { awaitingAdvisorRef: false }, db, saveDBCallback, mainRaffle.id);
+      return '';
+    };
     if (cleanLower === 'ninguno' || cleanLower === 'ninguna' || cleanLower === 'nadie' || cleanLower === 'directo' || cleanLower === 'no') {
       targetTkt.advisorId = null;
       targetTkt.advisorName = 'Venta Directa WhatsApp';
       if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
-      await sendTextMessage(instance, senderPhone, `🤝 ¡Perfecto! Tu boleta #${targetTkt.ticketNumber} quedó registrada como *compra directa*.`);
+      await sendTextMessage(instance, senderPhone, `🤝 ¡Perfecto! Tu boleta (${(targetTkt.numbers || []).join(' • ')}) quedó registrada como *compra directa*.${followUp()}`);
       return { handled: true };
     }
 
@@ -850,8 +932,9 @@ _(Escribe *MENU* para volver al menú de opciones)._`;
     const matchedAdvisor = (db.advisors || []).find(a => {
       const advNameClean = (a.name || '').toLowerCase();
       const advCodeClean = (a.code || '').toLowerCase();
-      return cleanLower.includes(advNameClean) || (advCodeClean && cleanLower.includes(advCodeClean)) ||
-             (cleanLower.startsWith('asesor') && cleanLower.includes(advNameClean.split(' ')[0]));
+      const firstName = advNameClean.split(' ')[0];
+      return (advNameClean && cleanLower.includes(advNameClean)) || (advCodeClean && cleanLower.includes(advCodeClean)) ||
+             (firstName.length >= 4 && firstName !== 'asesor' && cleanLower.includes(firstName));
     });
 
     if (matchedAdvisor) {
@@ -864,39 +947,26 @@ _(Escribe *MENU* para volver al menú de opciones)._`;
         });
       }
       if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
-      await sendTextMessage(instance, senderPhone, `🤝 ¡Excelente! Tu boleta #${targetTkt.ticketNumber} ha quedado formalmente vinculada a nuestro asesor *${matchedAdvisor.name}*.`);
+      await sendTextMessage(instance, senderPhone, `🤝 ¡Excelente! Tu boleta (${(targetTkt.numbers || []).join(' • ')}) ha quedado formalmente vinculada a nuestro asesor *${matchedAdvisor.name}*.${followUp()}`);
       return { handled: true };
     }
   }
 
-  // 1.6. DETECCIÓN DE DATOS DE TRANSFERENCIA EN TEXTO (Si envía comprobante, valor o banco por mensaje)
-  const textTransfer = extractTransferInfo(userText);
-  if ((textTransfer.amount || textTransfer.approvalNumber) && targetTkt) {
-    targetTkt.abonos = targetTkt.abonos || [];
-    let existingAbono = targetTkt.abonos.find(a => a.isTransfer || a.metodoPago === 'transferencia');
-    if (!existingAbono) {
-      existingAbono = {
-        id: `abn-${Date.now()}`,
-        amount: textTransfer.amount || ticketPrice,
-        metodoPago: 'transferencia',
-        date: new Date().toISOString(),
-        sellerId: targetTkt.advisorId || '',
-        sellerName: targetTkt.advisorName || 'Venta WhatsApp',
-        note: `Transferencia reportada por WhatsApp${textTransfer.approvalNumber ? ` (Comprobante: #${textTransfer.approvalNumber})` : ''}`,
-        approvalNumber: textTransfer.approvalNumber || '',
-        originBank: textTransfer.bank || 'Transferencia Bancaria',
-        transferDate: new Date().toISOString(),
-        soporteWebViewUrl: null
-      };
-      targetTkt.abonos.push(existingAbono);
-    } else {
-      if (textTransfer.amount) existingAbono.amount = textTransfer.amount;
-      if (textTransfer.approvalNumber) existingAbono.approvalNumber = textTransfer.approvalNumber;
-      if (textTransfer.bank) existingAbono.originBank = textTransfer.bank;
+  // 1.6. PAGO REPORTADO POR TEXTO: el soporte (foto) es obligatorio; se guarda el valor y se pide la foto
+  if (/transfer|consign|pagu[eé]|abon[eé]|comprobante|aprobaci[oó]n|nequi|bancolombia|daviplata|\$/i.test(userText)) {
+    const reportedAmount = detectAmount(userText);
+    const reportedApproval = extractTransferInfo(userText).approvalNumber || '';
+    const openTickets = myTickets(db, mainRaffle.id, senderPhone).filter(t => balanceOf(t, ticketPrice) > 0);
+    if ((reportedAmount || reportedApproval) && openTickets.length) {
+      updateSession(senderPhone, {
+        pendingAmount: reportedAmount || undefined,
+        pendingApproval: reportedApproval || undefined,
+        pendingBank: extractTransferInfo(userText).bank || undefined
+      }, db, saveDBCallback, mainRaffle.id);
+      await sendTextMessage(instance, senderPhone,
+        `📝 Anoté${reportedAmount ? ` el valor de *${money(reportedAmount)}*` : ''}${reportedApproval ? ` y el comprobante *#${reportedApproval}*` : ''}.\n\nPara registrar el pago envíame ahora la *foto o captura del comprobante*; yo la asocio a tu boleta y te pido confirmar.`);
+      return { handled: true };
     }
-    targetTkt.pendingTransferValidation = true;
-    targetTkt.totalPaid = (targetTkt.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
-    if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
   }
 
   // 2. PARSEO DE DATOS DEL COMPRADOR (Si responde con sus datos: Nombre, Cédula, Correo, Ciudad, País)
@@ -949,7 +1019,6 @@ _(Escribe *MENU* para volver al menú de opciones)._`;
         replyMsg = 
 `🎉 *¡DATOS VINCULADOS A TU BOLETA Y SOPORTE DE COMPRA!* ✅
 
-🎟️ *Boleta:* #${targetTicket.ticketNumber}
 🔢 *Tus números:* ${targetTicket.numbers.join('  •  ')}
 👤 *Titular / Razón Social:* ${targetTicket.buyerName || 'Registrado'}
 🪪 *Cédula / NIT:* ${targetTicket.buyerDocument || 'Registrada'}
@@ -967,7 +1036,7 @@ _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha s
         replyMsg = 
 `✅ *¡Datos recibidos y actualizados con éxito!*
 
-🎟️ *Boleta:* #${targetTicket.ticketNumber} (${targetTicket.numbers.join(' • ')})
+🎟️ *Tus números:* ${targetTicket.numbers.join(' • ')}
 ${targetTicket.buyerName ? `• *Titular:* ${targetTicket.buyerName}\n` : ''}${targetTicket.buyerDocument ? `• *Cédula/NIT:* ${targetTicket.buyerDocument}\n` : ''}${targetTicket.buyerEmail ? `• *Correo:* ${targetTicket.buyerEmail}\n` : ''}${targetTicket.buyerCity ? `• *Ciudad:* ${targetTicket.buyerCity}\n` : ''}
 📋 *Para completar tu Soporte Digital de Compra, solo indícanos:*
 ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
@@ -975,7 +1044,18 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
 ✍️ *Por favor indícanos ${missingAfter.length === 1 ? 'este dato' : 'estos datos faltantes'} para finalizar.*`;
       }
 
+      // Con los datos completos, preguntar (una sola vez) por qué medio se enteró de nosotros
+      const hasRealAdvisor = !!targetTicket.advisorId && targetTicket.advisorName !== 'Venta WhatsApp';
+      const askAdvisorRef = missingAfter.length === 0 && !hasRealAdvisor && targetTicket.advisorName !== 'Venta Directa WhatsApp';
+      const askHowHeard = missingAfter.length === 0 && !askAdvisorRef && cfg.howHeard.enabled && !targetTicket.howHeard && !session?.howHeard;
+      if (askAdvisorRef) replyMsg += `\n\n${ADVISOR_REF_QUESTION}`;
+      else if (askHowHeard) replyMsg += `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
+
       updateSession(senderPhone, {
+        awaitingAdvisorRef: askAdvisorRef,
+        awaitingAdvisorRefAt: askAdvisorRef ? Date.now() : undefined,
+        awaitingHowHeard: askHowHeard,
+        awaitingHowHeardAt: askHowHeard ? Date.now() : undefined,
         waitingData: missingAfter.length > 0,
         profileCaptured: missingAfter.length === 0,
         buyerName: targetTicket.buyerName,
@@ -991,72 +1071,11 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // =============================================================
-  // ENRUTAMIENTO MULTI-SERVICIO Y MENÚ DE ATENCIÓN (Rifas / Constructora / Asesor)
+  // MENÚ DE ATENCIÓN (Rifas / Asesor)
   // =============================================================
 
-  // A. HABLAR CON UN ASESOR HUMANO (Opción 3)
-  if (cleanLower === '3' || 
-      cleanLower === 'asesor' || cleanLower === 'asesora' ||
-      cleanLower.includes('humano') || cleanLower.includes('persona') ||
-      cleanLower.includes('hablar con') || cleanLower.includes('comercial') ||
-      cleanLower.includes('llamar') || cleanLower.includes('atencion') ||
-      cleanLower.includes('atención') || cleanLower.includes('agente')) {
-    
-    updateSession(senderPhone, {
-      humanAssisted: true,
-      humanAssistedAt: Date.now()
-    }, db, saveDBCallback, mainRaffle?.id);
-
-    const handoffMsg = buildAdvisorHandOffMessage(companyName, advisor);
-    await sendTextMessage(instance, senderPhone, handoffMsg);
-    return { handled: true };
-  }
-
-  // B. CONSTRUCTORA Y PROYECTOS (Opción 2)
-  if (cleanLower === '2' || 
-      cleanLower.includes('constructora') || 
-      cleanLower.includes('construccion') || cleanLower.includes('construcción') ||
-      cleanLower.includes('obra') || cleanLower.includes('obras') ||
-      cleanLower.includes('remodelacion') || cleanLower.includes('remodelación') ||
-      cleanLower.includes('lote') || cleanLower.includes('lotes') ||
-      cleanLower.includes('parcela') || cleanLower.includes('parcelas') ||
-      cleanLower.includes('terreno') || cleanLower.includes('terrenos') ||
-      cleanLower.includes('inmobiliaria') ||
-      cleanLower.includes('plano') || cleanLower.includes('planos') ||
-      cleanLower.includes('diseño') || cleanLower.includes('diseno') ||
-      cleanLower.includes('casa campestre') || cleanLower.includes('construir')) {
-    
-    updateSession(senderPhone, {
-      currentTopic: 'constructora',
-      humanAssisted: false
-    }, db, saveDBCallback, mainRaffle?.id);
-
-    const constMsg = buildConstructoraMessage(companyName);
-    await sendTextMessage(instance, senderPhone, constMsg);
-    return { handled: true };
-  }
-
-  // C. SOLICITUD DE COTIZACIÓN DE CONSTRUCCIÓN
-  if (cleanLower.includes('cotizar') || cleanLower.includes('cotizacion') || cleanLower.includes('cotización') || cleanLower.includes('presupuesto')) {
-    updateSession(senderPhone, {
-      currentTopic: 'constructora',
-      humanAssisted: false
-    }, db, saveDBCallback, mainRaffle?.id);
-
-    const quoteMsg = 
-`📐 *¡SOLICITUD DE COTIZACIÓN DE OBRA!* 🏗️✨
-
-Para estructurar tu cotización personalizada con *${companyName} Constructora*, indícanos:
-1️⃣ *Tipo de proyecto:* (Casa campestre, vivienda urbana, cabaña, piscina, remodelación o lote).
-2️⃣ *Medidas estimadas:* (Metros cuadrados de construcción o área del terreno).
-3️⃣ *Ubicación:* (Municipio o vereda donde se desarrollará la obra).
-
-Un asesor técnico o arquitecto evaluará los requerimientos para formular la propuesta.
-_(Escribe *ASESOR* si deseas agendar visita técnica en el lote o llamada directa)._`;
-
-    await sendTextMessage(instance, senderPhone, quoteMsg);
-    return { handled: true };
-  }
+  // A. RESPUESTAS PERSONALIZADAS DEL ADMINISTRADOR Y HABLAR CON UN ASESOR HUMANO (Opción 3)
+  if (await customIntents()) return { handled: true };
 
   // D. ENTRADA EXPLÍCITA AL FLUJO DE RIFAS (Opción 1)
   if (cleanLower === '1' || cleanLower === 'rifa' || cleanLower === 'rifas' || 
@@ -1192,7 +1211,7 @@ _(Escribe *ASESOR* si deseas agendar visita técnica en el lote o llamada direct
     let dispMsg = `🎲 *NÚMEROS DISPONIBLES - ${mainRaffle.title}* 🎟️\n\n`;
     dispMsg += `Aquí tienes opciones de números libres para jugar (${opportunities} números por boleta):\n\n`;
     shuffled.forEach(t => {
-      dispMsg += `• Boleta *#${t.ticketNumber}:* ${t.numbers.join('  •  ')}\n`;
+      dispMsg += `• ${t.numbers.join('  •  ')}\n`;
     });
     dispMsg += `\n💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
     dispMsg += `\n✍️ *Para apartar cualquiera de ellos,* solo responde con el número que deseas (ejemplo: *${shuffled[0].numbers[0]}*).`;
@@ -1217,96 +1236,14 @@ _(Escribe *ASESOR* si deseas agendar visita técnica en el lote o llamada direct
     }
 
     if (matchedTicket) {
-      const prevSession = getSession(senderPhone, db);
-      const isChangingNumber = prevSession && prevSession.lastTicketId && prevSession.lastTicketId !== matchedTicket.id;
-      const previousTicket = isChangingNumber ? tickets.find(t => t.id === prevSession.lastTicketId) : null;
-
       if (matchedTicket.status === 'DISPONIBLE') {
-        // Si el usuario ya tenía una boleta RESERVADA por él mismo y sin pagos, liberamos la anterior
-        if (previousTicket && previousTicket.status === 'RESERVADA' && previousTicket.buyerPhone === senderPhone && (previousTicket.totalPaid || 0) === 0) {
-          previousTicket.status = 'DISPONIBLE';
-          previousTicket.buyerName = '';
-          previousTicket.buyerPhone = '';
-          previousTicket.buyerDocument = '';
-          previousTicket.buyerEmail = '';
-          previousTicket.buyerCity = '';
-          previousTicket.buyerCountry = '';
-        }
-
-        // Si ya teníamos datos del comprador en la sesión, transferirlos a la nueva boleta
-        const assignedAdv = getAssignedAdvisorForTicket(matchedTicket, mainRaffle, db) || advisor;
-        if (assignedAdv) {
-          matchedTicket.advisorId = assignedAdv.id;
-          matchedTicket.advisorName = assignedAdv.name;
-        }
-
-        if (prevSession && (prevSession.buyerName || prevSession.buyerDocument)) {
-          if (prevSession.buyerName) matchedTicket.buyerName = prevSession.buyerName;
-          if (prevSession.buyerDocument) matchedTicket.buyerDocument = prevSession.buyerDocument;
-          if (prevSession.buyerEmail) matchedTicket.buyerEmail = prevSession.buyerEmail;
-          if (prevSession.buyerCity) matchedTicket.buyerCity = prevSession.buyerCity;
-          if (prevSession.buyerCountry) matchedTicket.buyerCountry = prevSession.buyerCountry;
-          matchedTicket.buyerPhone = senderPhone;
-          matchedTicket.soldByBot = true;
-          matchedTicket.saleChannel = 'Bot WhatsApp';
-          matchedTicket.assignedDate = matchedTicket.assignedDate || new Date().toISOString();
-          matchedTicket.status = 'RESERVADA';
-          matchedTicket.auditLogs = matchedTicket.auditLogs || [];
-          matchedTicket.auditLogs.push({
-            id: `log-${Date.now()}`,
-            date: new Date().toISOString(),
-            user: '🤖 Bot WhatsApp',
-            action: 'VENTA_BOT',
-            description: `Boleta reservada por Bot de WhatsApp${matchedTicket.advisorName ? ` • Asignada a: ${matchedTicket.advisorName}` : ''}`
-          });
-          if (typeof saveDBCallback === 'function') {
-            saveDBCallback(mainRaffle.id);
-          }
-        }
-
-        updateSession(senderPhone, {
-          lastTicketId: matchedTicket.id,
-          lastRaffleId: mainRaffle.id,
-          lastOpportunity: paddedNumber,
-          lastTicketNumber: matchedTicket.ticketNumber,
-          waitingData: !matchedTicket.buyerDocument
-        }, db, saveDBCallback, mainRaffle.id);
-
-        const otherOpportunities = matchedTicket.numbers.filter(n => n !== paddedNumber);
-
-        if (isChangingNumber) {
-          const changeMsg = 
-`🔄 *¡NÚMERO CAMBIADO CON ÉXITO!* ✅
-
-🎟️ *Tu nueva boleta es:* #${matchedTicket.ticketNumber}
-🔢 *Juegas con el número:* *${paddedNumber}* ${otherOpportunities.length > 0 ? `(y también con *${otherOpportunities.join(', ')}*)` : ''}
-${matchedTicket.buyerName ? `👤 *Titular:* ${matchedTicket.buyerName}\n` : ''}${matchedTicket.buyerDocument ? `🪪 *Cédula/NIT:* ${matchedTicket.buyerDocument}\n` : ''}${matchedTicket.advisorName ? `👤 *Asesor:* ${matchedTicket.advisorName}\n` : ''}💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
-🎯 *Sorteo:* ${mainRaffle.title} el ${drawDateFormatted}
-
-${!matchedTicket.buyerDocument ? '📋 *Por favor indícanos tu Nombre, Cédula/NIT, Correo electrónico y Ciudad* para vincular tus datos al soporte digital de compra y tu boleta oficial.' : `🌐 *Puedes consultar tu boleta actualizada:* ${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}`}
-_(Si deseas cambiar a otro número, solo escribe el nuevo número)._ 🍀`;
-
-          await sendTextMessage(instance, senderPhone, changeMsg);
-          return { handled: true };
-        }
-
-        let advisorTxt = '';
-        if (assignedAdv) {
-          advisorTxt = `\n👤 *Asesor asignado:* *${assignedAdv.name}*\n💡 _(Este número se encuentra asignado a nuestro asesor *${assignedAdv.name}*. Si lo deseas, podemos apartártelo aquí directamente o puedes validar con él)._\n`;
-        }
-
-        const availReply = 
-`✅ *¡EL NÚMERO ${paddedNumber} ESTÁ DISPONIBLE!* 🎉
-
-🎟️ *Boleta:* #${matchedTicket.ticketNumber}
-🔢 *Juegas con:* *${paddedNumber}* ${otherOpportunities.length > 0 ? `(y también con *${otherOpportunities.join(', ')}*)` : ''}
-💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
-${mainRaffle.minAbono ? `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n` : ''}🎯 *Sorteo:* ${mainRaffle.title}
-🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}${advisorTxt}
-✍️ *¿Deseas apartarlo ahora mismo?*
-Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la foto de tu comprobante de pago Nequi/Bancolombia) para reservártelo de inmediato a este número de WhatsApp.`;
-
-        await sendTextMessage(instance, senderPhone, availReply);
+        // Se muestra y se pide confirmación: nunca se aparta (ni se cambia una boleta) sin que el cliente confirme
+        await offerReservation(flowCtx, matchedTicket, paddedNumber);
+        return { handled: true };
+      } else if (matchedTicket.buyerPhone === senderPhone) {
+        const left = balanceOf(matchedTicket, ticketPrice);
+        await sendTextMessage(instance, senderPhone,
+          `ℹ️ El número *${paddedNumber}* ya es tuyo: boleta *${numbersOf(matchedTicket)}*, ${STATUS_LABEL[matchedTicket.status] || matchedTicket.status}${left > 0 ? `, saldo pendiente *${money(left)}*` : ''}.\n\n${left > 0 ? 'Para pagar o abonar, envíame la *foto del comprobante*.' : 'Está al día. ¡Mucha suerte! 🍀'}`);
         return { handled: true };
       } else {
         const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
@@ -1318,7 +1255,7 @@ Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la fo
         if (availableAlts.length > 0) {
           busyReply += `🎲 *Te sugerimos estas opciones disponibles:*\n`;
           availableAlts.forEach(a => {
-            busyReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
+            busyReply += `• ${a.numbers.join('  •  ')}\n`;
           });
           busyReply += `\n¿Te gustaría apartar alguno de ellos? Escribe el número que prefieras o escribe *DISPONIBLES*.`;
         } else {
@@ -1334,7 +1271,7 @@ Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la fo
       if (availableAlts.length > 0) {
         notFoundReply += `🎲 *Te sugerimos estos números que sí están disponibles:*\n`;
         availableAlts.forEach(a => {
-          notFoundReply += `• Boleta *#${a.ticketNumber}:* ${a.numbers.join('  •  ')}\n`;
+          notFoundReply += `• ${a.numbers.join('  •  ')}\n`;
         });
         notFoundReply += `\nEscribe el número que desees consultar o escribe *DISPONIBLES*.`;
       }
@@ -1344,26 +1281,597 @@ Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la fo
   }
 
   // 9. FALLBACK Y ENRUTAMIENTO INTELIGENTE
-  if (session?.currentTopic === 'constructora') {
-    const constFollowup = 
-`👷‍♂️ *Constructora y Proyectos - ${companyName}* 🏗️
-Hemos recibido tu mensaje. Para coordinar los detalles de tu obra, presupuesto o visita técnica:
-• Escribe *ASESOR* para hablar con nuestro director de proyectos.
-• Escribe *COTIZAR* para solicitar una cotización formal.
-• Escribe *MENU* para volver al menú de opciones.`;
-    await sendTextMessage(instance, senderPhone, constFollowup);
-    return { handled: true };
-  }
-
   if (session?.currentTopic === 'rifa') {
     const raffleMsg = buildRaffleMessage(mainRaffle, companyName, digits, opportunities, ticketPrice, drawDateFormatted, lotteryName);
-    await sendTextMessage(instance, senderPhone, raffleMsg);
+    await fallbackReply(raffleMsg);
     return { handled: true };
   }
 
-  const defaultMenu = buildMainMenuMessage(companyName, advisor);
-  await sendTextMessage(instance, senderPhone, defaultMenu);
+  await fallbackReply(buildMainMenuMessage(companyName, advisor));
   return { handled: true };
+}
+
+// ---------------------------------------------------------------------------
+// Flujos con confirmación: apartar una boleta y registrar comprobantes de pago.
+// El bot nunca aparta, cambia ni registra un pago sin que el cliente lo confirme.
+// El estado de la conversación se guarda en session.pending ({ type, ...datos }) por 30 minutos.
+// ---------------------------------------------------------------------------
+const PENDING_TTL_MS = 30 * 60 * 1000;
+const YES_WORDS = new Set(['si', 'sii', 's', 'ok', 'okey', 'dale', 'listo', 'claro', 'confirmo', 'confirmado', 'confirmar', 'correcto', 'de acuerdo',
+  'si confirmo', 'si quiero', 'si apartala', 'si apartalo', 'apartala', 'apartalo', 'vale', 'perfecto', 'si es correcto', 'si correcto']);
+const NO_WORDS = new Set(['no', 'n', 'cancelar', 'cancela', 'cancelo', 'no gracias', 'nel', 'negativo', 'no es', 'incorrecto']);
+const money = n => `$${Math.round(Number(n) || 0).toLocaleString('es-CO')}`;
+const isYes = text => YES_WORDS.has(botBrain.normalize(text));
+const isNo = text => NO_WORDS.has(botBrain.normalize(text));
+
+function setPending(senderPhone, pending, db, saveDBCallback, raffleId) {
+  updateSession(senderPhone, { pending: pending ? { ...pending, at: Date.now(), reminders: 0 } : null }, db, saveDBCallback, raffleId || null);
+}
+
+function getPending(session) {
+  const p = session && session.pending;
+  if (!p || !p.type) return null;
+  return Date.now() - (p.at || 0) > PENDING_TTL_MS ? null : p;
+}
+
+const numbersOf = t => (t.numbers || []).join(' • ');
+/** Solo se puede cambiar una boleta apartada que no tenga ningún pago (ni abono pendiente de validar). */
+const isChangeable = t => t.status === 'RESERVADA' && (Number(t.totalPaid) || 0) === 0 && !(t.abonos || []).some(a => (Number(a.amount) || 0) > 0);
+const priceOf = (t, fallback) => Number(t.price) || Number(fallback) || 0;
+const balanceOf = (t, fallback) => Math.max(0, priceOf(t, fallback) - (Number(t.totalPaid) || 0));
+const STATUS_LABEL = { RESERVADA: 'apartada', ABONO_PARCIAL: 'con abono parcial', PAGADA: 'pagada', CONFIRMADA: 'pagada y confirmada' };
+
+/** Boletas de la rifa que ya son de este cliente (apartadas, con abono o pagadas). */
+function myTickets(db, raffleId, phone) {
+  return (db.tickets || []).filter(t => t.raffleId === raffleId && t.buyerPhone === phone && t.status !== 'DISPONIBLE');
+}
+
+/** Datos del comprador que el sistema ya conoce (de sus boletas anteriores o de la conversación). */
+function knownProfile(db, phone, session) {
+  const withData = (db.tickets || [])
+    .filter(t => t.buyerPhone === phone && (t.buyerName || t.buyerDocument))
+    .sort((a, b) => String(b.assignedDate || '').localeCompare(String(a.assignedDate || '')));
+  const t = withData[0] || {};
+  return {
+    name: t.buyerName || session?.buyerName || '',
+    document: t.buyerDocument || session?.buyerDocument || '',
+    email: t.buyerEmail || session?.buyerEmail || '',
+    city: t.buyerCity || session?.buyerCity || '',
+    country: t.buyerCountry || session?.buyerCountry || 'Colombia'
+  };
+}
+
+function missingProfileFields(p) {
+  const missing = [];
+  if (!p.name) missing.push('Nombre y Apellidos completos (o Razón Social)');
+  if (!p.document) missing.push('Cédula de Ciudadanía o NIT');
+  if (!p.email) missing.push('Correo electrónico (para envío de soporte de compra)');
+  if (!p.city) missing.push('Ciudad y País (ej: San Martín, Meta)');
+  return missing;
+}
+
+function profileLines(p) {
+  const lines = [];
+  if (p.name) lines.push(`• *Titular:* ${p.name}`);
+  if (p.document) lines.push(`• *Cédula/NIT:* ${p.document}`);
+  if (p.email) lines.push(`• *Correo:* ${p.email}`);
+  if (p.city) lines.push(`• *Ciudad:* ${p.city}${p.country ? `, ${p.country}` : ''}`);
+  return lines;
+}
+
+function releaseTicket(t) {
+  t.status = 'DISPONIBLE';
+  ['buyerName', 'buyerPhone', 'buyerDocument', 'buyerEmail', 'buyerCity', 'buyerCountry'].forEach(k => { t[k] = ''; });
+  t.advisorId = null;
+  t.advisorName = '';
+  t.soldByBot = false;
+  t.assignedDate = null;
+  t.totalPaid = 0;
+  t.balancePending = t.price;
+}
+
+/** Aparta la boleta para el cliente con los datos que ya se conocen. */
+function reserveTicket(ctx, ticket, replacing) {
+  const { db, senderPhone, mainRaffle, advisor, session } = ctx;
+  const profile = knownProfile(db, senderPhone, session);
+  if (replacing) {
+    ticket.auditLogs = ticket.auditLogs || [];
+    releaseTicket(replacing);
+  }
+  Object.assign(ticket, {
+    buyerName: profile.name || ticket.buyerName || '',
+    buyerDocument: profile.document || ticket.buyerDocument || '',
+    buyerEmail: profile.email || ticket.buyerEmail || '',
+    buyerCity: profile.city || ticket.buyerCity || '',
+    buyerCountry: profile.country || ticket.buyerCountry || '',
+    buyerPhone: senderPhone,
+    soldByBot: true,
+    saleChannel: 'Bot WhatsApp',
+    assignedDate: new Date().toISOString(),
+    status: 'RESERVADA'
+  });
+  const assignedAdv = getAssignedAdvisorForTicket(ticket, mainRaffle, db) || advisor;
+  if (assignedAdv) {
+    ticket.advisorId = assignedAdv.id;
+    ticket.advisorName = assignedAdv.name;
+    // Tipo de venta: punto = oficina (no comisiona), calle = calle; el integral lo define el administrador
+    if (assignedAdv.type === 'PUNTO') ticket.saleZone = 'OFICINA';
+    else if (!assignedAdv.type || assignedAdv.type === 'CALLE') ticket.saleZone = 'CALLE';
+  }
+  ticket.auditLogs = ticket.auditLogs || [];
+  ticket.auditLogs.push({
+    id: `log-${Date.now()}`,
+    date: new Date().toISOString(),
+    user: '🤖 Bot WhatsApp',
+    action: 'VENTA_BOT',
+    description: `Boleta ${replacing ? 'cambiada' : 'apartada'} por el cliente (confirmó por WhatsApp)${replacing ? ` • Reemplaza la boleta ${numbersOf(replacing)}` : ''}${ticket.advisorName ? ` • Asignada a: ${ticket.advisorName}` : ''}`
+  });
+}
+
+/** Mensaje tras apartar: datos conocidos o faltantes, y las preguntas pendientes (asesor, cómo se enteró). */
+async function sendReservedReply(ctx, ticket, number, changed) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, cfg, session, drawDateFormatted, ticketPrice } = ctx;
+  const profile = knownProfile(db, senderPhone, session);
+  const missing = missingProfileFields(profile);
+  const hasRealAdvisor = !!ticket.advisorId && ticket.advisorName !== 'Venta WhatsApp';
+  const askAdvisorRef = missing.length === 0 && !hasRealAdvisor && ticket.advisorName !== 'Venta Directa WhatsApp';
+  const askHowHeard = missing.length === 0 && !askAdvisorRef && cfg.howHeard.enabled && !ticket.howHeard && !session?.howHeard;
+
+  let msg = `${changed ? '🔄 *¡BOLETA CAMBIADA!*' : '✅ *¡BOLETA APARTADA!*'} 🎟️\n\n`;
+  msg += `🔢 *Tus números:* ${numbersOf(ticket)}\n`;
+  msg += `💵 *Valor:* ${money(priceOf(ticket, ticketPrice))} COP\n`;
+  msg += `🎯 *Sorteo:* ${mainRaffle.title}${drawDateFormatted ? ` el ${drawDateFormatted}` : ''}\n`;
+  if (ticket.advisorName && ticket.advisorName !== 'Venta WhatsApp') msg += `👤 *Asesor:* ${ticket.advisorName}\n`;
+
+  if (missing.length === 0) {
+    msg += `\n📋 *Datos que tenemos de ti:*\n${profileLines(profile).join('\n')}\n`;
+    msg += `\nSi algún dato cambió, envíanos el dato corregido. Si todo está bien, no necesitas hacer nada más.`;
+  } else {
+    if (profileLines(profile).length) msg += `\n✅ *Datos ya registrados:*\n${profileLines(profile).join('\n')}\n`;
+    msg += `\n📋 *Para completar tu Soporte Digital de Compra, indícanos:*\n${missing.map((m, i) => `${i + 1}️⃣ *${m}*`).join('\n')}\n`;
+    msg += `\n✍️ *Envíalos en tu siguiente mensaje.*`;
+  }
+  msg += `\n\n💳 Escribe *PAGOS* para ver las cuentas. Cuando pagues, envíame la *foto del comprobante* y yo lo asocio a tu boleta.`;
+  if (askAdvisorRef) msg += `\n\n${ADVISOR_REF_QUESTION}`;
+  else if (askHowHeard) msg += `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
+
+  updateSession(senderPhone, {
+    pending: null,
+    lastTicketId: ticket.id,
+    lastRaffleId: mainRaffle.id,
+    lastOpportunity: number,
+    lastTicketNumber: ticket.ticketNumber,
+    waitingData: missing.length > 0,
+    awaitingAdvisorRef: askAdvisorRef,
+    awaitingAdvisorRefAt: askAdvisorRef ? Date.now() : undefined,
+    awaitingHowHeard: askHowHeard,
+    awaitingHowHeardAt: askHowHeard ? Date.now() : undefined
+  }, db, saveDBCallback, mainRaffle.id);
+  if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+/** El cliente escribió un número libre: se le muestra y se le pide confirmar (nunca se aparta solo). */
+async function offerReservation(ctx, ticket, number) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, lotteryName, drawDateFormatted } = ctx;
+  const mine = myTickets(db, mainRaffle.id, senderPhone);
+  const others = ticket.numbers.filter(n => n !== number);
+  const assignedAdv = getAssignedAdvisorForTicket(ticket, mainRaffle, db) || ctx.advisor;
+
+  let head = `✅ *¡EL NÚMERO ${number} ESTÁ DISPONIBLE!* 🎉\n\n`;
+  head += `🔢 *Juegas con:* *${number}* ${others.length ? `(y también con *${others.join(', ')}*)` : ''}\n`;
+  head += `💵 *Valor Boleta:* ${money(ticketPrice)} COP\n`;
+  if (mainRaffle.minAbono) head += `💰 *Abono Mínimo:* ${money(mainRaffle.minAbono)} COP\n`;
+  head += `🎯 *Sorteo:* ${mainRaffle.title}\n🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}`;
+  if (assignedAdv) head += `\n👤 *Asesor asignado:* *${assignedAdv.name}*`;
+
+  if (mine.length === 0) {
+    setPending(senderPhone, { type: 'RESERVE', ticketId: ticket.id, number }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, `${head}\n\n✍️ *¿Confirmas que deseas apartarla?*\nResponde *SÍ* para apartarla o *NO* para cancelar.`);
+    return;
+  }
+
+  // Ya tiene boletas: se pregunta si es una compra nueva o un cambio
+  const changeable = mine.filter(isChangeable);
+  const options = ['NEW'];
+  if (changeable.length) options.push('CHANGE');
+  options.push('CANCEL');
+  const labels = {
+    NEW: '*Comprar una boleta NUEVA* (además de la que ya tienes)',
+    CHANGE: '*CAMBIAR* una de tus boletas apartadas (sin pagos) por esta',
+    CANCEL: '*Cancelar* (no hacer nada)'
+  };
+  let msg = `${head}\n\n`;
+  msg += `🎟️ *Ya tienes ${mine.length === 1 ? 'esta boleta' : 'estas boletas'}:*\n`;
+  mine.forEach(t => { msg += `• ${numbersOf(t)} — ${STATUS_LABEL[t.status] || t.status}${balanceOf(t, ticketPrice) > 0 ? `, saldo ${money(balanceOf(t, ticketPrice))}` : ''}\n`; });
+  msg += `\n¿Qué deseas hacer?\n${options.map((o, i) => `${i + 1}️⃣ ${labels[o]}`).join('\n')}`;
+  setPending(senderPhone, { type: 'KIND', ticketId: ticket.id, number, options }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+async function confirmReservation(ctx, ticket, number, action, oldTicket) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice } = ctx;
+  let msg;
+  if (action === 'CHANGE') {
+    msg = `🔄 *Vas a CAMBIAR tu boleta*\n\n• Actual: *${numbersOf(oldTicket)}* (quedará libre)\n• Nueva: *${numbersOf(ticket)}* — ${money(priceOf(ticket, ticketPrice))} COP\n\n¿Confirmas el cambio? Responde *SÍ* o *NO*.`;
+  } else {
+    msg = `🎟️ *Vas a apartar una boleta NUEVA* (además de las que ya tienes)\n\n• Números: *${numbersOf(ticket)}*\n• Valor: ${money(priceOf(ticket, ticketPrice))} COP\n\n¿Confirmas? Responde *SÍ* o *NO*.`;
+  }
+  setPending(senderPhone, { type: 'CONFIRM', action, ticketId: ticket.id, number, oldTicketId: oldTicket ? oldTicket.id : null }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+async function executeReservation(ctx, pending) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle } = ctx;
+  const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
+  if (!ticket || ticket.status !== 'DISPONIBLE') {
+    setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, `😕 Ese número ya no está disponible (alguien lo acaba de apartar). Escribe *DISPONIBLES* para ver otras opciones.`);
+    return;
+  }
+  let old = null;
+  if (pending.action === 'CHANGE') {
+    old = (db.tickets || []).find(t => t.id === pending.oldTicketId);
+    if (!old || old.buyerPhone !== senderPhone || !isChangeable(old)) {
+      setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, `⚠️ Tu boleta anterior ya no se puede cambiar (tiene pagos o cambió de estado). Escribe *ASESOR* para que te ayudemos.`);
+      return;
+    }
+  }
+  reserveTicket(ctx, ticket, old);
+  await sendReservedReply(ctx, ticket, pending.number, !!old);
+}
+
+// ---------------------------------------------------------------------------
+// Comprobantes de pago
+// ---------------------------------------------------------------------------
+const approvalKeyOf = v => String(v || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
+
+/** Monto escrito por el cliente, sin confundir el número de comprobante con un valor. */
+function detectAmount(text) {
+  if (!text) return null;
+  const stripped = String(text)
+    .replace(/(?:comprobante|aprobaci[oó]n|transacci[oó]n|referencia|ref)\D{0,6}\d{6,}/gi, ' ')
+    .replace(/\b\d{9,}\b/g, ' ');
+  const info = extractTransferInfo(stripped);
+  if (info.amount) return info.amount;
+  const plain = stripped.trim().match(/^\$?\s*([\d.,]+)\s*(?:cop|pesos)?$/i);
+  if (plain) {
+    const value = parseInt(plain[1].replace(/[.,]/g, ''), 10);
+    if (value >= 1000) return value;
+  }
+  return null;
+}
+
+/** Guarda la imagen del comprobante (si llegó en el mensaje): huella para detectar repetidos y copia en Drive. */
+async function storeReceiptMedia(ctx, media) {
+  if (!media || !media.base64) return null;
+  const clean = String(media.base64).replace(/^data:[^;]+;base64,/, '');
+  const buffer = Buffer.from(clean, 'base64');
+  if (buffer.length < 2000) return null;
+  const out = { hash: require('crypto').createHash('sha256').update(buffer).digest('hex'), driveId: null, url: null, webViewUrl: null };
+  try {
+    const { mainRaffle, company, companyName } = ctx;
+    const folders = await driveService.getRaffleFolders(companyName, mainRaffle.companyId || (company && company.id), mainRaffle.title, mainRaffle.id, mainRaffle.driveFolderId);
+    mainRaffle.driveFolderId = folders.raffleFolderId;
+    const up = await driveService.uploadFileToDrive({
+      buffer,
+      filename: `soporte_whatsapp_${ctx.senderPhone}_${Date.now()}.jpg`,
+      mimeType: media.mimeType || 'image/jpeg',
+      parentFolderId: folders.soportesFolderId
+    });
+    out.driveId = up.fileId;
+    out.url = up.directUrl;
+    out.webViewUrl = up.webViewUrl;
+  } catch (err) {
+    console.warn('⚠️ No se pudo guardar el comprobante de WhatsApp en Drive:', err.message);
+  }
+  return out;
+}
+
+async function startReceiptFlow(ctx, info) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, session } = ctx;
+  const soporte = await storeReceiptMedia(ctx, info.media);
+  const mine = myTickets(db, mainRaffle.id, senderPhone);
+  const payable = mine.filter(t => balanceOf(t, ticketPrice) > 0);
+
+  if (mine.length === 0) {
+    await sendTextMessage(instance, senderPhone,
+      `📸 Recibí tu comprobante, pero *aún no tienes ninguna boleta apartada* a este número de WhatsApp.\n\nDime qué número deseas jugar (o escribe *DISPONIBLES*), apártalo y luego envíame el comprobante para asociarlo a tu boleta.`);
+    return;
+  }
+  if (payable.length === 0) {
+    await sendTextMessage(instance, senderPhone, `✅ Todas tus boletas ya están *pagadas por completo*, así que no tengo saldo pendiente al que aplicar este comprobante.\n\nSi quieres comprar otra boleta, escribe el número que deseas o *DISPONIBLES*. Si crees que es un error, escribe *ASESOR*.`);
+    return;
+  }
+
+  const base = {
+    approval: info.approval || '',
+    bank: info.bank || '',
+    soporte,
+    hint: info.hintNumber || ''
+  };
+  if (!info.amount) {
+    setPending(senderPhone, { type: 'RECEIPT_AMOUNT', ...base }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, `📸 *¡Recibí tu comprobante!*\n\nPara registrarlo bien necesito el *valor transferido*. ¿De cuánto fue? Escríbelo solo en números (ej: *150000*).`);
+    return;
+  }
+  await receiptSelectTarget(ctx, { ...base, amount: info.amount }, payable);
+}
+
+async function receiptSelectTarget(ctx, plan, payable) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, session } = ctx;
+  let candidates = payable || myTickets(db, mainRaffle.id, senderPhone).filter(t => balanceOf(t, ticketPrice) > 0);
+  // Si el cliente nombró el número en el mensaje, se usa esa boleta
+  if (plan.hint) {
+    const byHint = candidates.filter(t => (t.numbers || []).includes(plan.hint));
+    if (byHint.length === 1) candidates = byHint;
+  }
+  if (candidates.length === 1) {
+    await receiptConfirm(ctx, candidates[0], plan);
+    return;
+  }
+  let msg = `📸 *¡Recibí tu comprobante por ${money(plan.amount)}!*\n\nTienes varias boletas con saldo. *¿A cuál corresponde este pago?* Responde con el número de la lista:\n\n`;
+  candidates.forEach((t, i) => { msg += `${i + 1}️⃣ ${numbersOf(t)} — saldo ${money(balanceOf(t, ticketPrice))}\n`; });
+  setPending(senderPhone, { type: 'RECEIPT_WHICH', ...plan, candidateIds: candidates.map(t => t.id) }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg.trim());
+}
+
+async function receiptConfirm(ctx, ticket, plan) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice } = ctx;
+  const price = priceOf(ticket, ticketPrice);
+  const paid = Number(ticket.totalPaid) || 0;
+  const balance = balanceOf(ticket, ticketPrice);
+  const amount = plan.amount;
+
+  let msg = `📸 *Revisemos tu comprobante antes de registrarlo*\n\n`;
+  msg += `🎟️ *Boleta:* ${numbersOf(ticket)}\n`;
+  msg += `💵 *Valor de la boleta:* ${money(price)}\n`;
+  msg += `✅ *Pagado hasta hoy:* ${money(paid)}\n`;
+  msg += `⏳ *Saldo pendiente:* ${money(balance)}\n`;
+  msg += `💸 *Valor de este comprobante:* ${money(amount)}\n`;
+  if (plan.approval) msg += `🧾 *Comprobante No.:* ${plan.approval}\n`;
+  if (plan.bank) msg += `🏛️ *Medio / Banco:* ${plan.bank}\n`;
+
+  if (amount > balance) {
+    const surplus = amount - balance;
+    msg += `\n💡 *Este pago supera el saldo por ${money(surplus)}.* Esos ${money(surplus)} quedan a tu favor para otra boleta${surplus >= price ? ` (alcanza para ${Math.floor(surplus / price)} boleta(s) completa(s))` : ''}. Un asesor te ayudará a aplicarlos.\n`;
+  } else if (amount === balance) {
+    msg += `\n✅ Con este pago tu boleta *quedaría totalmente pagada*.\n`;
+  } else {
+    msg += `\nℹ️ Es un *abono parcial*: después de este pago quedarían pendientes *${money(balance - amount)}*.\n`;
+    if (mainRaffle.minAbono && amount < Number(mainRaffle.minAbono)) {
+      msg += `⚠️ Ojo: el abono mínimo de esta rifa es ${money(mainRaffle.minAbono)}.\n`;
+    }
+  }
+  if (plan.approval && checkDuplicateApprovalNumber(plan.approval, ticket.id, db)) {
+    msg += `\n🚨 Este número de comprobante ya figura en otra boleta; nuestro equipo lo revisará con el banco antes de validarlo.\n`;
+  }
+  if (!plan.soporte) {
+    msg += `\n⚠️ No pude guardar la imagen del comprobante; nuestro equipo puede pedirte que la envíes de nuevo.\n`;
+  }
+  msg += `\n👉 *¿Confirmas que este pago es para la boleta ${numbersOf(ticket)}?* Responde *SÍ* para registrarlo o *NO* para cancelar.`;
+
+  setPending(senderPhone, { type: 'RECEIPT_CONFIRM', ticketId: ticket.id, amount, approval: plan.approval, bank: plan.bank, soporte: plan.soporte }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+async function receiptRegister(ctx, pending) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, advisor, cfg, session } = ctx;
+  const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
+  if (!ticket || ticket.buyerPhone !== senderPhone) {
+    setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, `😕 No pude encontrar esa boleta. Escribe *ASESOR* y te ayudamos.`);
+    return;
+  }
+  const balanceBefore = balanceOf(ticket, ticketPrice);
+  const amount = pending.amount;
+  const soporte = pending.soporte;
+  const flags = [];
+  const key = approvalKeyOf(pending.approval);
+  const sameApproval = [];
+  if (key) {
+    for (const t of db.tickets || []) {
+      for (const a of [...(t.abonos || []), ...(t.voidedAbonos || [])]) if (approvalKeyOf(a.approvalNumber) === key) sameApproval.push(a);
+    }
+    if (sameApproval.length) flags.push({ code: 'APROBACION_REPETIDA', level: 'MEDIA', detail: `El número de aprobación ya estaba en ${sameApproval.length} pago(s).` });
+  }
+  if (soporte && soporte.hash) {
+    const same = [];
+    for (const t of db.tickets || []) {
+      for (const a of [...(t.abonos || []), ...(t.voidedAbonos || [])]) if (a.soporteHash === soporte.hash) same.push(a);
+    }
+    if (same.length) {
+      const sameKey = same.every(a => approvalKeyOf(a.approvalNumber) === key);
+      flags.push({ code: 'SOPORTE_REPETIDO', level: sameKey ? 'MEDIA' : 'ALTA', detail: sameKey ? `Mismo soporte y misma aprobación en ${same.length} pago(s) ya registrados.` : `El mismo soporte se usó con OTRO número de aprobación en ${same.length} pago(s).` });
+    }
+  } else {
+    flags.push({ code: 'SIN_SOPORTE', level: 'MEDIA', detail: 'El comprobante llegó por WhatsApp pero no se pudo guardar la imagen: solicítela de nuevo antes de validar.' });
+  }
+  if (amount > balanceBefore) flags.push({ code: 'EXCEDENTE', level: 'BAJA', detail: `El pago supera el saldo por ${money(amount - balanceBefore)}: distribuya el excedente en otra boleta.` });
+
+  const now = new Date().toISOString();
+  const abono = {
+    id: `abn-${Date.now()}`,
+    amount,
+    metodoPago: 'transferencia',
+    date: now,
+    sellerId: ticket.advisorId || (advisor ? advisor.id : ''),
+    sellerName: ticket.advisorName ? `${ticket.advisorName} (🤖 Bot WhatsApp)` : '🤖 Bot WhatsApp',
+    note: `Transferencia reportada por WhatsApp${pending.approval ? ` (Comprobante: #${pending.approval})` : ''} — confirmada por el cliente`,
+    approvalNumber: pending.approval || '',
+    originBank: pending.bank || 'Transferencia Bancaria',
+    transferDate: now,
+    duplicateApprovalConfirmed: sameApproval.length > 0,
+    soporteUrl: soporte ? soporte.url : null,
+    soporteDriveId: soporte ? soporte.driveId : null,
+    soporteWebViewUrl: soporte ? soporte.webViewUrl : null,
+    ...(soporte && soporte.hash ? { soporteHash: soporte.hash } : {}),
+    ...(flags.some(f => f.level !== 'BAJA') ? { riskFlags: flags, riskReview: { status: 'PENDIENTE' } } : (flags.length ? { riskFlags: flags, riskReview: { status: 'DESCARTADA', by: '🤖 Bot', at: now, note: 'Solo informativa (excedente)' } } : {}))
+    // Sin 'verification': queda POR_VALIDAR en Caja
+  };
+  ticket.abonos = ticket.abonos || [];
+  ticket.abonos.push(abono);
+  ticket.totalPaid = ticket.abonos.reduce((s, a) => s + (a.amount || 0), 0);
+  ticket.balancePending = Math.max(0, priceOf(ticket, ticketPrice) - ticket.totalPaid);
+  ticket.pendingTransferValidation = true;
+  ticket.auditLogs = ticket.auditLogs || [];
+  ticket.auditLogs.push({
+    id: `log-${Date.now()}`,
+    date: now,
+    user: '🤖 Bot WhatsApp',
+    action: 'VENTA_BOT',
+    description: `Comprobante de ${money(amount)} reportado y confirmado por el cliente en WhatsApp (pendiente de validar en Caja)`
+  });
+  if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+
+  const profile = knownProfile(db, senderPhone, session);
+  const missing = missingProfileFields(profile);
+  const hasRealAdvisor = !!ticket.advisorId && ticket.advisorName !== 'Venta WhatsApp';
+  const askAdvisorRef = !hasRealAdvisor && ticket.advisorName !== 'Venta Directa WhatsApp';
+
+  let msg = `✅ *¡Pago registrado!* 📸\n\n`;
+  msg += `🎟️ *Boleta:* ${numbersOf(ticket)}\n💸 *Comprobante:* ${money(amount)}\n`;
+  msg += ticket.balancePending > 0 ? `⏳ *Saldo pendiente:* ${money(ticket.balancePending)}\n` : `🎉 *Tu boleta queda totalmente pagada* (sujeta a validación del banco).\n`;
+  msg += `\nNuestro equipo validará la transferencia en la cuenta bancaria y te avisaremos por este chat.\n`;
+  if (missing.length) {
+    msg += `\n📋 *Para completar tu Soporte Digital de Compra, indícanos:*\n${missing.map((m, i) => `${i + 1}️⃣ *${m}*`).join('\n')}\n`;
+  } else {
+    msg += `\n🌐 *Consulta tu boleta y soporte aquí:*\n${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}\n`;
+  }
+  if (askAdvisorRef) msg += `\n${ADVISOR_REF_QUESTION}\n`;
+  msg += `\n¡Muchas gracias y mucha suerte! 🍀`;
+
+  updateSession(senderPhone, {
+    pending: null,
+    lastTicketId: ticket.id,
+    lastRaffleId: mainRaffle.id,
+    waitingData: missing.length > 0,
+    awaitingAdvisorRef: askAdvisorRef,
+    awaitingAdvisorRefAt: askAdvisorRef ? Date.now() : undefined,
+    pendingAmount: null,
+    pendingApproval: null,
+    pendingBank: null
+  }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+/**
+ * Responde a lo que el cliente contesta mientras hay una confirmación pendiente.
+ * Devuelve true si el mensaje se atendió aquí; false para que siga el flujo normal.
+ */
+async function handlePendingFlow(ctx) {
+  const { instance, senderPhone, userText, db, saveDBCallback, session, mainRaffle, cfg, digits, ticketPrice } = ctx;
+  const pending = getPending(session);
+  if (!pending) return false;
+  const norm = botBrain.normalize(userText);
+  if (!norm) return false;
+  const clear = () => setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+  const looksLikeNumberQuery = /^\d+$/.test(norm) && norm.length >= 3;
+  const wantsHuman = botBrain.isHandoffRequest(cfg, userText) && !/^\d{1,2}$/.test(norm);
+  const remind = async (text) => {
+    if ((pending.reminders || 0) >= 2) { clear(); return false; }
+    updateSession(senderPhone, { pending: { ...pending, reminders: (pending.reminders || 0) + 1 } }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, text);
+    return true;
+  };
+  const cancelled = async () => {
+    clear();
+    await sendTextMessage(instance, senderPhone, `👍 Listo, no hice ningún cambio. Escribe un número para consultarlo, *DISPONIBLES* para ver opciones o *ASESOR* para hablar con una persona.`);
+    return true;
+  };
+
+  if (pending.type === 'RECEIPT_AMOUNT') {
+    if (wantsHuman) { clear(); return false; }
+    const amount = detectAmount(userText);
+    if (!amount) return remind(`No pude entender el valor. Escríbelo solo en números, por ejemplo *150000*.`);
+    await receiptSelectTarget(ctx, { amount, approval: pending.approval, bank: pending.bank, soporte: pending.soporte, hint: pending.hint });
+    return true;
+  }
+
+  if (pending.type === 'RECEIPT_WHICH') {
+    if (wantsHuman) { clear(); return false; }
+    if (isNo(userText)) return cancelled();
+    const candidates = (pending.candidateIds || []).map(id => (db.tickets || []).find(t => t.id === id)).filter(Boolean);
+    let chosen = null;
+    if (/^\d{1,2}$/.test(norm)) chosen = candidates[parseInt(norm, 10) - 1] || null;
+    if (!chosen && /^\d{3,}$/.test(norm)) chosen = candidates.find(t => (t.numbers || []).includes(norm) || (t.numbers || []).includes(norm.padStart(digits, '0'))) || null;
+    if (!chosen) return remind(`Responde con el número de la lista (1${candidates.length > 1 ? ` a ${candidates.length}` : ''}) o escribe *NO* para cancelar.`);
+    await receiptConfirm(ctx, chosen, { amount: pending.amount, approval: pending.approval, bank: pending.bank, soporte: pending.soporte });
+    return true;
+  }
+
+  if (pending.type === 'RECEIPT_CONFIRM') {
+    if (isYes(userText)) { await receiptRegister(ctx, pending); return true; }
+    if (isNo(userText)) {
+      clear();
+      await sendTextMessage(instance, senderPhone, `👍 No registré el pago. Si te equivocaste de boleta o de valor, envíame de nuevo la foto del comprobante.`);
+      return true;
+    }
+    if (wantsHuman) { clear(); return false; }
+    return remind(`Responde *SÍ* para registrar este pago o *NO* para cancelar.`);
+  }
+
+  // Reserva / cambio de boleta
+  if (looksLikeNumberQuery || wantsHuman) { clear(); return false; }
+
+  if (pending.type === 'RESERVE') {
+    if (isYes(userText)) { await executeReservation(ctx, { ...pending, action: 'NEW' }); return true; }
+    if (isNo(userText)) return cancelled();
+    return remind(`¿Confirmas que deseas apartar el número *${pending.number}*? Responde *SÍ* o *NO*.`);
+  }
+
+  if (pending.type === 'KIND') {
+    const options = pending.options || ['NEW', 'CANCEL'];
+    let choice = null;
+    if (/^\d$/.test(norm)) choice = options[parseInt(norm, 10) - 1] || null;
+    else if (/nueva|nuevo|otra|adicional/.test(norm)) choice = 'NEW';
+    else if (/cambi/.test(norm)) choice = options.includes('CHANGE') ? 'CHANGE' : null;
+    else if (isNo(userText)) choice = 'CANCEL';
+    if (!choice) return remind(`Responde con el número de la opción (1${options.length > 1 ? ` a ${options.length}` : ''}).`);
+    if (choice === 'CANCEL') return cancelled();
+    const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
+    if (!ticket || ticket.status !== 'DISPONIBLE') {
+      clear();
+      await sendTextMessage(instance, senderPhone, `😕 Ese número ya no está disponible. Escribe *DISPONIBLES* para ver otras opciones.`);
+      return true;
+    }
+    if (choice === 'NEW') { await confirmReservation(ctx, ticket, pending.number, 'NEW', null); return true; }
+    const all = myTickets(db, mainRaffle.id, senderPhone);
+    let msg = `🔄 *¿Cuál de tus boletas quieres cambiar* por la nueva *${numbersOf(ticket)}*?\n\n`;
+    all.forEach((t, i) => {
+      msg += `${i + 1}️⃣ ${numbersOf(t)} — ${isChangeable(t) ? 'apartada, sin pagos ✅' : `${STATUS_LABEL[t.status] || t.status} 🔒 _(no se puede cambiar: ya tiene pagos)_`}\n`;
+    });
+    msg += `\nResponde con el número de la boleta que deseas cambiar o escribe *NO* para cancelar.`;
+    setPending(senderPhone, { type: 'WHICH_CHANGE', ticketId: ticket.id, number: pending.number, listIds: all.map(t => t.id) }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, msg);
+    return true;
+  }
+
+  if (pending.type === 'WHICH_CHANGE') {
+    if (isNo(userText)) return cancelled();
+    const list = (pending.listIds || []).map(id => (db.tickets || []).find(t => t.id === id)).filter(Boolean);
+    const chosen = /^\d{1,2}$/.test(norm) ? list[parseInt(norm, 10) - 1] : null;
+    if (!chosen) return remind(`Responde con el número de la lista (1${list.length > 1 ? ` a ${list.length}` : ''}) o escribe *NO* para cancelar.`);
+    if (!isChangeable(chosen)) {
+      // No se puede cambiar una boleta con pagos: se le explica y se le deja elegir otra
+      await sendTextMessage(instance, senderPhone, `🔒 La boleta *${numbersOf(chosen)}* ya tiene pagos registrados y *no se puede cambiar*.\n\nElige otra de la lista (solo las apartadas sin pagos) o escribe *NO* para cancelar. Si necesitas ayuda con esa boleta, escribe *ASESOR*.`);
+      return true;
+    }
+    const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
+    if (!ticket || ticket.status !== 'DISPONIBLE') { clear(); await sendTextMessage(instance, senderPhone, `😕 Ese número ya no está disponible.`); return true; }
+    await confirmReservation(ctx, ticket, pending.number, 'CHANGE', chosen);
+    return true;
+  }
+
+  if (pending.type === 'CONFIRM') {
+    if (isYes(userText)) { await executeReservation(ctx, pending); return true; }
+    if (isNo(userText)) return cancelled();
+    return remind(`Responde *SÍ* para confirmar o *NO* para cancelar.`);
+  }
+
+  clear();
+  return false;
 }
 
 module.exports = {
@@ -1373,6 +1881,8 @@ module.exports = {
   connectInstance,
   disconnectInstance,
   sendTextMessage,
+  sendDocument,
+  setDocumentHandler,
   handleWebhookEvent,
   extractBuyerProfile
 };

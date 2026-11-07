@@ -58,6 +58,8 @@ class AdvisorManagementView extends StatelessWidget {
     final rangeCtrl = TextEditingController(text: advisor?.assignedTicketRanges.join(', ') ?? '');
     String mode = advisor?.mode ?? 'POOL_GENERAL';
     String status = advisor?.status ?? 'ACTIVO';
+    // Obligatorio al crear: define si el asesor comisiona (calle), no comisiona (punto) o depende de cada venta (integral)
+    String? advisorType = advisor?.type;
 
     bool obscurePassword = true;
     final formKey = GlobalKey<FormState>();
@@ -183,6 +185,38 @@ class AdvisorManagementView extends StatelessWidget {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
+                      value: advisorType,
+                      decoration: InputDecoration(
+                        labelText: 'Tipo de asesor *',
+                        helperText: advisorType == null
+                            ? 'Defina cómo vende y si comisiona'
+                            : (advisorType == 'PUNTO'
+                                ? 'Todas sus ventas son de oficina: no comisionan.'
+                                : advisorType == 'CALLE'
+                                    ? 'Todas sus ventas son de calle: comisionan.'
+                                    : 'En cada venta indicará si fue en oficina (no comisiona) o en calle (comisiona).'),
+                        helperMaxLines: 2,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.storefront),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'PUNTO', child: Text('🏢 Asesor de punto (no comisiona)')),
+                        DropdownMenuItem(value: 'CALLE', child: Text('🛣️ Asesor de calle (comisiona)')),
+                        DropdownMenuItem(value: 'INTEGRAL', child: Text('🔀 Asesor integral (oficina y calle)')),
+                      ],
+                      validator: (v) => v == null ? 'Seleccione el tipo de asesor' : null,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      onChanged: (v) => setState(() => advisorType = v),
+                    ),
+                    if (isEditing && advisorType != null && advisorType != advisor.type)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 6),
+                        child: Text('Las ventas que ya hizo conservan su tipo; el cambio aplica a las ventas nuevas.',
+                            style: TextStyle(fontSize: 11.5, color: Colors.orange)),
+                      ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: status,
                       decoration: const InputDecoration(
                         labelText: 'Estado de la Cuenta',
@@ -274,6 +308,7 @@ class AdvisorManagementView extends StatelessWidget {
                         ((v) => (v ?? '').trim().length < 5 || v!.trim().length > 15 ? 'Escriba la cédula (de 5 a 15 dígitos)' : null)(
                             codeCtrl.text)
                       ),
+                      ('Tipo de asesor', advisorType == null ? 'Seleccione el tipo de asesor' : null),
                     ].where((c) => c.$2 != null).toList();
                     formKey.currentState?.validate();
                     if (checks.isEmpty) {
@@ -289,6 +324,7 @@ class AdvisorManagementView extends StatelessWidget {
                         'phone': phoneCtrl.text.trim(),
                         'code': codeCtrl.text.trim(),
                         'mode': mode,
+                        'type': advisorType,
                         'status': status,
                         'assignedTicketRanges': ranges,
                       };
@@ -484,7 +520,7 @@ class AdvisorManagementView extends StatelessWidget {
 
         // Sort advisors by sales count descending for ranking
         // Sales of the current raffle by status (same raffle as the header and the commissions tab)
-        final sales = context.watch<TicketViewModel>().salesByAdvisor();
+        final sales = context.watch<TicketViewModel>().salesByAdvisor(advisorTypes: {for (final a in advVM.advisors) a.id: a.type});
         AdvisorSales salesOf(String advisorId) => sales[advisorId] ?? AdvisorSales();
         final rankedAdvisors = List.from(advVM.advisors);
         rankedAdvisors.sort((a, b) => salesOf(b.id).total.compareTo(salesOf(a.id).total));
@@ -649,6 +685,11 @@ class AdvisorManagementView extends StatelessWidget {
                                               color: AppTheme.secondaryEmerald,
                                             ),
                                           ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '🏢 ${salesOf(adv.id).oficina} oficina • 🛣️ ${salesOf(adv.id).calle} calle',
+                                            style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -733,6 +774,24 @@ class AdvisorManagementView extends StatelessWidget {
                                                       fontSize: 11,
                                                       fontWeight: FontWeight.bold,
                                                       color: Colors.amber.shade900,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Tooltip(
+                                                  message: adv.typeHint,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: (adv.isPunto ? Colors.blueGrey : (adv.isIntegral ? Colors.deepPurple : Colors.teal)).withValues(alpha: 0.15),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Text(
+                                                      '${adv.isPunto ? '🏢' : (adv.isIntegral ? '🔀' : '🛣️')} ${adv.typeLabel.toUpperCase()}',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: adv.isPunto ? Colors.blueGrey.shade800 : (adv.isIntegral ? Colors.deepPurple.shade700 : Colors.teal.shade800),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),

@@ -10,6 +10,8 @@ class Advisor {
   final String phone;
   final String code;
   final String mode; // POOL_GENERAL or ASSIGNED
+  /// PUNTO (oficina, no comisiona) • CALLE (comisiona) • INTEGRAL (cada venta es de oficina —sin comisión— o de calle)
+  final String type;
   final String status; // ACTIVO or INHABILITADO
   final String? deletionReason;
   final List<String> assignedTicketRanges;
@@ -31,6 +33,7 @@ class Advisor {
     required this.phone,
     required this.code,
     required this.mode,
+    this.type = 'CALLE',
     this.status = 'ACTIVO',
     this.deletionReason,
     required this.assignedTicketRanges,
@@ -44,6 +47,15 @@ class Advisor {
   });
 
   bool get isActive => status != 'INHABILITADO';
+
+  bool get isPunto => type == 'PUNTO';
+  bool get isIntegral => type == 'INTEGRAL';
+  String get typeLabel => switch (type) { 'PUNTO' => 'De punto', 'INTEGRAL' => 'Integral', _ => 'De calle' };
+  String get typeHint => switch (type) {
+        'PUNTO' => 'Vende en la oficina o punto: no comisiona',
+        'INTEGRAL' => 'Vende en oficina (no comisiona) y en calle (comisiona)',
+        _ => 'Vende en la calle: comisiona',
+      };
 
   bool get worksWithAssignedNumbers => mode == 'ASSIGNED' && assignedTicketRanges.isNotEmpty;
 
@@ -88,6 +100,7 @@ class Advisor {
       phone: json['phone'] ?? '',
       code: codeVal,
       mode: json['mode'] ?? 'POOL_GENERAL',
+      type: ['PUNTO', 'CALLE', 'INTEGRAL'].contains(json['type']) ? json['type'] : 'CALLE',
       status: json['status'] ?? 'ACTIVO',
       deletionReason: json['deletionReason'],
       assignedTicketRanges: ranges,
@@ -111,6 +124,7 @@ class Advisor {
         'phone': phone,
         'code': code,
         'mode': mode,
+        'type': type,
         'status': status,
         'deletionReason': deletionReason,
         'assignedTicketRanges': assignedTicketRanges,

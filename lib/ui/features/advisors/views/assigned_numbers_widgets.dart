@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/data/models/advisor.dart';
+import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
@@ -41,7 +42,6 @@ class AssignNumbersDialog extends StatefulWidget {
 
 class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
   late List<(int, int)> _ranges = widget.advisor.mode == 'ASSIGNED' ? [...widget.advisor.parsedRanges] : [];
-  late final _quantityCtrl = TextEditingController(text: '${widget.advisor.rangeRequest?.quantity ?? 10}');
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
   String? _error;
@@ -49,7 +49,6 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
 
   @override
   void dispose() {
-    _quantityCtrl.dispose();
     _fromCtrl.dispose();
     _toCtrl.dispose();
     super.dispose();
@@ -62,8 +61,6 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
         for (final a in context.read<AdvisorViewModel>().advisors)
           if (a.id != widget.advisor.id && a.mode == 'ASSIGNED') ...a.parsedRanges,
       ];
-
-  bool _inAny(int n, List<(int, int)> ranges) => ranges.any((r) => n >= r.$1 && n <= r.$2);
 
   void _add(List<(int, int)> added) {
     final sorted = [..._ranges, ...added]..sort((a, b) => a.$1.compareTo(b.$1));
@@ -82,33 +79,114 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
     });
   }
 
-  /// Adds the next free numbers of the current raffle (not assigned to anyone yet).
-  void _suggestNext() {
-    final quantity = int.tryParse(_quantityCtrl.text.trim()) ?? 0;
-    if (quantity < 1) {
-      setState(() => _error = 'Indique cuántos números quiere agregar.');
-      return;
+  static List<int> _valuesOf(Ticket t) {
+    final nums = t.numbers.map(int.tryParse).whereType<int>().toList();
+    return nums.isEmpty ? [t.ticketNumber] : nums;
+  }
+
+  static bool _covered(Ticket t, List<(int, int)> ranges) =>
+      _valuesOf(t).any((n) => ranges.any((r) => n >= r.$1 && n <= r.$2));
+
+  /// Boletas of the current raffle that the given ranges cover (a boleta belongs to the advisor when any of its numbers is inside).
+  List<Ticket> _ticketsCoveredBy(List<(int, int)> ranges) =>
+      context.read<TicketViewModel>().tickets.where((t) => _covered(t, ranges)).toList();
+
+  /// The next `quantity` free boletas (available and not covered by this or any other advisor), in ticket order.
+  /// Returns each boleta with the single number that will be added to cover it.
+  List<(Ticket, int)> _pickFree(int quantity) {
+    final tickets = [...context.read<TicketViewModel>().tickets]..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+    final taken = [..._takenByOthers, ..._ranges];
+    final picked = <(Ticket, int)>[];
+    for (final t in tickets) {
+      if (picked.length >= quantity) break;
+      if (t.status != 'DISPONIBLE' || _covered(t, taken)) continue;
+      final number = (_valuesOf(t)..sort()).first;
+      picked.add((t, number));
     }
-    final tickets = context.read<TicketViewModel>().tickets;
-    final allNumbers = <int>{
-      for (final t in tickets)
-        if (t.numbers.isEmpty) t.ticketNumber else ...t.numbers.map(int.tryParse).whereType<int>(),
-    }.toList()
-      ..sort();
-    if (allNumbers.isEmpty) {
+    return picked;
+  }
+
+  /// Asks how many boletas to add and shows exactly which ones before adding them.
+  Future<void> _openAddFreeDialog() async {
+    if (context.read<TicketViewModel>().tickets.isEmpty) {
       setState(() => _error = 'No hay boletas cargadas en la rifa actual para sugerir números.');
       return;
     }
-    final taken = [..._takenByOthers, ..._ranges];
-    final free = allNumbers.where((n) => !_inAny(n, taken)).take(quantity).toList();
-    if (free.isEmpty) {
-      setState(() => _error = 'Ya no quedan números libres en la rifa actual.');
-      return;
-    }
-    _add(compressNumbers(free).map(Advisor.parseRange).whereType<(int, int)>().toList());
-    if (free.length < quantity) {
-      setState(() => _error = 'Solo quedaban ${free.length} números libres; se agregaron todos.');
-    }
+    final qtyCtrl = TextEditingController(text: '${widget.advisor.rangeRequest?.quantity ?? 10}');
+    final picked = await showDialog<List<(Ticket, int)>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) {
+        final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+        final preview = qty > 0 ? _pickFree(qty) : <(Ticket, int)>[];
+        final shown = preview.take(40).toList();
+        return AlertDialog(
+          title: const Text('Agregar boletas libres'),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: qtyCtrl,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(labelText: '¿Cuántas boletas desea agregar?', border: OutlineInputBorder()),
+                    onChanged: (_) => setD(() {}),
+                  ),
+                  const SizedBox(height: 14),
+                  if (qty < 1)
+                    Text('Indique una cantidad mayor a 0.', style: TextStyle(color: Colors.grey[600]))
+                  else if (preview.isEmpty)
+                    const Text('No quedan boletas libres disponibles en la rifa actual.',
+                        style: TextStyle(color: AppTheme.dangerRose, fontWeight: FontWeight.w600))
+                  else ...[
+                    Text(
+                      preview.length < qty
+                          ? 'Solo hay ${preview.length} boletas libres; se agregarían todas:'
+                          : 'Se agregarán ${preview.length} boletas libres:',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final (t, _) in shown)
+                          Chip(
+                            label: Text(t.displayNumber, style: const TextStyle(fontSize: 12)),
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                          ),
+                        if (preview.length > shown.length)
+                          Chip(label: Text('+${preview.length - shown.length} más'), visualDensity: VisualDensity.compact),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Números que se agregan: ${compressNumbers([for (final (_, n) in preview) n]).join(', ')}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: preview.isEmpty ? null : () => Navigator.pop(ctx, preview),
+              child: Text(preview.isEmpty ? 'Agregar' : 'Agregar ${preview.length}'),
+            ),
+          ],
+        );
+      }),
+    );
+    qtyCtrl.dispose();
+    if (picked == null || picked.isEmpty || !mounted) return;
+    _add(compressNumbers([for (final (_, n) in picked) n]).map(Advisor.parseRange).whereType<(int, int)>().toList());
   }
 
   void _addManual() {
@@ -212,11 +290,39 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
                     ],
                   ),
                 ),
-              const Text('Números asignados', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Boletas asignadas', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
-              if (_ranges.isEmpty)
-                Text('Aún no tiene números. Agréguelos abajo.', style: TextStyle(color: Colors.grey[600], fontSize: 13))
-              else
+              Builder(builder: (context) {
+                final covered = _ticketsCoveredBy(_ranges);
+                int count(bool Function(Ticket) f) => covered.where(f).length;
+                final free = count((t) => t.status == 'DISPONIBLE');
+                final held = count((t) => t.status == 'APARTADA' || t.status == 'FIADA' || t.status == 'ABONO_PARCIAL');
+                final sold = covered.length - free - held;
+                if (_ranges.isEmpty) {
+                  return Text('Aún no tiene boletas. Agréguelas abajo.', style: TextStyle(color: Colors.grey[600], fontSize: 13));
+                }
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${covered.length} boletas', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('$free disponibles  •  $held apartadas/abono  •  $sold vendidas',
+                          style: TextStyle(fontSize: 12.5, color: Colors.grey[800])),
+                    ],
+                  ),
+                );
+              }),
+              if (_ranges.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text('Rangos de números impresos (toque ✕ para quitar):', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
@@ -229,31 +335,17 @@ class _AssignNumbersDialogState extends State<AssignNumbersDialog> {
                       ),
                   ],
                 ),
-              const SizedBox(height: 6),
-              Text('Total: $_total números', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+              ],
               const Divider(height: 28),
-              const Text('Agregar los siguientes números libres', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Agregar boletas libres', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 110,
-                    child: TextField(
-                      controller: _quantityCtrl,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: digitsOnly,
-                      decoration: const InputDecoration(labelText: 'Cantidad', isDense: true, border: OutlineInputBorder()),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed: _suggestNext,
-                      icon: const Icon(Icons.auto_awesome, size: 18),
-                      label: const Text('Agregar libres'),
-                    ),
-                  ),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: _openAddFreeDialog,
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Agregar libres…'),
+                ),
               ),
               const SizedBox(height: 16),
               const Text('O un rango específico', style: TextStyle(fontWeight: FontWeight.w600)),

@@ -1203,6 +1203,16 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Admin decision on a transfer's risk alerts: status DESCARTADA or FRAUDE, with a note.
+  Future<void> reviewRiskAlert(String ticketId, String abonoId, String status, String note) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/risk/alerts/$ticketId/$abonoId/review'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status, 'note': note}),
+    ).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
   Future<Ticket> receiveCashPayment(String ticketId, String abonoId) async {
     final response = await authPost(Uri.parse('$baseUrl/cash/abonos/$ticketId/$abonoId/receive')).timeout(const Duration(seconds: 20));
     if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
@@ -1556,13 +1566,29 @@ class ApiService {
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
   }
 
-  /// Payments already registered with this transfer approval number (current, voided or of voided sales).
-  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) async {
-    final uri = Uri.parse('$baseUrl/transfers/check').replace(queryParameters: {'raffleId': raffleId, 'approvalNumber': approvalNumber});
+  /// Payments already registered with this transfer approval number (current, voided or of voided sales),
+  /// and whether the repeat is impossible (`blocked`: it cannot pay another ticket) with the reason.
+  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber, {String? ticketId}) async {
+    final uri = Uri.parse('$baseUrl/transfers/check').replace(queryParameters: {'raffleId': raffleId, 'approvalNumber': approvalNumber, if (ticketId != null) 'ticketId': ticketId});
     final response = await authGet(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
-    final body = jsonDecode(response.body);
-    return [for (final m in (body['matches'] as List? ?? [])) Map<String, dynamic>.from(m)];
+    final body = Map<String, dynamic>.from(jsonDecode(response.body));
+    return {
+      'matches': [for (final m in (body['matches'] as List? ?? [])) Map<String, dynamic>.from(m)],
+      'blocked': body['blocked'] == true,
+      'blockReason': '${body['blockReason'] ?? ''}',
+    };
+  }
+
+  /// Reads the payment proof on the server (OCR): reference, amount and bank. Never throws for an unreadable image.
+  Future<Map<String, dynamic>> readTransferProof(String imageDataUri) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/transfers/read-proof'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'imageBase64': imageDataUri}),
+    ).timeout(const Duration(seconds: 90));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+    return Map<String, dynamic>.from(jsonDecode(response.body));
   }
 
   /// The admin discards an advisor's request for more numbers.
@@ -1702,6 +1728,122 @@ class ApiService {
     }
     throw ApiException.fromResponse(response);
   }
+
+  // --- Entrenar Bot: respuestas personalizadas, preguntas sin respuesta y chats por atender ---
+  Future<Map<String, dynamic>> _botJson(Future<http.Response> request) async {
+    final response = await request.timeout(const Duration(seconds: 20));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Map<String, String> get _jsonHeaders => {'Content-Type': 'application/json'};
+
+  Future<Map<String, dynamic>> botFetchConfig() => _botJson(authGet(Uri.parse('$baseUrl/bot/config')));
+
+  Future<Map<String, dynamic>> botSaveConfig(Map<String, dynamic> config) => _botJson(authPut(
+        Uri.parse('$baseUrl/bot/config'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'config': config}),
+      ));
+
+  Future<Map<String, dynamic>> botTest(String text) => _botJson(authPost(
+        Uri.parse('$baseUrl/bot/test'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'text': text}),
+      ));
+
+  Future<Map<String, dynamic>> botFetchUnanswered() => _botJson(authGet(Uri.parse('$baseUrl/bot/unanswered')));
+
+  Future<void> botDeleteUnanswered(String id) async {
+    await _botJson(authDelete(Uri.parse('$baseUrl/bot/unanswered/$id')));
+  }
+
+  Future<Map<String, dynamic>> botUnansweredToFaq(String id, {required String title, required List<String> keywords, required String answer}) =>
+      _botJson(authPost(
+        Uri.parse('$baseUrl/bot/unanswered/$id/faq'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'title': title, 'keywords': keywords, 'answer': answer}),
+      ));
+
+  Future<Map<String, dynamic>> botFetchHandoffs() => _botJson(authGet(Uri.parse('$baseUrl/bot/handoffs')));
+
+  Future<void> botResolveHandoff(String id) async {
+    await _botJson(authPost(Uri.parse('$baseUrl/bot/handoffs/$id/resolve')));
+  }
+
+  // --- Pagos AGIL: consulta, Excel, lotes, envío programado y Excel devuelto (SUBIDO) ---
+  Uri _agilUri(String path, [Map<String, String>? query]) {
+    final clean = <String, String>{for (final e in (query ?? {}).entries) if (e.value.isNotEmpty) e.key: e.value};
+    return Uri.parse('$baseUrl/agil/$path').replace(queryParameters: clean.isEmpty ? null : clean);
+  }
+
+  Future<Uint8List> _agilBytes(Future<http.Response> request) async {
+    final response = await request.timeout(const Duration(minutes: 2));
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<Map<String, dynamic>> agilPayments(Map<String, String> filters) => _botJson(authGet(_agilUri('payments', filters)));
+
+  Future<Map<String, dynamic>> agilExpenses({String account = ''}) => _botJson(authGet(_agilUri('expenses', {'account': account})));
+
+  Future<void> agilCreateExpense({
+    required String account,
+    required String accountLabel,
+    required num amount,
+    required String date,
+    required String reason,
+    String? imageBase64,
+  }) async {
+    final response = await authPost(
+      _agilUri('expenses'),
+      headers: _jsonHeaders,
+      body: jsonEncode({'account': account, 'accountLabel': accountLabel, 'amount': amount, 'date': date, 'reason': reason, if (imageBase64 != null) 'imageBase64': imageBase64}),
+    ).timeout(const Duration(seconds: 60));
+    if (response.statusCode != 200 && response.statusCode != 201) throw ApiException.fromResponse(response);
+  }
+
+  Future<void> agilVoidExpense(String id, String reason) async {
+    await _botJson(authPost(_agilUri('expenses/$id/void'), headers: _jsonHeaders, body: jsonEncode({'reason': reason})));
+  }
+
+  Future<Map<String, dynamic>> agilSummary(Map<String, String> filters) => _botJson(authGet(_agilUri('summary', filters)));
+
+  Future<Uint8List> agilExport(Map<String, String> filters) => _agilBytes(authGet(_agilUri('export', filters)));
+
+  Future<Map<String, dynamic>> agilCreateBatch({String from = '', String to = '', bool includeSent = false}) => _botJson(authPost(
+        _agilUri('batches'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'from': from, 'to': to, 'includeSent': includeSent}),
+      ));
+
+  Future<Uint8List> agilBatchFile(String id) => _agilBytes(authGet(_agilUri('batches/$id/file')));
+
+  Future<void> agilSendBatch(String id) async {
+    await _botJson(authPost(_agilUri('batches/$id/send')));
+  }
+
+  Future<Map<String, dynamic>> agilSendNow() => _botJson(authPost(_agilUri('send-now')));
+
+  Future<Map<String, dynamic>> agilConfig() => _botJson(authGet(_agilUri('config')));
+
+  Future<Map<String, dynamic>> agilSaveConfig(Map<String, dynamic> config) => _botJson(authPut(
+        _agilUri('config'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'config': config}),
+      ));
+
+  Future<Map<String, dynamic>> agilMark(List<String> ids, String status) => _botJson(authPost(
+        _agilUri('mark'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'ids': ids, 'status': status}),
+      ));
+
+  Future<Map<String, dynamic>> agilUpload(String fileName, List<int> bytes) => _botJson(authPost(
+        _agilUri('upload'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'fileName': fileName, 'base64': base64Encode(bytes)}),
+      ));
 
   Future<Map<String, dynamic>> disconnectWhatsApp() async {
     final response = await authPost(Uri.parse('$baseUrl/whatsapp/disconnect'));

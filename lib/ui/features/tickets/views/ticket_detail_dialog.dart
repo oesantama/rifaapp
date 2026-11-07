@@ -62,9 +62,18 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   final _approvalFocus = FocusNode();
   String? _approvalCheckedKey; // approval number already checked (or confirmed as repeated)
   bool _approvalDuplicateConfirmed = false;
+  bool _supportDuplicateConfirmed = false;
+  // Número de aprobación repetido que no se puede usar (esa transferencia no alcanza para otra boleta)
+  String? _approvalBlockedKey;
+  String _approvalBlockedReason = '';
+  // Lectura automática del comprobante (referencia, valor, banco) y validación contra lo escrito
+  Map<String, dynamic>? _proofRead;
+  bool _readingProof = false;
+  bool _referenceMismatchConfirmed = false;
   bool _checkingApproval = false;
   String? _selectedSellerId;
   String? _selectedSellerName;
+  String? _saleZone; // OFICINA / CALLE (solo lo elige el asesor integral)
 
   @override
   void initState() {
@@ -83,6 +92,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       if (!_approvalFocus.hasFocus) _checkApproval();
     });
     _selectedSellerId = widget.ticket.advisorId.isNotEmpty ? widget.ticket.advisorId : null;
+    _saleZone = widget.ticket.saleZone.isNotEmpty ? widget.ticket.saleZone : null;
     _selectedSellerName = widget.ticket.advisorName;
   }
 
@@ -132,6 +142,52 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     return null;
   }
 
+  /// Letras y números que el OCR confunde se comparan por igual (O/0, I/1, S/5, B/8…).
+  static String _lookalike(String s) => s
+      .toUpperCase()
+      .replaceAll(RegExp(r'[^0-9A-Z]'), '')
+      .replaceAll(RegExp(r'[OQD]'), '0')
+      .replaceAll(RegExp(r'[IL]'), '1')
+      .replaceAll('Z', '2')
+      .replaceAll('S', '5')
+      .replaceAll('B', '8');
+
+  List<String> get _readReferences => ((_proofRead?['references'] as List?) ?? []).map((e) => '$e').toList();
+
+  /// null = no se puede validar (comprobante ilegible o aún sin leer); true = coincide; false = no coincide.
+  bool? get _referenceMatchesProof {
+    if (_proofRead == null || _proofRead!['readable'] != true) return null;
+    final typed = _lookalike(_approvalController.text);
+    if (typed.length < 4) return null;
+    return _readReferences.map(_lookalike).contains(typed);
+  }
+
+  /// Reads the proof on the server and fills the approval number when it is still empty (it can be edited; it is validated again).
+  Future<void> _readProof(String dataUri) async {
+    setState(() {
+      _readingProof = true;
+      _proofRead = null;
+      _referenceMismatchConfirmed = false;
+    });
+    try {
+      final read = await context.read<TicketViewModel>().readTransferProof(dataUri);
+      if (!mounted || _soporteBase64 != dataUri) return;
+      setState(() => _proofRead = read);
+      if (read['readable'] == true && _readReferences.isNotEmpty && _approvalController.text.trim().isEmpty) {
+        setState(() {
+          _approvalController.text = _readReferences.first;
+          _approvalCheckedKey = null;
+          _approvalDuplicateConfirmed = false;
+        });
+        _checkApproval();
+      }
+    } catch (_) {
+      // Sin lectura automática el usuario sigue escribiendo la referencia (el servidor igual la valida al guardar)
+    } finally {
+      if (mounted) setState(() => _readingProof = false);
+    }
+  }
+
   /// Looks for the approval number in other payments. Returns true when it is free or the user
   /// chose to continue anyway; false when they cancel to correct it or the check could not run.
   Future<bool> _checkApproval() async {
@@ -142,28 +198,33 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     if (_checkingApproval) return false;
     setState(() => _checkingApproval = true);
     try {
-      final matches = await context.read<TicketViewModel>().checkTransferApproval(widget.ticket.raffleId, text);
+      final check = await context.read<TicketViewModel>().checkTransferApproval(widget.ticket.raffleId, text, ticketId: widget.ticket.id);
+      final matches = (check['matches'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
+      final blocked = check['blocked'] == true;
       if (!mounted) return false;
       setState(() => _checkingApproval = false);
       if (matches.isEmpty) {
         setState(() {
           _approvalCheckedKey = key;
           _approvalDuplicateConfirmed = false;
+          _approvalBlockedKey = null;
         });
         return true;
       }
-      final proceed = await showApprovalMatchesDialog(context, text, matches);
+      final proceed = await showApprovalMatchesDialog(context, text, matches, blocked: blocked, blockReason: '${check['blockReason'] ?? ''}');
       if (!mounted) return false;
       setState(() {
-        _approvalCheckedKey = proceed ? key : null;
-        _approvalDuplicateConfirmed = proceed;
+        _approvalCheckedKey = proceed && !blocked ? key : null;
+        _approvalDuplicateConfirmed = proceed && !blocked;
+        _approvalBlockedKey = blocked ? key : null;
+        _approvalBlockedReason = blocked ? '${check['blockReason'] ?? ''}' : '';
       });
-      if (!proceed) {
+      if (!proceed || blocked) {
         // Back to the field so the user can correct the number
         _approvalController.selection = TextSelection(baseOffset: 0, extentOffset: _approvalController.text.length);
         _approvalFocus.requestFocus();
       }
-      return proceed;
+      return proceed && !blocked;
     } catch (e) {
       if (mounted) {
         setState(() => _checkingApproval = false);
@@ -1045,6 +1106,14 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
               ? (authVM.activeAdvisor?.id ?? 'ind_${authVM.currentUserName}')
               : (_selectedSellerId ?? 'admin'));
       final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
+      // Asesor integral: cada venta debe indicar si fue en oficina o en calle
+      final sellerAdvisor = (authVM.isAsesor ? authVM.activeAdvisor : advisorVM.advisors.where((a) => a.id == newSellerId).firstOrNull);
+      if (sellerAdvisor != null && sellerAdvisor.isIntegral && _saleZone == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(backgroundColor: Colors.red, content: Text('⚠️ Indique si la venta es en OFICINA (no comisiona) o en CALLE (comisiona).')),
+        );
+        return false;
+      }
 
       if (isChangingSeller && _noteController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1058,6 +1127,15 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
 
       // Transfers: the approval number must be checked (or confirmed as repeated) first
       final isTransfer = _metodoPago == 'transferencia' && amt > 0;
+      if (isTransfer && _soporteBase64 == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.red,
+            content: Text('⚠️ El soporte (foto o captura del comprobante) es obligatorio en las transferencias.'),
+          ),
+        );
+        return false;
+      }
       if (isTransfer && !await _checkApproval()) return false;
       if (!context.mounted) return false;
 
@@ -1075,6 +1153,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
           'buyerEmail': _buyerEmailController.text.trim(),
           'buyerCity': _buyerCityController.text.trim(),
           if (_saleChannel != null) 'saleChannel': _saleChannel,
+          if (_saleZone != null) 'saleZone': _saleZone,
           'sellerId': newSellerId,
           'sellerName': authVM.isAsesor
               ? authVM.activeAdvisor?.name
@@ -1090,6 +1169,8 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
             if (_transferAccountId != null) 'transferAccountId': _transferAccountId,
             'cuentaDestino': _cuentaDestinoController.text.trim(),
             'allowDuplicateApproval': _approvalDuplicateConfirmed,
+            'allowDuplicateSupport': _supportDuplicateConfirmed,
+            'allowReferenceMismatch': _referenceMismatchConfirmed,
             if (_soporteBase64 != null) 'soporteImageBase64': _soporteBase64,
           },
         },
@@ -1097,6 +1178,48 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       );
       if (!mounted) return false;
       setState(() => _saving = false);
+      if (!success && ticketVM.lastErrorCode == 'REFERENCE_MISMATCH' && ticketVM.lastErrorData != null) {
+        // La referencia escrita no aparece en el comprobante: corregirla o confirmar que es correcta (queda para revisión)
+        final read = ((ticketVM.lastErrorData!['read'] as List?) ?? []).map((e) => '$e').toList();
+        final proceed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            icon: const Icon(Icons.rule, color: Colors.red, size: 40),
+            title: const Text('La referencia no coincide'),
+            content: Text(
+              'Usted escribió "${_approvalController.text.trim()}" pero en el comprobante ${read.isEmpty ? 'no encontré esa referencia' : 'leí: ${read.take(3).join(', ')}'}.\n\n'
+              'Corríjala para que sea la misma del comprobante. Si está seguro de que es correcta (por ejemplo, el comprobante se ve borroso), '
+              'puede continuar y el pago quedará marcado para que el administrador lo revise.',
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Corregir')),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white),
+                child: const Text('Es correcta, continuar'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return false;
+        if (proceed == true) {
+          _referenceMismatchConfirmed = true;
+          return saveSale();
+        }
+        _approvalFocus.requestFocus();
+        return false;
+      }
+      if (!success && ticketVM.lastErrorCode == 'DUPLICATE_SUPPORT' && ticketVM.lastErrorData != null) {
+        // The same proof image was used before: the user decides whether it is one transfer paying several tickets
+        final proceed = await showSupportMatchesDialog(context, ticketVM.lastErrorData!);
+        if (!mounted) return false;
+        if (proceed) {
+          _supportDuplicateConfirmed = true;
+          return saveSale();
+        }
+        return false;
+      }
       if (!success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1446,6 +1569,32 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                           },
                         );
                       }(),
+                    // Tipo de venta: solo para el asesor integral (punto = oficina y calle = calle se fijan solos)
+                    Builder(builder: (context) {
+                      final sellerAdv = authVM.isAsesor
+                          ? authVM.activeAdvisor
+                          : advisorVM.advisors.where((a) => a.id == _selectedSellerId).firstOrNull;
+                      if (sellerAdv == null || !sellerAdv.isIntegral) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Tipo de venta *', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _saleZone == null ? Colors.red.shade700 : null)),
+                          const SizedBox(height: 6),
+                          Wrap(spacing: 8, runSpacing: 6, children: [
+                            ChoiceChip(
+                              label: const Text('🏢 Venta en oficina (no comisiona)'),
+                              selected: _saleZone == 'OFICINA',
+                              onSelected: (_) => setState(() => _saleZone = 'OFICINA'),
+                            ),
+                            ChoiceChip(
+                              label: const Text('🛣️ Venta en calle (comisiona)'),
+                              selected: _saleZone == 'CALLE',
+                              onSelected: (_) => setState(() => _saleZone = 'CALLE'),
+                            ),
+                          ]),
+                        ]),
+                      );
+                    }),
                     const SizedBox(height: 12),
                     if (widget.ticket.balancePending > 0) ...[
                       Text(
@@ -1594,13 +1743,25 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                             helperMaxLines: 2,
                             prefixIcon: const Icon(Icons.confirmation_number_outlined),
                             border: const OutlineInputBorder(),
-                            helperText: _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
-                                ? 'Número repetido: usted decidió continuar'
-                                : 'Se verifica que no esté registrado en otro pago',
+                            helperText: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
+                                ? 'No se puede usar: $_approvalBlockedReason'
+                                : _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                    ? 'Número repetido: usted decidió continuar'
+                                    : _referenceMatchesProof == true
+                                        ? '✓ Coincide con el comprobante'
+                                        : _referenceMatchesProof == false
+                                            ? '✗ No coincide con el comprobante (leí: ${_readReferences.take(2).join(', ')}). Corríjala.'
+                                            : 'Se verifica que no esté registrado y que sea la del comprobante',
                             helperStyle: TextStyle(
-                                color: _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
-                                    ? Colors.orange.shade900
-                                    : null),
+                                color: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
+                                    ? Colors.red.shade800
+                                    : _referenceMatchesProof == false
+                                        ? Colors.red.shade700
+                                        : _referenceMatchesProof == true
+                                            ? AppTheme.secondaryEmerald
+                                            : (_approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                                ? Colors.orange.shade900
+                                                : null)),
                             suffixIcon: _checkingApproval
                                 ? const Padding(
                                     padding: EdgeInsets.all(14),
@@ -1612,7 +1773,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                         : const Icon(Icons.verified, color: AppTheme.secondaryEmerald))
                                     : null,
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: (_) => setState(() => _referenceMismatchConfirmed = false),
                           onFieldSubmitted: (_) => _checkApproval(),
                           validator: (v) => approvalKey(v ?? '').length < 3 ? 'Ingrese el número de aprobación' : null,
                         ),
@@ -1631,7 +1792,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                             final compressed = compressImageDataUri(picked, maxSide: 1600);
                                             setState(() {
                                               _soporteBase64 = compressed;
+                                              _supportDuplicateConfirmed = false;
                                             });
+                                            _readProof(compressed);
                                           }
                                         } catch (e) {
                                           if (mounted) {
@@ -1647,17 +1810,69 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                                     : const Icon(Icons.attach_file),
                                 label: Text(
-                                    _soporteBase64 != null ? '✓ Soporte adjunto (Cambiar)' : 'Adjuntar soporte de pago (Google Drive)'),
+                                    _soporteBase64 != null ? '✓ Soporte adjunto (Cambiar)' : 'Adjuntar soporte de pago * (obligatorio)'),
                               ),
                             ),
                             if (_soporteBase64 != null)
                               IconButton(
                                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                                 tooltip: 'Quitar soporte adjunto',
-                                onPressed: () => setState(() => _soporteBase64 = null),
+                                onPressed: () => setState(() {
+                                  _soporteBase64 = null;
+                                  _proofRead = null;
+                                }),
                               ),
                           ],
                         ),
+                        if (_readingProof)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Row(children: [
+                              SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                              SizedBox(width: 8),
+                              Text('Leyendo el comprobante…', style: TextStyle(fontSize: 12.5)),
+                            ]),
+                          )
+                        else if (_proofRead != null && _proofRead!['available'] == true)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: (_proofRead!['readable'] == true ? AppTheme.secondaryEmerald : Colors.grey).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: _proofRead!['readable'] == true
+                                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    const Text('🔎 Leído del comprobante', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                    const SizedBox(height: 4),
+                                    if (_readReferences.isNotEmpty)
+                                      Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                                        const Text('Referencia:', style: TextStyle(fontSize: 12.5)),
+                                        for (final ref in _readReferences.take(3))
+                                          ActionChip(
+                                            label: Text(ref, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                            visualDensity: VisualDensity.compact,
+                                            tooltip: 'Usar esta referencia',
+                                            onPressed: () => setState(() {
+                                              _approvalController.text = ref;
+                                              _approvalCheckedKey = null;
+                                              _approvalDuplicateConfirmed = false;
+                                              _referenceMismatchConfirmed = false;
+                                              _approvalBlockedKey = null;
+                                            }),
+                                          ),
+                                      ])
+                                    else
+                                      const Text('No encontré una referencia clara: verifíquela a mano.', style: TextStyle(fontSize: 12.5)),
+                                    if (((_proofRead!['amounts'] as List?) ?? []).isNotEmpty)
+                                      Text('Valor en el comprobante: ${((_proofRead!['amounts'] as List).take(2)).map((a) => NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(a)).join(' / ')}',
+                                          style: const TextStyle(fontSize: 12.5)),
+                                    if ('${_proofRead!['bank'] ?? ''}'.isNotEmpty) Text('Banco: ${_proofRead!['bank']}', style: const TextStyle(fontSize: 12.5)),
+                                  ])
+                                : const Text('No pude leer el comprobante (imagen borrosa o con poca luz). Escriba la referencia a mano: el administrador la revisará.',
+                                    style: TextStyle(fontSize: 12.5)),
+                          ),
                         const SizedBox(height: 6),
                       ],
                     ] else ...[

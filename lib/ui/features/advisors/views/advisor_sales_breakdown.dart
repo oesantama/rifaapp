@@ -36,6 +36,11 @@ class AdvisorSalesBreakdown extends StatelessWidget {
         _chip(sales.pagadas == 1 ? 'pagada' : 'pagadas', sales.pagadas, AppTheme.secondaryEmerald),
         Text('=', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600])),
         _chip(sales.total == 1 ? 'vendida' : 'vendidas', sales.total, AppTheme.primaryBlue),
+        if (sales.oficina > 0 || sales.calle > 0) ...[
+          Text('•', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600])),
+          _chip('de oficina', sales.oficina, Colors.blueGrey),
+          _chip('de calle', sales.calle, Colors.teal),
+        ],
       ],
     );
   }

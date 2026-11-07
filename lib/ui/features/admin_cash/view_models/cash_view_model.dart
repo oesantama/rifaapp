@@ -43,6 +43,9 @@ class CashViewModel extends ChangeNotifier {
   Future<String?> verifyTransfer(String ticketId, String abonoId, String action, {String note = '', String? raffleId}) =>
       _run(() => _repository.verifyTransferPayment(ticketId, abonoId, action, note: note), raffleId: raffleId);
 
+  Future<String?> reviewRisk(String ticketId, String abonoId, String status, String note, {String? raffleId}) =>
+      _run(() => _repository.reviewRiskAlert(ticketId, abonoId, status, note), raffleId: raffleId);
+
   Future<String?> receiveCash(String ticketId, String abonoId, {String? raffleId}) =>
       _run(() => _repository.receiveCashPayment(ticketId, abonoId), raffleId: raffleId);
 

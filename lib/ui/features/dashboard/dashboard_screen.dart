@@ -13,6 +13,7 @@ import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/features/winners/view_models/winner_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/commission_dashboard_view.dart';
 import 'package:rifaapp/data/models/ticket.dart';
+import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 
 class DashboardScreen extends StatelessWidget {
   final Function(int index) onNavigateTab;
@@ -53,7 +54,11 @@ class DashboardScreen extends StatelessWidget {
         double totalConfirmed = targetTickets.where((t) => t.confirmedByAdmin).fold(0.0, (sum, t) => sum + t.totalPaid);
         double pendingTurnIn = totalCollected - totalConfirmed;
 
-        int soldTicketsCount = targetTickets.where((t) => t.status != 'DISPONIBLE').length;
+        // Solo las ventas de calle comisionan (las de oficina/punto no)
+        final advisorTypes = {for (final a in context.read<AdvisorViewModel>().advisors) a.id: a.type};
+        bool commissionable(Ticket t) =>
+            (t.saleZone.isNotEmpty ? t.saleZone : (advisorTypes[t.advisorId] == 'PUNTO' ? 'OFICINA' : 'CALLE')) == 'CALLE' && t.advisorId.isNotEmpty;
+        int soldTicketsCount = targetTickets.where((t) => t.status != 'DISPONIBLE' && commissionable(t)).length;
         double commissionPerTicket = currentRaffle != null
             ? (currentRaffle.commissionType == 'PORCENTAJE'
                 ? (currentRaffle.ticketPrice * (currentRaffle.commissionValue / 100))

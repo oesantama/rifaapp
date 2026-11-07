@@ -23,6 +23,7 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
   String _state = 'loading'; // 'open', 'connecting', 'close', 'not_created', 'error'
   String _instanceName = '';
   String? _connectedNumber;
+  String? _profileName;
   Uint8List? _qrBytes;
   String? _pairingCode;
   String? _errorMessage;
@@ -49,6 +50,13 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
     super.dispose();
   }
 
+  /// 573102005003 -> +57 310 200 5003
+  String _prettyNumber(String raw) {
+    final d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.length == 12 && d.startsWith('57')) return '+57 ${d.substring(2, 5)} ${d.substring(5, 8)} ${d.substring(8)}';
+    return '+$d';
+  }
+
   Future<void> _fetchStatus({bool silent = false}) async {
     if (!silent) setState(() => _isLoading = true);
     try {
@@ -59,6 +67,7 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
       final state = (res['state'] ?? 'close').toString();
       final instance = (res['instanceName'] ?? '').toString();
       final number = res['number']?.toString();
+      final profileName = res['profileName']?.toString();
       final qrBase64 = res['qrcode']?.toString();
       final pairCode = res['pairingCode']?.toString();
 
@@ -75,6 +84,7 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
         _state = state;
         _instanceName = instance;
         _connectedNumber = number;
+        _profileName = (profileName == null || profileName.isEmpty) ? null : profileName;
         _qrBytes = bytes;
         _pairingCode = pairCode;
         _errorMessage = null;
@@ -252,6 +262,16 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
                               'Canal: $roleName | Instancia: $_instanceName',
                               style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 13),
                             ),
+                            if (isConnected && _connectedNumber != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.phone_android, size: 16, color: Colors.green),
+                                  const SizedBox(width: 4),
+                                  Text(_prettyNumber(_connectedNumber!),
+                                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                                ]),
+                              ),
                           ],
                         ),
                       ),
@@ -340,8 +360,8 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
                                   ),
                                   if (_connectedNumber != null)
                                     Text(
-                                      'Línea vinculada: +$_connectedNumber',
-                                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                      'Número vinculado: ${_prettyNumber(_connectedNumber!)}${_profileName != null ? '  ($_profileName)' : ''}',
+                                      style: TextStyle(color: Colors.grey.shade700, fontSize: 14, fontWeight: FontWeight.w600),
                                     ),
                                 ],
                               ),

@@ -26,16 +26,24 @@ class AuthSession {
 class ApiException implements Exception {
   final int statusCode;
   final String message;
+  final String? code; // machine-readable reason sent by the server (e.g. DUPLICATE_SUPPORT)
+  final Map<String, dynamic>? data; // full error body
 
-  ApiException(this.statusCode, this.message);
+  ApiException(this.statusCode, this.message, {this.code, this.data});
 
   factory ApiException.fromResponse(http.Response response) {
     String message = 'Error del servidor (${response.statusCode}).';
+    String? code;
+    Map<String, dynamic>? data;
     try {
       final body = jsonDecode(response.body);
-      if (body is Map && body['error'] is String) message = body['error'];
+      if (body is Map) {
+        if (body['error'] is String) message = body['error'];
+        if (body['code'] is String) code = body['code'];
+        data = Map<String, dynamic>.from(body);
+      }
     } catch (_) {}
-    return ApiException(response.statusCode, message);
+    return ApiException(response.statusCode, message, code: code, data: data);
   }
 
   @override

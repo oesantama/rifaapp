@@ -55,8 +55,10 @@ class RaffleRepository {
 
   Future<void> dismissRangeRequest(String advisorId) => _apiService.dismissRangeRequest(advisorId);
 
-  Future<List<Map<String, dynamic>>> checkTransferApproval(String raffleId, String approvalNumber) =>
-      _apiService.checkTransferApproval(raffleId, approvalNumber);
+  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber, {String? ticketId}) =>
+      _apiService.checkTransferApproval(raffleId, approvalNumber, ticketId: ticketId);
+
+  Future<Map<String, dynamic>> readTransferProof(String imageDataUri) => _apiService.readTransferProof(imageDataUri);
 
   Future<List<WinnerRecord>> fetchWinners() => _apiService.getWinners();
 
@@ -134,6 +136,9 @@ class RaffleRepository {
   Future<List<Lottery>> fetchLotteries() => _apiService.fetchLotteries();
 
   Future<Map<String, dynamic>> fetchAppConfig() => _apiService.fetchAppConfig();
+
+  Future<void> reviewRiskAlert(String ticketId, String abonoId, String status, String note) =>
+      _apiService.reviewRiskAlert(ticketId, abonoId, status, note);
 
   Future<Ticket> verifyTransferPayment(String ticketId, String abonoId, String action, {String note = ''}) =>
       _apiService.verifyTransferPayment(ticketId, abonoId, action, note: note);

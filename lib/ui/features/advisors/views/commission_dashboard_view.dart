@@ -592,10 +592,23 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                   final identity = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        adv['advisorName'] ?? 'Sin Nombre',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
+                      Wrap(spacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        Text(
+                          adv['advisorName'] ?? 'Sin Nombre',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: (adv['advisorType'] == 'PUNTO' ? Colors.blueGrey : (adv['advisorType'] == 'INTEGRAL' ? Colors.deepPurple : Colors.teal)).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            adv['advisorType'] == 'PUNTO' ? 'PUNTO' : (adv['advisorType'] == 'INTEGRAL' ? 'INTEGRAL' : 'CALLE'),
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: adv['advisorType'] == 'PUNTO' ? Colors.blueGrey.shade800 : (adv['advisorType'] == 'INTEGRAL' ? Colors.deepPurple.shade700 : Colors.teal.shade800)),
+                          ),
+                        ),
+                      ]),
                       const SizedBox(height: 2),
                       Text(
                         'Cédula/Código: ${adv['advisorCode'] ?? "N/A"} • Tel: ${adv['phone'] ?? "N/A"}',
@@ -613,6 +626,14 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                       ),
                       const SizedBox(height: 2),
                       Text('Recaudado: ${currency.format(collected)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      Text(
+                        '🛣️ Calle (comisiona): ${adv['streetSold'] ?? 0} • ${currency.format((adv['streetCollected'] as num?) ?? 0)}\n'
+                        '🏢 Oficina/punto (no comisiona): ${adv['officeSold'] ?? 0} • ${currency.format((adv['officeCollected'] as num?) ?? 0)}',
+                        style: const TextStyle(fontSize: 10.5, color: Colors.grey),
+                      ),
+                      if (((adv['zoneUndefined'] as num?) ?? 0) > 0)
+                        Text('⚠️ ${adv['zoneUndefined']} venta(s) sin definir: cuentan como calle',
+                            style: TextStyle(fontSize: 10.5, color: Colors.orange.shade800, fontWeight: FontWeight.w600)),
                     ],
                   );
                   final earnings = Column(

@@ -13,6 +13,7 @@ import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/core/utils/url_launcher_helper.dart' as web_launcher;
+import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 
 class TicketPrintDialog extends StatefulWidget {
   final Ticket ticket;
@@ -58,6 +59,26 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
     } finally {
       if (mounted) setState(() => _templateStatus = null);
     }
+  }
+
+  /// Envía al comprador el enlace de su boleta (ahí puede ver la boleta, su estado y descargarla).
+  Future<void> _sendWhatsApp() async {
+    final t = widget.ticket;
+    final code = t.verificationCode;
+    if (t.status == 'DISPONIBLE' || t.buyerName.trim().isEmpty && t.buyerPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('La boleta aún no tiene comprador: no hay nada que enviar.')));
+      return;
+    }
+    final link = code != null
+        ? ApiService.verificationUrl(code)
+        : '${ApiService.publicBaseUrl}/boleta?phone=${WhatsAppHelper.cleanPhoneNumber(t.buyerPhone)}';
+    final name = t.buyerName.trim().isEmpty ? '' : ' ${t.buyerName.trim()}';
+    final message = '¡Hola$name! 👋\n\n'
+        'Esta es tu boleta de *${widget.raffleTitle}* 🎟️\n'
+        '🔢 Números: *${t.numbers.join(' • ')}*\n\n'
+        '👉 Mira tu boleta, su estado y descárgala aquí:\n$link\n\n'
+        '¡Mucha suerte! 🍀';
+    await WhatsAppHelper.sendWhatsAppMessage(phone: t.buyerPhone, message: message);
   }
 
   void _pickBgImage() async {
@@ -351,6 +372,12 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                     icon: const Icon(Icons.print),
                     label: const Text('IMPRIMIR'),
                     style: ElevatedButton.styleFrom(backgroundColor: _themeColor),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _sendWhatsApp,
+                    icon: const Icon(Icons.send, size: 18),
+                    label: const Text('ENVIAR POR WHATSAPP'),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366), foregroundColor: Colors.white),
                   ),
                   // Only administrators change the raffle's ticket design; advisors print with it
                   if (Provider.of<AuthViewModel>(context, listen: false).isAdmin)

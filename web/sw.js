@@ -1,5 +1,5 @@
 // Rifa Master PWA Service Worker v1.0.0
-const CACHE_NAME = 'rifamaster-pwa-v1';
+const CACHE_NAME = 'rifamaster-pwa-v2';
 const PRECACHE_ASSETS = [
   './',
   'index.html',
@@ -77,7 +77,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets (JS, CSS, images, wasm, fonts): Cache-first with network fallback
+  // Código y datos de versión (JS, JSON, HTML): primero la red, así una versión nueva se ve de inmediato
+  if (/\.(js|json|html)$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' })
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, responseClone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // Resto de recursos estáticos (imágenes, wasm, fuentes): caché primero con red de respaldo
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       if (cachedResponse) {

@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const security = require('./security');
 const driveService = require('./driveService');
+const ocrService = require('./ocrService');
 const whatsappService = require('./whatsappService');
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://45-137-192-195.sslip.io').replace(/\/+$/, '');
 let admin;
@@ -588,18 +589,6 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
     </div>
     <div class="portal-badge">Consulta Oficial</div>
   </header>
-  <div class="app-download-bar">
-    <div class="app-download-content">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:15px;">📲</span>
-        <span><b>App Oficial Rifa Master</b></span>
-      </div>
-      <div class="app-download-btns">
-        <a href="/descargar-apk" class="btn-app-apk" download="RifaMaster.apk">📥 Descargar APK</a>
-        <button type="button" class="btn-app-pwa" onclick="promptPWAInstall()">⭐ Instalar Web App</button>
-      </div>
-    </div>
-  </div>
   <main>
     <div class="subhead">PORTAL DEL COMPRADOR</div>
     <h1>Encontremos tu boleta</h1>
@@ -819,18 +808,6 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
     </div>
   </header>
 
-  <div class="app-download-bar">
-    <div class="app-download-content">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:15px;">📲</span>
-        <span><b>App Oficial Rifa Master</b></span>
-      </div>
-      <div class="app-download-btns">
-        <a href="/descargar-apk" class="btn-app-apk" download="RifaMaster.apk">📥 Descargar APK</a>
-        <button type="button" class="btn-app-pwa" onclick="promptPWAInstall()">⭐ Instalar Web App</button>
-      </div>
-    </div>
-  </div>
 
   <main>
     <div class="ticket-wrapper">
@@ -863,6 +840,79 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
           Valor: $${ticketPrice.toLocaleString('es-CO')} COP
         </div>
       </div>
+
+      <!-- Ver la boleta con su diseño oficial -->
+      <details class="bp-details" id="boletaView">
+        <summary>🎟️ Ver mi boleta</summary>
+        <style id="bpStyles">
+          .bp-card { display:flex; border:2px solid #93C5FD; border-radius:16px; background:#FFFFFF; overflow:hidden; color:#0F172A; font-family:'Inter','Segoe UI',Arial,sans-serif; text-align:left; }
+          .bp-stub { width:34%; background:#F1F5F9; padding:14px; border-right:2px dashed #94A3B8; font-size:12px; }
+          .bp-stub .bp-tag { display:inline-block; background:#DBEAFE; color:#1D4ED8; font-size:10px; font-weight:800; padding:2px 8px; border-radius:6px; letter-spacing:.4px; }
+          .bp-stub .bp-num { color:#1D4ED8; font-weight:800; font-size:15px; margin:8px 0; }
+          .bp-lbl { color:#64748B; font-size:11px; margin-top:8px; }
+          .bp-val { font-weight:700; font-size:13px; }
+          .bp-main { flex:1; padding:16px; }
+          .bp-title { color:#1D4ED8; font-weight:800; font-size:18px; text-transform:uppercase; }
+          .bp-sub { color:#475569; font-size:11px; margin-top:2px; }
+          .bp-draw { color:#1D4ED8; font-weight:700; font-size:11px; margin-top:4px; text-transform:uppercase; }
+          .bp-chips { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 12px; }
+          .bp-chip { border:2px solid #93C5FD; background:#EFF6FF; color:#1D4ED8; border-radius:10px; padding:6px 14px; font-size:20px; font-weight:800; letter-spacing:1px; }
+          .bp-money { display:flex; justify-content:space-between; gap:8px; border-top:1px solid #E2E8F0; padding-top:10px; font-size:12px; flex-wrap:wrap; }
+          .bp-money b { display:block; font-size:15px; }
+          .bp-foot { display:flex; justify-content:space-between; align-items:center; border-top:1px solid #E2E8F0; margin-top:10px; padding-top:8px; font-size:11px; gap:8px; flex-wrap:wrap; }
+          .bp-code { font-family:monospace; font-weight:800; color:#15803D; background:#DCFCE7; padding:2px 8px; border-radius:6px; }
+          @media (max-width:560px) { .bp-card { flex-direction:column; } .bp-stub { width:auto; border-right:0; border-bottom:2px dashed #94A3B8; } }
+        </style>
+        <div class="bp-card" id="boletaPrint">
+          <div class="bp-stub">
+            <span class="bp-tag">TALONARIO DE CONTROL</span>
+            <div class="bp-num">BOLETA N° ${escapeHtml(opportunities.join(' - '))}</div>
+            <div class="bp-lbl">Comprador:</div><div class="bp-val">${escapeHtml(ticket.buyerName || 'Pendiente')}</div>
+            <div class="bp-lbl">Teléfono:</div><div class="bp-val">${ticket.buyerPhone ? '••••••' + escapeHtml(String(ticket.buyerPhone).slice(-4)) : 'N/A'}</div>
+            <div class="bp-lbl">Cédula / NIT:</div><div class="bp-val">${escapeHtml(maskedDoc)}</div>
+            <div class="bp-lbl">Vendedor / Asesor:</div><div class="bp-val">${escapeHtml(ticket.advisorName || 'Oficina')}</div>
+            <div class="bp-lbl">Monto abonado:</div><div class="bp-val" style="color:#16A34A;">$${totalPaid.toLocaleString('es-CO')}</div>
+          </div>
+          <div class="bp-main">
+            <div class="bp-title">${escapeHtml(raffle.title || 'Gran Sorteo')}</div>
+            <div class="bp-sub">Comprobante oficial de boleta • ${escapeHtml(companyName)}</div>
+            <div class="bp-draw">Juega el ${escapeHtml(drawDate)}${(raffle.mainLotteryName || raffle.lotteryName) ? ' con la ' + escapeHtml(raffle.mainLotteryName || raffle.lotteryName) : ''}</div>
+            <div class="bp-lbl" style="margin-top:12px;">NÚMEROS DE OPORTUNIDAD (${opportunities.length} ${opportunities.length === 1 ? 'NÚMERO' : 'NÚMEROS'}):</div>
+            <div class="bp-chips">${opportunities.map(num => `<div class="bp-chip">${escapeHtml(num)}</div>`).join('')}</div>
+            <div class="bp-money">
+              <div>Valor boleta<b>$${ticketPrice.toLocaleString('es-CO')}</b></div>
+              <div>Total abonado<b style="color:#16A34A;">$${totalPaid.toLocaleString('es-CO')}</b></div>
+              <div>Saldo pendiente<b style="color:${balancePending > 0 ? '#DC2626' : '#16A34A'};">$${balancePending.toLocaleString('es-CO')}</b></div>
+            </div>
+            <div class="bp-foot">
+              <span>${isPaid ? '✅ PAGADA' : '⏳ ' + escapeHtml(String(ticket.status || '').replace('_', ' '))}</span>
+              <span>Código: <span class="bp-code">${escapeHtml(ticket.verificationCode || verifyHash)}</span></span>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:12px;">
+          <button type="button" class="bp-print-btn" onclick="printBoleta()">🖨️ Imprimir / Guardar PDF</button>
+        </div>
+      </details>
+      <style>
+        .bp-details { margin:14px 16px 4px; }
+        .bp-details > summary { cursor:pointer; list-style:none; text-align:center; background:#2563EB; color:#FFFFFF; font-weight:800; font-size:14px; padding:11px 14px; border-radius:12px; box-shadow:0 4px 12px rgba(37,99,235,.35); }
+        .bp-details > summary::-webkit-details-marker { display:none; }
+        .bp-details[open] > summary { background:#1E40AF; margin-bottom:12px; }
+        .bp-print-btn { background:#0F172A; color:#FFFFFF; border:none; border-radius:10px; padding:10px 18px; font-weight:700; font-size:13px; cursor:pointer; }
+      </style>
+      <script>
+        function printBoleta() {
+          var card = document.getElementById('boletaPrint');
+          var styles = document.getElementById('bpStyles');
+          var w = window.open('', '_blank');
+          if (!w || !card) { window.print(); return; }
+          w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Boleta</title><style>body{margin:16px;font-family:Arial,sans-serif}' + styles.textContent + '</style></head><body>' + card.outerHTML + '</body></html>');
+          w.document.close();
+          w.focus();
+          setTimeout(function () { w.print(); }, 400);
+        }
+      </script>
 
       <!-- Carrusel de fotos y videos del premio -->
       <div class="carousel-container">
@@ -1273,11 +1323,53 @@ app.get(['/descargar-apk', '/descargar', '/rifamaster.apk', '/app.apk'], (req, r
   return res.status(404).send('APK en proceso de compilación o no disponible.');
 });
 
+// ---------------------------------------------------------------------------
+// Enlace público del soporte de un pago (para quien recibe el Excel de AGIL): /soporte/<ticket~abono>.<firma>
+// La firma (HMAC con el secreto de la base de datos) impide adivinar enlaces de otros pagos.
+// ---------------------------------------------------------------------------
+function soporteSignature(ticketId, abonoId) {
+  const secret = (db.settings || {}).verificationSecret;
+  if (!secret) return null;
+  return require('crypto').createHmac('sha256', secret).update(`soporte:${ticketId}~${abonoId}`).digest('hex').slice(0, 24);
+}
+
+function soporteLinkFor(ticketId, abonoId) {
+  const sig = soporteSignature(ticketId, abonoId);
+  return sig ? `${PUBLIC_BASE_URL}/soporte/${ticketId}~${abonoId}.${sig}` : '';
+}
+
+app.get('/soporte/:token', async (req, res) => {
+  try {
+    const token = String(req.params.token || '');
+    const dot = token.lastIndexOf('.');
+    const [ticketId, abonoId] = token.slice(0, dot).split('~');
+    const sig = token.slice(dot + 1);
+    const expected = dot > 0 && ticketId && abonoId ? soporteSignature(ticketId, abonoId) : null;
+    const okSig = expected && sig.length === expected.length && require('crypto').timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+    const ticket = okSig ? (db.tickets || []).find(t => t.id === ticketId) : null;
+    const abono = ticket && [...(ticket.abonos || []), ...(ticket.voidedAbonos || [])].find(a => a.id === abonoId);
+    if (!abono) return res.status(404).send('Soporte no encontrado.');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    if (abono.soporteDriveId) {
+      const file = await driveService.downloadDriveFile(abono.soporteDriveId);
+      res.setHeader('Content-Type', file.mimeType || 'image/jpeg');
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      return res.send(file.buffer);
+    }
+    const link = abono.soporteWebViewUrl || abono.soporteUrl;
+    return link ? res.redirect(302, link) : res.status(404).send('Este pago no tiene soporte.');
+  } catch (err) {
+    console.error('⚠️ Error sirviendo soporte:', err.message);
+    res.status(502).send('No se pudo cargar el soporte. Intente de nuevo.');
+  }
+});
+
 if (staticDir) {
   app.get(['/', '/index.html'], (req, res) => sendIndexHtml(res));
   app.use(express.static(staticDir, {
     setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.html') || filePath.endsWith('main.dart.js') || filePath.endsWith('flutter_bootstrap.js')) {
+      if (filePath.endsWith('.html') || filePath.endsWith('main.dart.js') || filePath.endsWith('flutter_bootstrap.js') ||
+          filePath.endsWith('flutter_service_worker.js') || filePath.endsWith('/sw.js') || filePath.endsWith('build.json') || filePath.endsWith('version.json')) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
@@ -2123,10 +2215,25 @@ const APP_VERSION = require('./package.json').version;
 const DEPLOYED_COMMIT = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || null;
 const STARTED_AT = new Date().toISOString();
 
+// Identificador de la compilación de la web que se está sirviendo (public/build.json, lo escribe scripts/build-web.sh)
+let buildCache = { mtime: 0, value: '' };
+function currentBuildId() {
+  try {
+    if (!staticDir) return '';
+    const file = path.join(staticDir, 'build.json');
+    const stat = fs.statSync(file);
+    if (stat.mtimeMs !== buildCache.mtime) buildCache = { mtime: stat.mtimeMs, value: String(JSON.parse(fs.readFileSync(file, 'utf8')).build || '') };
+    return buildCache.value;
+  } catch (_) {
+    return '';
+  }
+}
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     version: APP_VERSION,
+    build: currentBuildId(),
     commit: DEPLOYED_COMMIT,
     startedAt: STARTED_AT,
     timestamp: new Date().toISOString(),
@@ -2540,6 +2647,153 @@ app.get('/api/auth/me', (req, res) => {
 // -------------------------------------------------------------
 // WHATSAPP BOT ENDPOINTS (SuperAdmin, Empresa, Asesor)
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// PAGOS AGIL: consulta, Excel, envío programado por WhatsApp y Excel devuelto (SUBIDO)
+// -------------------------------------------------------------
+const agilService = require('./agilService')({
+  getDb: () => db,
+  saveDB: () => saveDB(),
+  isReady: () => isDbLoaded,
+  whatsappService,
+  isAbonoSettled: a => isAbonoSettled(a),
+  abonoCashState: a => abonoCashState(a),
+  soporteLinkFor: (ticketId, abonoId) => soporteLinkFor(ticketId, abonoId),
+  actorName: req => actorName(req),
+  colombiaDay: ms => colombiaDay(ms),
+  colombiaOffsetMs: () => COLOMBIA_OFFSET_MS,
+  baseUrl: () => PUBLIC_BASE_URL,
+  getInstanceName: auth => whatsappService.getInstanceName(auth),
+  accountLabel: account => transferAccountLabel(account),
+  uploadProof: (buffer, filename, mimeType) => driveService.uploadFileToDrive({ buffer, filename, mimeType }),
+  auditPush: entry => {
+    if (!db.auditLogs) db.auditLogs = [];
+    db.auditLogs.push({ id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, date: new Date().toISOString(), ...entry });
+  }
+});
+agilService.registerRoutes(app, { adminOnly, targetCompanyOf });
+whatsappService.setDocumentHandler(agilService.handleIncomingDocument);
+agilService.start();
+
+// -------------------------------------------------------------
+// ENTRENAR BOT: respuestas personalizadas, preguntas sin respuesta y chats por pasar a un asesor
+// -------------------------------------------------------------
+const botBrain = require('./botBrain');
+
+function botCompany(req, res) {
+  const company = targetCompanyOf(req);
+  if (!company) res.status(400).json({ error: 'Seleccione la empresa.' });
+  return company;
+}
+
+app.get('/api/bot/config', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const raffleIds = new Set((db.raffles || []).filter(r => r.companyId === company.id).map(r => r.id));
+  const howHeardStats = {};
+  (db.tickets || []).forEach(t => {
+    if (raffleIds.has(t.raffleId) && t.howHeard) howHeardStats[t.howHeard] = (howHeardStats[t.howHeard] || 0) + 1;
+  });
+  res.json({
+    config: botBrain.getBotConfig(company),
+    pendingHandoffs: (db.botHandoffs || []).filter(h => h.companyId === company.id && h.status === 'PENDIENTE').length,
+    unanswered: (db.botUnanswered || []).filter(u => u.companyId === company.id).length,
+    howHeardStats
+  });
+});
+
+app.put('/api/bot/config', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const checked = botBrain.sanitizeConfig(req.body && req.body.config, company.botConfig);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  company.botConfig = checked.config;
+  company.botConfigUpdatedAt = new Date().toISOString();
+  saveDB();
+  res.json({ message: 'Configuración del bot guardada.', config: checked.config });
+});
+
+// Simula qué respondería el bot a un mensaje (sin enviar nada)
+app.post('/api/bot/test', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const text = String((req.body && req.body.text) || '').slice(0, 500);
+  const cfg = botBrain.getBotConfig(company);
+  const raffle = (db.raffles || []).find(r => r.companyId === company.id && r.status !== 'INACTIVA' && r.active !== false);
+  const vars = {
+    empresa: company.name || company.companyName || 'Empresa',
+    rifa: raffle ? raffle.title : '',
+    precio: raffle ? `$${Number(raffle.ticketPrice || 0).toLocaleString('es-CO')}` : '',
+    fecha: raffle && raffle.mainDrawDate ? raffle.mainDrawDate.substring(0, 10).split('-').reverse().join('/') : ''
+  };
+  const faq = botBrain.matchFaq(cfg, text);
+  if (faq) return res.json({ type: 'faq', title: faq.title, answer: botBrain.fillPlaceholders(faq.answer, vars) });
+  if (botBrain.isHandoffRequest(cfg, text)) return res.json({ type: 'handoff', answer: 'El bot pasaría este chat a un asesor y avisaría al administrador.' });
+  if (botBrain.isGreeting(text)) return res.json({ type: 'greeting', answer: 'El bot mostraría el menú principal.' });
+  res.json({ type: 'none', answer: 'El bot no tiene una respuesta personalizada para esto: usaría sus respuestas por defecto (menú, números, pagos) o lo registraría como "sin respuesta".' });
+});
+
+app.get('/api/bot/unanswered', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const list = (db.botUnanswered || [])
+    .filter(u => u.companyId === company.id)
+    .sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt)))
+    .slice(0, 100);
+  res.json({ unanswered: list });
+});
+
+app.delete('/api/bot/unanswered/:id', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const before = (db.botUnanswered || []).length;
+  db.botUnanswered = (db.botUnanswered || []).filter(u => !(u.id === req.params.id && u.companyId === company.id));
+  if (db.botUnanswered.length !== before) saveDB();
+  res.json({ ok: true });
+});
+
+// Convierte una pregunta sin respuesta en una respuesta del bot
+app.post('/api/bot/unanswered/:id/faq', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const item = (db.botUnanswered || []).find(u => u.id === req.params.id && u.companyId === company.id);
+  if (!item) return res.status(404).json({ error: 'Pregunta no encontrada.' });
+  const current = botBrain.getBotConfig(company);
+  const { title, keywords, answer } = req.body || {};
+  const checked = botBrain.sanitizeConfig({
+    faqs: [...current.faqs, { title: title || item.text, keywords: keywords && keywords.length ? keywords : [item.text], answer, active: true }]
+  }, company.botConfig);
+  if (checked.error) return res.status(400).json({ error: checked.error });
+  company.botConfig = checked.config;
+  db.botUnanswered = db.botUnanswered.filter(u => u.id !== item.id);
+  saveDB();
+  res.json({ message: 'Respuesta creada.', config: checked.config });
+});
+
+app.get('/api/bot/handoffs', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const list = (db.botHandoffs || [])
+    .filter(h => h.companyId === company.id)
+    .sort((a, b) => (a.status === b.status ? String(b.updatedAt).localeCompare(String(a.updatedAt)) : (a.status === 'PENDIENTE' ? -1 : 1)))
+    .slice(0, 100);
+  res.json({ handoffs: list });
+});
+
+// Marca el chat como atendido y devuelve el control al bot
+app.post('/api/bot/handoffs/:id/resolve', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const rec = (db.botHandoffs || []).find(h => h.id === req.params.id && h.companyId === company.id);
+  if (!rec) return res.status(404).json({ error: 'Chat no encontrado.' });
+  rec.status = 'ATENDIDO';
+  rec.resolvedAt = new Date().toISOString();
+  rec.resolvedBy = actorName(req);
+  const key = whatsappService.formatPhoneNumber(rec.phone);
+  if (db.whatsappSessions && db.whatsappSessions[key]) db.whatsappSessions[key].humanAssisted = false;
+  saveDB();
+  res.json({ ok: true });
+});
+
 app.get('/api/whatsapp/status', async (req, res) => {
   try {
     const instanceName = whatsappService.getInstanceName(req.auth);
@@ -2565,7 +2819,7 @@ app.post('/api/whatsapp/disconnect', async (req, res) => {
   try {
     const instanceName = whatsappService.getInstanceName(req.auth);
     const result = await whatsappService.disconnectInstance(instanceName);
-    res.json({ success: true, ...result });
+    res.json({ ...result, success: result.ok === true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -3170,6 +3424,8 @@ app.delete('/api/companies/:id', superAdminOnly, (req, res) => {
 
   // Remove commission payouts
   db.commissionPayouts = (db.commissionPayouts || []).filter(cp => !companyAdvisorIds.has(cp.advisorId) && !companyRaffleIds.has(cp.raffleId));
+  db.expenses = (db.expenses || []).filter(e => e.companyId !== id);
+  db.agilBatches = (db.agilBatches || []).filter(b => b.companyId !== id);
 
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({
@@ -3912,18 +4168,25 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   if (req.body.ticketPrice !== undefined) {
     const newPrice = Math.round(Number(req.body.ticketPrice));
     if (!Number.isFinite(newPrice) || newPrice <= 0) return res.status(400).json({ error: 'El valor de la boleta debe ser mayor a 0.' });
-    if (newPrice !== raffle.ticketPrice) {
-      const oldPrice = raffle.ticketPrice;
-      raffle.ticketPrice = newPrice;
-      // Solo cambian las boletas sin movimiento; las vendidas/apartadas/con abonos conservan su valor
-      let updated = 0;
-      (db.tickets || []).forEach(t => {
-        if (t.raffleId === raffle.id && t.status === 'DISPONIBLE' && !t.buyerName && !(t.totalPaid > 0)) { t.price = newPrice; updated++; }
-      });
+    const oldPrice = raffle.ticketPrice;
+    raffle.ticketPrice = newPrice;
+    // Se aplica a TODAS las boletas (disponibles, apartadas, fiadas y con abono parcial) y se recalcula su saldo.
+    // Solo se respetan las que ya tienen pagado un valor igual o mayor al nuevo precio (o al anterior): cambiarles el precio
+    // dejaría el saldo/estado inconsistente (pagada con deuda, o con excedente sin transferir).
+    let updated = 0, kept = 0;
+    (db.tickets || []).forEach(t => {
+      if (t.raffleId !== raffle.id || Number(t.price) === newPrice) return;
+      const paid = Number(t.totalPaid) || 0;
+      if (paid > 0 && paid >= Math.min(Number(t.price) || 0, newPrice)) { kept++; return; }
+      t.price = newPrice;
+      if (t.balancePending !== undefined) t.balancePending = Math.max(0, newPrice - paid);
+      updated++;
+    });
+    if (oldPrice !== newPrice || updated > 0) {
       if (!db.auditLogs) db.auditLogs = [];
       db.auditLogs.push({
         id: `audit-${Date.now()}`, type: 'TICKET_PRICE', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title,
-        detail: `Valor de boleta ${oldPrice} → ${newPrice} (${updated} boletas disponibles actualizadas)`,
+        detail: `Valor de boleta ${oldPrice} → ${newPrice} (${updated} boletas actualizadas; ${kept} ya pagadas conservan su valor)`,
         by: actorName(req), date: new Date().toISOString()
       });
     }
@@ -5393,6 +5656,9 @@ app.post('/api/tickets/:id/abonos/:abonoId/void', adminOnly, (req, res) => {
 // Colombia has no daylight saving time: always UTC-5.
 const COLOMBIA_OFFSET_MS = 5 * 60 * 60 * 1000;
 const TRANSFER_MAX_AGE_DAYS = 15;
+// Risk alert: this many transfers by the same person inside this window
+const RISK_BURST_COUNT = 5;
+const RISK_BURST_MINUTES = 60;
 
 /** Calendar day in Colombia ("YYYY-MM-DD") of an instant. */
 function colombiaDay(ms) {
@@ -5485,6 +5751,11 @@ function validateTransfer(body, raffle) {
  */
 function findApprovalMatches(key, companyId, maskContact) {
   if (!key) return [];
+  return findPaymentMatches(ab => approvalKey(ab.approvalNumber) === key, companyId, maskContact);
+}
+
+/** Same idea with any test over the payment: used for the approval number and for the proof image hash. */
+function findPaymentMatches(test, companyId, maskContact) {
   const raffles = new Map((db.raffles || []).filter(r => !companyId || r.companyId === companyId).map(r => [r.id, r]));
   const mask = value => {
     const text = String(value || '');
@@ -5492,7 +5763,7 @@ function findApprovalMatches(key, companyId, maskContact) {
   };
   const matches = [];
   const collect = (ticket, raffle, abono, state, sale, extra = {}) => {
-    if (approvalKey(abono.approvalNumber) !== key) return;
+    if (!test(abono)) return;
     matches.push({
       state,
       raffleTitle: raffle.title,
@@ -5530,13 +5801,79 @@ function findApprovalMatches(key, companyId, maskContact) {
   return matches.sort((a, b) => String(b.registeredAt).localeCompare(String(a.registeredAt)));
 }
 
+/**
+ * Un número de aprobación repetido solo puede ser legítimo si esa transferencia fue por MÁS que el valor de una boleta
+ * (alcanza para pagar otra). Si lo ya registrado con esa aprobación es igual o menor al valor de la boleta, es imposible
+ * que pague otra: no se deja continuar. Tampoco se puede usar dos veces en la misma boleta. Las anuladas no cuentan.
+ */
+function approvalRepeatRule(matches, ticket, raffle) {
+  const live = (matches || []).filter(m => m.state === 'VIGENTE');
+  if (!live.length) return { blocked: false, registered: 0, price: 0, reason: '' };
+  const price = Number((ticket && ticket.price) || (raffle && raffle.ticketPrice) || 0);
+  const registered = live.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+  const money = n => `$${Math.round(n).toLocaleString('es-CO')}`;
+  if (ticket && live.some(m => m.ticketId === ticket.id)) {
+    return { blocked: true, registered, price, reason: 'Este número de aprobación ya está registrado en esta misma boleta: no se puede usar dos veces.' };
+  }
+  if (registered <= price) {
+    return {
+      blocked: true, registered, price,
+      reason: `Este número de aprobación ya está registrado por ${money(registered)}, un valor igual o menor al de una boleta (${money(price)}). Una transferencia de ese valor no puede pagar otra boleta: revise el número.`
+    };
+  }
+  return { blocked: false, registered, price, reason: '' };
+}
+
 // Checks an approval number before saving (the app asks when the user leaves the field)
 app.get('/api/transfers/check', (req, res) => {
   const raffle = (db.raffles || []).find(r => r.id === req.query.raffleId);
   if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada' });
   const key = approvalKey(req.query.approvalNumber);
   if (key.length < 3) return res.json({ matches: [] });
-  res.json({ matches: findApprovalMatches(key, raffle.companyId, req.auth.role === 'asesor') });
+  const matches = findApprovalMatches(key, raffle.companyId, req.auth.role === 'asesor');
+  const ticket = req.query.ticketId ? (db.tickets || []).find(t => t.id === req.query.ticketId && t.raffleId === raffle.id) : null;
+  const rule = approvalRepeatRule(matches, ticket, raffle);
+  res.json({ matches, blocked: rule.blocked, blockReason: rule.reason, registeredTotal: rule.registered, ticketPrice: rule.price });
+});
+
+// Lee el comprobante (OCR en el servidor, sin costo): referencia, valor y banco. Para prellenar y validar el formulario.
+const readProofHits = new Map(); // quien -> instantes de sus últimas lecturas
+app.post('/api/transfers/read-proof', async (req, res) => {
+  const who = `${req.auth.role}:${(req.auth.record && req.auth.record.id) || ''}`;
+  const now = Date.now();
+  const recent = (readProofHits.get(who) || []).filter(t => now - t < 60000);
+  if (recent.length >= 10) return res.status(429).json({ error: 'Demasiadas lecturas seguidas. Espere un momento.' });
+  readProofHits.set(who, [...recent, now]);
+  const raw = req.body && req.body.imageBase64;
+  if (typeof raw !== 'string' || raw.length < 100 || raw.length > 12 * 1024 * 1024) return res.status(400).json({ error: 'Imagen no válida.' });
+  const buffer = Buffer.from(raw.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+  if (buffer.length < 2000) return res.status(400).json({ error: 'La imagen es demasiado pequeña.' });
+  const read = await ocrService.readProof(buffer);
+  res.json({ available: read.available, readable: read.readable, references: read.references, amounts: read.amounts, bank: read.bank });
+});
+
+// Administrador: corrige si una venta de un asesor INTEGRAL fue en oficina o en calle (cambia su comisión)
+app.put('/api/tickets/:id/sale-zone', adminOnly, (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!ticket || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada.' });
+  const zone = String((req.body || {}).saleZone || '');
+  if (!SALE_ZONES.includes(zone)) return res.status(400).json({ error: 'La venta debe ser OFICINA o CALLE.' });
+  const advisor = (db.advisors || []).find(a => a.id === ticket.advisorId);
+  if (!advisor) return res.status(400).json({ error: 'Esta boleta no tiene asesor: las ventas directas son siempre de oficina.' });
+  if (advisorTypeOf(advisor) !== 'INTEGRAL') {
+    return res.status(400).json({ error: `El tipo de venta de un asesor ${advisorTypeOf(advisor) === 'PUNTO' ? 'de punto' : 'de calle'} es fijo; solo los asesores integrales lo eligen en cada venta.` });
+  }
+  const previous = ticket.saleZone || '(sin definir)';
+  ticket.saleZone = zone;
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`, type: 'SALE_ZONE', companyId: raffle.companyId, targetId: ticket.id, targetName: raffle.title,
+    detail: `Venta de ${advisor.name} (boleta ${(ticket.numbers || []).join('-')}): ${previous} → ${zone}`, by: actorName(req), date: new Date().toISOString()
+  });
+  saveDB();
+  notifyRaffleChanged(ticket.raffleId);
+  res.json(ticket);
 });
 
 app.post('/api/tickets/:id/abono', async (req, res) => {
@@ -5556,6 +5893,38 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     const checked = validateTransfer(req.body, db.raffles.find(r => r.id === found.raffleId));
     if (checked.error) return res.status(400).json({ error: checked.error });
     transfer = checked.transfer;
+  }
+
+  // Transfers need the proof image (no agreement with banks/gateways: the proof is what the admin checks).
+  // Its hash detects the same image being used again.
+  let supportHash = null;
+  let referenceFlag = null;
+  if (isTransfer) {
+    const proof = req.body.soporteImageBase64 || req.body.soporteBase64;
+    if (!proof) {
+      return res.status(400).json({ error: 'El soporte (foto o captura del comprobante) es obligatorio en las transferencias.', code: 'SUPPORT_REQUIRED' });
+    }
+    const proofBuffer = Buffer.from(String(proof).replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    if (proofBuffer.length < 2000) return res.status(400).json({ error: 'El soporte adjunto no es una imagen válida. Adjunte de nuevo el comprobante.', code: 'SUPPORT_INVALID' });
+    supportHash = require('crypto').createHash('sha256').update(proofBuffer).digest('hex');
+
+    // La referencia escrita debe ser la del comprobante (se lee la imagen en el servidor). Si no coincide, el usuario
+    // debe corregirla; si insiste, el pago queda con una alerta ALTA para revisión. Si no se puede leer, no bloquea.
+    const proofRead = await ocrService.readProof(proofBuffer);
+    const refCheck = ocrService.verifyReference(proofRead, transfer.approvalNumber);
+    if (refCheck.status === 'MISMATCH') {
+      if (req.body.allowReferenceMismatch !== true) {
+        return res.status(409).json({
+          error: `La referencia escrita (${transfer.approvalNumber}) no coincide con la del comprobante${refCheck.read.length ? ` (leí: ${refCheck.read.slice(0, 3).join(', ')})` : ''}. Corríjala o confirme que es correcta.`,
+          code: 'REFERENCE_MISMATCH',
+          read: refCheck.read,
+          typed: transfer.approvalNumber
+        });
+      }
+      referenceFlag = { code: 'REFERENCIA_NO_COINCIDE', level: 'ALTA', detail: `La referencia escrita (${transfer.approvalNumber}) no coincide con la del comprobante${refCheck.read.length ? ` (leí: ${refCheck.read.slice(0, 3).join(', ')})` : ''}. Compare el soporte.` };
+    } else if (refCheck.status === 'UNREADABLE' && proofRead.available) {
+      referenceFlag = { code: 'COMPROBANTE_ILEGIBLE', level: 'MEDIA', detail: 'No se pudo leer la referencia del comprobante: compárela a mano con el soporte.' };
+    }
   }
 
   // The payment proof goes to Google Drive first. Nothing below waits, so the checks and the
@@ -5645,16 +6014,93 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     });
   }
 
-  // The same approval number may mean the same transfer reported twice: the user must confirm it
-  if (transfer && req.body.allowDuplicateApproval !== true) {
+  // Risk signals of the transfer. Repeated approval / proof are allowed when the user confirms them
+  // (one transfer can pay several tickets) but they are flagged so the admin reviews them in Caja.
+  const riskFlags = [];
+  if (referenceFlag) riskFlags.push(referenceFlag);
+  if (transfer) {
     const raffle = db.raffles.find(r => r.id === ticket.raffleId);
-    const matches = findApprovalMatches(approvalKey(transfer.approvalNumber), raffle && raffle.companyId, req.auth.role === 'asesor');
-    if (matches.length) {
-      return res.status(409).json({
-        error: `El número de aprobación ${transfer.approvalNumber} ya está registrado. Revise antes de continuar.`,
-        code: 'DUPLICATE_APPROVAL',
-        matches
+    const companyId = raffle && raffle.companyId;
+    const maskContact = req.auth.role === 'asesor';
+
+    const approvalMatches = findApprovalMatches(approvalKey(transfer.approvalNumber), companyId, maskContact);
+    if (approvalMatches.length) {
+      // Imposible de repetir: no se puede continuar ni confirmando
+      const repeatRule = approvalRepeatRule(approvalMatches, ticket, raffle);
+      if (repeatRule.blocked) {
+        return res.status(409).json({ error: repeatRule.reason, code: 'DUPLICATE_APPROVAL_BLOCKED', matches: approvalMatches });
+      }
+      if (req.body.allowDuplicateApproval !== true) {
+        return res.status(409).json({
+          error: `El número de aprobación ${transfer.approvalNumber} ya está registrado. Revise antes de continuar.`,
+          code: 'DUPLICATE_APPROVAL',
+          matches: approvalMatches
+        });
+      }
+      riskFlags.push({ code: 'APROBACION_REPETIDA', level: 'MEDIA', detail: `El número de aprobación ya estaba en ${approvalMatches.length} pago(s).` });
+    }
+
+    const supportMatches = supportHash ? findPaymentMatches(ab => ab.soporteHash === supportHash, companyId, maskContact) : [];
+    if (supportMatches.length) {
+      const sameApproval = supportMatches.every(m => approvalKey(m.approvalNumber) === approvalKey(transfer.approvalNumber));
+      const usedTotal = supportMatches.filter(m => m.state === 'VIGENTE').reduce((sum, m) => sum + (m.amount || 0), 0);
+      if (req.body.allowDuplicateSupport !== true) {
+        return res.status(409).json({
+          error: 'Este soporte (comprobante) ya fue usado en otro pago. Revise antes de continuar.',
+          code: 'DUPLICATE_SUPPORT',
+          matches: supportMatches,
+          sameApproval,
+          usedTotal,
+          thisAmount: abonoAmount
+        });
+      }
+      riskFlags.push({
+        code: 'SOPORTE_REPETIDO',
+        level: sameApproval ? 'MEDIA' : 'ALTA',
+        detail: sameApproval
+          ? `Mismo soporte y misma aprobación en ${supportMatches.length} pago(s) ya registrados ($${Math.round(usedTotal).toLocaleString('es-CO')}): verifique que el valor de la transferencia cubra la suma.`
+          : `El mismo soporte se usó con OTRO número de aprobación en ${supportMatches.length} pago(s).`
       });
+    }
+
+    // Many transfers registered by the same person in a short time
+    const sellerKey = sellerId || (req.auth.record && req.auth.record.id) || '';
+    if (sellerKey) {
+      const since = Date.now() - RISK_BURST_MINUTES * 60 * 1000;
+      let recent = 0;
+      for (const t of db.tickets || []) {
+        for (const ab of t.abonos || []) {
+          if (ab.metodoPago === 'transferencia' && ab.sellerId === sellerKey && Date.parse(ab.date) >= since) recent++;
+        }
+      }
+      if (recent + 1 >= RISK_BURST_COUNT) {
+        riskFlags.push({ code: 'RAFAGA_ASESOR', level: 'MEDIA', detail: `${recent + 1} transferencias registradas por la misma persona en los últimos ${RISK_BURST_MINUTES} minutos.` });
+      }
+    }
+  }
+
+  // Tipo de venta (oficina / calle): lo fija el tipo del asesor; el integral lo indica en cada venta
+  let saleZone = SALE_ZONES.includes(ticket.saleZone) ? ticket.saleZone : null;
+  {
+    const isIndependentSale = (req.auth.role === 'admin' && req.auth.record && req.auth.record.isIndependent) || String(sellerId || '').startsWith('ind_');
+    const sellerAdvisor = req.auth.role === 'asesor'
+      ? req.auth.record
+      : (sellerId && sellerId !== 'admin' ? (db.advisors || []).find(a => a.id === sellerId) : null);
+    if (sellerAdvisor) {
+      const type = advisorTypeOf(sellerAdvisor);
+      if (type === 'PUNTO') saleZone = 'OFICINA';
+      else if (type === 'CALLE') saleZone = 'CALLE';
+      else {
+        const wanted = SALE_ZONES.includes(req.body.saleZone) ? req.body.saleZone : null;
+        const isNewSale = ticket.status === 'DISPONIBLE';
+        const changesSeller = !!ticket.advisorId && ticket.advisorId !== sellerAdvisor.id;
+        if (wanted && (req.auth.role !== 'asesor' || isNewSale || !saleZone)) saleZone = wanted;
+        else if (isNewSale || changesSeller) {
+          return res.status(400).json({ error: 'Indique si la venta es en OFICINA (no comisiona) o en CALLE (comisiona).', code: 'SALE_ZONE_REQUIRED' });
+        }
+      }
+    } else if (!isIndependentSale) {
+      saleZone = 'OFICINA'; // venta directa del administrador: sin comisión de asesor
     }
   }
 
@@ -5674,6 +6120,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   }
   if (sellerId) ticket.advisorId = sellerId;
   if (sellerName) ticket.advisorName = sellerName;
+  if (saleZone) ticket.saleZone = saleZone;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();
 
   const payMethod = transfer ? 'transferencia' : (metodoPago === 'transferencia' ? 'efectivo' : (metodoPago || 'efectivo'));
@@ -5685,7 +6132,9 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
       approvalNumber: transfer.approvalNumber,
       originBank: transfer.originBank,
       transferAccountId: transfer.transferAccountId,
-      ...(req.body.allowDuplicateApproval === true ? { duplicateApprovalConfirmed: true } : {})
+      ...(req.body.allowDuplicateApproval === true ? { duplicateApprovalConfirmed: true } : {}),
+      ...(supportHash ? { soporteHash: supportHash } : {}),
+      ...(riskFlags.length ? { riskFlags } : {})
     } : {}),
     ...soporte
   };
@@ -5717,6 +6166,12 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
         // Registrada por asesor: queda pendiente de legalizar por el administrador en Caja Admin
         delete newAbono.verification;
       }
+    }
+    if (newAbono.riskFlags && newAbono.riskFlags.length) {
+      // The admin confirmed the warnings while registering; an advisor's payment waits for the admin's review
+      newAbono.riskReview = isAdminRegistrar
+        ? { status: 'DESCARTADA', by: actorName(req), at: newAbono.date, note: 'Alertas confirmadas por el administrador al registrar el pago' }
+        : { status: 'PENDIENTE' };
     }
     ticket.abonos.push(newAbono);
     ticket.totalPaid += abonoAmount;
@@ -5979,7 +6434,6 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
 
 Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
 
-🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
 🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
 💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
 🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
@@ -5998,6 +6452,75 @@ ${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
   res.json(withVerification(ticket));
 });
 
+// ---------------------------------------------------------------------------
+// Alertas de riesgo en transferencias (sin convenio con bancos/pasarelas, la validación es humana):
+// cada transferencia con señales sospechosas queda marcada y el administrador debe revisarla
+// (descartar la alerta o confirmar el fraude) antes de poder validarla en Caja.
+// ---------------------------------------------------------------------------
+const RISK_REVIEW_STATES = ['PENDIENTE', 'DESCARTADA', 'FRAUDE'];
+
+function abonoNeedsRiskReview(abono) {
+  return Array.isArray(abono.riskFlags) && abono.riskFlags.length > 0 && (!abono.riskReview || abono.riskReview.status === 'PENDIENTE');
+}
+
+app.get('/api/risk/alerts', adminOnly, (req, res) => {
+  const company = targetCompanyOf(req);
+  if (!company) return res.status(400).json({ error: 'Seleccione la empresa.' });
+  const raffles = new Map((db.raffles || []).filter(r => r.companyId === company.id).map(r => [r.id, r]));
+  const alerts = [];
+  for (const ticket of db.tickets || []) {
+    const raffle = raffles.get(ticket.raffleId);
+    if (!raffle) continue;
+    for (const abono of ticket.abonos || []) {
+      if (!Array.isArray(abono.riskFlags) || abono.riskFlags.length === 0) continue;
+      alerts.push({
+        ticketId: ticket.id,
+        abonoId: abono.id,
+        raffleTitle: raffle.title,
+        numbers: ticket.numbers || [],
+        buyerName: ticket.buyerName || '',
+        advisorName: abono.sellerName || ticket.advisorName || '',
+        amount: abono.amount || 0,
+        date: abono.date,
+        approvalNumber: abono.approvalNumber || '',
+        originBank: abono.originBank || '',
+        soporteWebViewUrl: abono.soporteWebViewUrl || null,
+        cashState: abonoCashState(abono),
+        flags: abono.riskFlags,
+        review: abono.riskReview || { status: 'PENDIENTE' }
+      });
+    }
+  }
+  alerts.sort((a, b) => {
+    const pa = a.review.status === 'PENDIENTE' ? 0 : 1;
+    const pb = b.review.status === 'PENDIENTE' ? 0 : 1;
+    return pa !== pb ? pa - pb : String(b.date).localeCompare(String(a.date));
+  });
+  res.json({ alerts: alerts.slice(0, 200), pending: alerts.filter(a => a.review.status === 'PENDIENTE').length });
+});
+
+// Admin decides on an alert: DESCARTADA (it is a legitimate payment) or FRAUDE (the payment is not real)
+app.post('/api/risk/alerts/:ticketId/:abonoId/review', adminOnly, (req, res) => {
+  const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
+  const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Pago no encontrado.' });
+  if (!Array.isArray(abono.riskFlags) || abono.riskFlags.length === 0) return res.status(400).json({ error: 'Este pago no tiene alertas de riesgo.' });
+  const status = String((req.body || {}).status || '');
+  if (!['DESCARTADA', 'FRAUDE'].includes(status)) return res.status(400).json({ error: 'Decisión no válida.' });
+  const note = String((req.body || {}).note || '').trim().slice(0, 300);
+  if (note.length < 5) return res.status(400).json({ error: 'Explique su decisión (mínimo 5 caracteres).' });
+  abono.riskReview = { status, by: actorName(req), at: new Date().toISOString(), note };
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`, type: 'RISK_REVIEW', companyId: raffle.companyId, targetId: ticket.id, targetName: raffle.title,
+    detail: `Alerta de riesgo ${status === 'FRAUDE' ? 'confirmada como FRAUDE' : 'descartada'} (boleta ${(ticket.numbers || []).join('-')}, $${abono.amount}): ${note}`,
+    by: actorName(req), date: new Date().toISOString()
+  });
+  saveDB();
+  notifyRaffleChanged(ticket.raffleId);
+  res.json({ ok: true, review: abono.riskReview });
+});
+
 // Admin validates or rejects a buyer's transfer (it reached the company's account or not)
 app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => {
   const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
@@ -6006,6 +6529,15 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => 
   if (!isTransferAbono(abono)) return res.status(400).json({ error: 'Este pago fue en efectivo: se confirma con la entrega del asesor.' });
   const action = (req.body || {}).action;
   const note = String((req.body || {}).note || '').trim().slice(0, 300);
+  if (action === 'validar' && abonoNeedsRiskReview(abono)) {
+    return res.status(409).json({
+      error: 'Esta transferencia tiene alertas de riesgo sin revisar. Revísela en "Alertas de riesgo" (descartar o confirmar fraude) antes de validarla.',
+      code: 'RISK_REVIEW_REQUIRED'
+    });
+  }
+  if (action === 'validar' && abono.riskReview && abono.riskReview.status === 'FRAUDE') {
+    return res.status(409).json({ error: 'Esta transferencia fue marcada como FRAUDE: no se puede validar. Recházela.', code: 'RISK_FRAUD' });
+  }
   if (action === 'reset') {
     delete abono.verification;
   } else if (action === 'validar' || action === 'rechazar') {
@@ -6027,7 +6559,6 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => 
 
 Hola *${ticket.buyerName || 'Participante'}*, tu transferencia bancaria ha sido confirmada con éxito por nuestro equipo administrativo.
 
-🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
 🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
 💵 *Valor Validado:* $${Number(abono.amount || 0).toLocaleString('es-CO')} COP${approvalTxt}${bankTxt}
 🏆 *Sorteo:* ${raffle.title || 'Gran Sorteo'}
@@ -6073,7 +6604,6 @@ Por favor verifica la transacción o comunícate con nosotros por este medio par
 
 Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
 
-🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
 🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
 💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
 🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
@@ -6208,7 +6738,6 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) =>
 
 Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
 
-🎟️ *Boleta Oficial:* #${ticket.ticketNumber}
 🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
 💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
 🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
@@ -6270,6 +6799,7 @@ setTimeout(() => { if (isDbLoaded) moveDeliveryProofsToAdvisorFolders().catch(()
 function companyOfDriveFile(fileId) {
   const raffleCompany = id => ((db.raffles || []).find(r => r.id === id) || {}).companyId;
   for (const d of db.cashDeliveries || []) if (d.soporteDriveId === fileId) return d.companyId;
+  for (const e of db.expenses || []) if (e.soporteDriveId === fileId) return e.companyId;
   for (const r of db.raffles || []) if (r.aficheDriveId === fileId || r.fondoBoletaDriveId === fileId) return r.companyId;
   for (const t of db.tickets || []) {
     const lists = [t.abonos || [], t.voidedAbonos || [], ...(t.annulments || []).map(a => (a.previous && a.previous.abonos) || [])];
@@ -6515,6 +7045,7 @@ app.get('/api/advisors', (req, res) => {
 // POST Create Advisor
 app.post('/api/advisors', adminOnly, (req, res) => {
   const { name, email, username, password, status, phone, code, mode, assignedTicketRanges, companyId } = req.body;
+  const advisorType = req.body.type;
   const policyError = security.validatePasswordPolicy(password);
   if (policyError) return res.status(400).json({ error: `Contraseña del asesor: ${policyError}` });
   const missing = [];
@@ -6523,6 +7054,7 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   if (!username || String(username).trim().length < 3) missing.push('usuario');
   if (!phone || String(phone).replace(/\D/g, '').length !== 10) missing.push('teléfono de 10 dígitos');
   if (!code || String(code).replace(/\D/g, '').length < 5) missing.push('cédula');
+  if (!ADVISOR_TYPES.includes(advisorType)) missing.push('tipo de asesor (de punto, de calle o integral)');
   if (missing.length) return res.status(400).json({ error: `Falta: ${missing.join(', ')}.` });
   let targetCompanyId = req.auth && req.auth.role === 'admin' ? req.auth.record.id : companyId;
   if (!targetCompanyId && (db.companies || []).length > 0) {
@@ -6557,6 +7089,7 @@ app.post('/api/advisors', adminOnly, (req, res) => {
     phone: phone || '',
     code: code || `ADV${Math.floor(10 + Math.random()*90)}`,
     mode: mode || 'POOL_GENERAL',
+    type: advisorType,
     assignedTicketRanges: [],
     createdAt: new Date().toISOString()
   };
@@ -6612,6 +7145,22 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
   if (req.body.phone !== undefined) advisor.phone = req.body.phone;
   if (req.body.code !== undefined) advisor.code = req.body.code;
   if (req.body.mode !== undefined) advisor.mode = req.body.mode;
+  if (req.body.type !== undefined && req.body.type !== advisorTypeOf(advisor)) {
+    if (!ADVISOR_TYPES.includes(req.body.type)) return res.status(400).json({ error: 'Tipo de asesor no válido.' });
+    // Las ventas ya hechas conservan su zona: se fija con el tipo anterior antes de cambiarlo
+    const previousType = advisorTypeOf(advisor);
+    for (const t of db.tickets || []) {
+      if (t.advisorId === advisor.id && !SALE_ZONES.includes(t.saleZone) && t.status !== 'DISPONIBLE') {
+        t.saleZone = previousType === 'PUNTO' ? 'OFICINA' : 'CALLE';
+      }
+    }
+    advisor.type = req.body.type;
+    if (!db.auditLogs) db.auditLogs = [];
+    db.auditLogs.push({
+      id: `audit-${Date.now()}`, type: 'ADVISOR_TYPE', companyId: advisor.companyId, targetId: advisor.id, targetName: advisor.name,
+      detail: `Tipo de asesor ${previousType} → ${advisor.type} (las ventas anteriores conservan su zona)`, by: actorName(req), date: new Date().toISOString()
+    });
+  }
   if (newRanges) {
     const size = list => list.map(parseRange).filter(Boolean).reduce((sum, r) => sum + r.end - r.start + 1, 0);
     // Assigning more numbers answers the advisor's pending request
@@ -7046,6 +7595,87 @@ app.get('/api/dashboard', (req, res) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Tipos de asesor y zona de venta
+//  • PUNTO: asesor de oficina/punto. NO comisiona (todas sus ventas son de oficina).
+//  • CALLE: asesor de calle. Comisiona en todas sus ventas.
+//  • INTEGRAL: en cada venta se indica si fue en OFICINA (no comisiona) o en CALLE (comisiona).
+// La zona de la venta se guarda en la boleta (ticket.saleZone). Sin zona guardada se deduce del tipo del asesor
+// (los asesores existentes quedan como CALLE: todo sigue comisionando como antes).
+// ---------------------------------------------------------------------------
+const ADVISOR_TYPES = ['PUNTO', 'CALLE', 'INTEGRAL'];
+const advisorTypeOf = adv => (adv && ADVISOR_TYPES.includes(adv.type) ? adv.type : 'CALLE');
+const SALE_ZONES = ['OFICINA', 'CALLE'];
+
+function ticketZoneOf(ticket, advisor) {
+  if (SALE_ZONES.includes(ticket.saleZone)) return ticket.saleZone;
+  return advisorTypeOf(advisor) === 'PUNTO' ? 'OFICINA' : 'CALLE';
+}
+
+/**
+ * Comisión de un asesor en una rifa. Solo cuentan las ventas de CALLE; las de oficina/punto no comisionan.
+ * rules = { commType, commVal, tiers }. Es el único lugar donde se calcula (ranking, liquidación y abonos usan esto).
+ */
+function computeAdvisorCommission(rules, adv, raffleTickets) {
+  const { commType, commVal, tiers } = rules;
+  const type = advisorTypeOf(adv);
+  const advTickets = raffleTickets.filter(t =>
+    t.advisorId === adv.id ||
+    (t.advisorName && t.advisorName.trim().toLowerCase() === adv.name.trim().toLowerCase()) ||
+    (adv.code && t.advisorName && t.advisorName.includes(adv.code))
+  );
+  const counts = t => t.status === 'PAGADA' || t.status === 'CONFIRMADA' || t.status === 'ABONO_PARCIAL';
+  const totalTicketsSold = advTickets.filter(counts).length;
+  const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+
+  const street = advTickets.filter(t => ticketZoneOf(t, adv) === 'CALLE');
+  const office = advTickets.filter(t => ticketZoneOf(t, adv) === 'OFICINA');
+  const streetSold = street.filter(counts).length;
+  const streetCollected = street.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+  const officeSold = office.filter(counts).length;
+  const officeCollected = office.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+
+  let commissionEarned = 0;
+  let activeTier = null;
+  let tierDescription = '';
+
+  if (type === 'PUNTO') {
+    tierDescription = 'Asesor de punto: no comisiona';
+  } else if (commType === 'ESCALONADO' && tiers) {
+    const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
+    for (const t of sortedTiers) {
+      if (streetSold >= (Number(t.min || t.minBoletas) || 0)) activeTier = t;
+    }
+    if (activeTier) {
+      const rate = Number(activeTier.rate) || 0;
+      const maxStr = (activeTier.max !== null && activeTier.max !== undefined && String(activeTier.max).trim() !== '') ? ` a ${activeTier.max}` : ' o más';
+      if ((activeTier.type || 'PORCENTAJE') === 'VALOR_FIJO') {
+        commissionEarned = streetSold * rate;
+        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
+      } else {
+        commissionEarned = (streetCollected * rate) / 100;
+        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de recaudado`;
+      }
+    } else {
+      commissionEarned = (streetCollected * commVal) / 100;
+      tierDescription = `${commVal}% base`;
+    }
+  } else if (commType === 'VALOR_FIJO') {
+    commissionEarned = streetSold * commVal;
+    tierDescription = `$${commVal.toLocaleString('es-CO')} COP por boleta`;
+  } else {
+    commissionEarned = (streetCollected * commVal) / 100;
+    tierDescription = `${commVal}% del dinero recaudado`;
+  }
+  if (type === 'INTEGRAL' && officeSold > 0) tierDescription += ` • ${officeSold} de oficina sin comisión`;
+
+  return {
+    type, advTickets, totalTicketsSold, totalCollected, commissionEarned, activeTier, tierDescription,
+    streetSold, streetCollected, officeSold, officeCollected,
+    zoneUndefined: type === 'INTEGRAL' ? advTickets.filter(t => !SALE_ZONES.includes(t.saleZone)).length : 0
+  };
+}
+
 // GET Commissions Summary
 /**
  * Raffle and advisors a commissions request may see: only the caller's company (the SuperAdmin passes a
@@ -7076,69 +7706,30 @@ app.get('/api/commissions', (req, res) => {
   const raffleTickets = db.tickets.filter(t => t.raffleId === targetRaffleId);
 
   const advisorStats = advisors.map(adv => {
-    const advTickets = raffleTickets.filter(t => 
-      t.advisorId === adv.id || 
-      (t.advisorName && t.advisorName.trim().toLowerCase() === adv.name.trim().toLowerCase()) ||
-      (adv.code && t.advisorName && t.advisorName.includes(adv.code))
-    );
-    
-    const paidTickets = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'CONFIRMADA');
-    const partialTickets = advTickets.filter(t => t.status === 'ABONO_PARCIAL');
-    const totalTicketsSold = paidTickets.length + partialTickets.length;
-    
-    const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
-
-    let commissionEarned = 0;
-    let activeTier = null;
-    let tierDescription = '';
-
-    if (commType === 'ESCALONADO' && tiers) {
-      const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
-      for (const t of sortedTiers) {
-        const min = Number(t.min || t.minBoletas) || 0;
-        if (totalTicketsSold >= min) {
-          activeTier = t;
-        }
-      }
-      if (activeTier) {
-        const rate = Number(activeTier.rate) || 0;
-        const tType = activeTier.type || 'PORCENTAJE';
-        const maxStr = (activeTier.max !== null && activeTier.max !== undefined && String(activeTier.max).trim() !== '') ? ` a ${activeTier.max}` : ' o más';
-        if (tType === 'VALOR_FIJO') {
-          commissionEarned = totalTicketsSold * rate;
-          tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
-        } else {
-          commissionEarned = (totalCollected * rate) / 100;
-          tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de recaudado`;
-        }
-      } else {
-        commissionEarned = (totalCollected * commVal) / 100;
-        tierDescription = `${commVal}% base`;
-      }
-    } else if (commType === 'VALOR_FIJO') {
-      commissionEarned = totalTicketsSold * commVal;
-      tierDescription = `$${commVal.toLocaleString('es-CO')} COP por boleta`;
-    } else {
-      commissionEarned = (totalCollected * commVal) / 100;
-      tierDescription = `${commVal}% del dinero recaudado`;
-    }
-
+    const c = computeAdvisorCommission({ commType, commVal, tiers }, adv, raffleTickets);
     const advPayouts = db.commissionPayouts.filter(p => p.advisorId === adv.id && (p.raffleId === targetRaffleId || !p.raffleId));
     const commissionPaid = advPayouts.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const pendingCommission = Math.max(0, commissionEarned - commissionPaid);
+    const pendingCommission = Math.max(0, c.commissionEarned - commissionPaid);
 
     return {
       advisorId: adv.id,
       advisorName: adv.name,
       advisorCode: adv.code,
       phone: adv.phone,
-      totalTicketsSold,
-      totalCollected,
-      commissionEarned,
+      advisorType: c.type,
+      totalTicketsSold: c.totalTicketsSold,
+      totalCollected: c.totalCollected,
+      // Solo las ventas de calle comisionan; las de oficina/punto se muestran aparte
+      streetSold: c.streetSold,
+      streetCollected: c.streetCollected,
+      officeSold: c.officeSold,
+      officeCollected: c.officeCollected,
+      zoneUndefined: c.zoneUndefined,
+      commissionEarned: c.commissionEarned,
       commissionPaid,
       pendingCommission,
-      activeTier,
-      tierDescription,
+      activeTier: c.activeTier,
+      tierDescription: c.tierDescription,
       payoutsCount: advPayouts.length
     };
   });
@@ -7204,26 +7795,8 @@ app.post('/api/commissions/payout', adminOnly, async (req, res) => {
 
     let totalPaidOut = 0;
     advisors.forEach(adv => {
-      const advTickets = raffleTickets.filter(t => t.advisorId === adv.id || (t.advisorName && t.advisorName.trim().toLowerCase() === adv.name.trim().toLowerCase()));
-      const totalTicketsSold = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'CONFIRMADA' || t.status === 'ABONO_PARCIAL').length;
-      const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
-
-      let earned = 0;
-      if (commType === 'ESCALONADO' && tiers) {
-        const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
-        let activeTier = sortedTiers[0];
-        for (const t of sortedTiers) {
-          if (totalTicketsSold >= (Number(t.min || t.minBoletas) || 0)) activeTier = t;
-        }
-        if (activeTier) {
-          const rate = Number(activeTier.rate) || 0;
-          earned = activeTier.type === 'VALOR_FIJO' ? (totalTicketsSold * rate) : ((totalCollected * rate) / 100);
-        }
-      } else if (commType === 'VALOR_FIJO') {
-        earned = totalTicketsSold * commVal;
-      } else {
-        earned = (totalCollected * commVal) / 100;
-      }
+      // Mismo cálculo que el resumen: solo comisionan las ventas de calle
+      const earned = computeAdvisorCommission({ commType, commVal, tiers }, adv, raffleTickets).commissionEarned;
 
       const advPayouts = db.commissionPayouts.filter(p => p.advisorId === adv.id && (p.raffleId === targetRaffleId || !p.raffleId));
       const paid = advPayouts.reduce((sum, p) => sum + (p.amount || 0), 0);

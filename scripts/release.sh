@@ -53,7 +53,7 @@ fi
 
 export PATH="$HOME/flutter/bin:$PATH"
 flutter test
-flutter build web --release
+scripts/build-web.sh
 rsync -a --delete build/web/ backend/public/
 
 git add pubspec.yaml lib/version.dart backend/package.json backend/package-lock.json CHANGELOG.md backend/public

@@ -688,8 +688,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(
                     labelText: 'Valor de la boleta (COP) *',
-                    prefixText: '\$ ',
-                    helperText: 'El nuevo valor se aplica a las boletas aún disponibles. Las ya vendidas, apartadas o con abonos conservan su valor.',
+                    helperText: 'El nuevo valor se aplica a todas las boletas. Solo conservan su valor las que ya tienen pagado un monto igual o mayor al nuevo precio.',
                     helperMaxLines: 3,
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.attach_money),

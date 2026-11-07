@@ -87,6 +87,19 @@
       });
     }
 
+    // Recarga completa: elimina service workers y cachés para cargar la versión nueva del servidor
+    window.hardReload = async function() {
+      try {
+        var regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function(r) { return r.unregister(); }));
+      } catch (e) {}
+      try {
+        var keys = await caches.keys();
+        await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+      } catch (e) {}
+      window.location.reload();
+    };
+
     // PWA Install prompt capture
     window.deferredPWAInstallPrompt = null;
     window.addEventListener('beforeinstallprompt', function(e) {

@@ -15,8 +15,13 @@ void printPage() {
 
 void reloadPage() {
   try {
-    html.window.location.reload();
-  } catch (_) {}
+    // hardReload (index.html) borra service workers y cachés antes de recargar
+    js.context.callMethod('hardReload');
+  } catch (_) {
+    try {
+      html.window.location.reload();
+    } catch (_) {}
+  }
 }
 
 void promptPwaInstall() {
