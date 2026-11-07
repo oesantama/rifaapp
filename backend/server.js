@@ -5,6 +5,7 @@ const path = require('path');
 const security = require('./security');
 const driveService = require('./driveService');
 const whatsappService = require('./whatsappService');
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://45-137-192-195.sslip.io').replace(/\/+$/, '');
 let admin;
 try {
   admin = require('firebase-admin');
@@ -1184,6 +1185,17 @@ app.get(['/boleta', '/consulta'], (req, res) => {
     phone: rawQuery,
     baseUrl
   }));
+});
+
+// Ruta corta de verificación /v/:code
+app.get('/v/:code', (req, res) => {
+  res.redirect(`/verificar/${encodeURIComponent(req.params.code)}`);
+});
+
+// Ruta corta de consulta de boletas /b
+app.get('/b', (req, res) => {
+  const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect(`/boleta${query}`);
 });
 
 // Verificación por código QR /verificar/:code (muestra el portal completo del comprador)
@@ -3676,7 +3688,10 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
     enlace_verificacion: code ? `${baseUrl}/verificar/${code}` : '(disponible cuando la boleta esté registrada)',
     codigo_verificacion: code || '—'
   };
-  const lines = String(template).split('\n');
+  let cleanTpl = String(template || '')
+    .replace(/([^\n\r])\s*\{enlace_verificacion\}/g, '$1\n{enlace_verificacion}')
+    .replace(/\{enlace_verificacion\}\s*([^\n\r])/g, '{enlace_verificacion}\n$1');
+  const lines = cleanTpl.split('\n');
   return lines
     .filter(line => !(line.trim() === '{cuentas}' && !values.cuentas))
     .join('\n')
@@ -3894,6 +3909,25 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
         .catch(err => console.error('⚠️ Error actualizando nombre de carpeta en Drive:', err.message));
     }
   }
+  if (req.body.ticketPrice !== undefined) {
+    const newPrice = Math.round(Number(req.body.ticketPrice));
+    if (!Number.isFinite(newPrice) || newPrice <= 0) return res.status(400).json({ error: 'El valor de la boleta debe ser mayor a 0.' });
+    if (newPrice !== raffle.ticketPrice) {
+      const oldPrice = raffle.ticketPrice;
+      raffle.ticketPrice = newPrice;
+      // Solo cambian las boletas sin movimiento; las vendidas/apartadas/con abonos conservan su valor
+      let updated = 0;
+      (db.tickets || []).forEach(t => {
+        if (t.raffleId === raffle.id && t.status === 'DISPONIBLE' && !t.buyerName && !(t.totalPaid > 0)) { t.price = newPrice; updated++; }
+      });
+      if (!db.auditLogs) db.auditLogs = [];
+      db.auditLogs.push({
+        id: `audit-${Date.now()}`, type: 'TICKET_PRICE', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title,
+        detail: `Valor de boleta ${oldPrice} → ${newPrice} (${updated} boletas disponibles actualizadas)`,
+        by: actorName(req), date: new Date().toISOString()
+      });
+    }
+  }
   if (req.body.description !== undefined) raffle.description = req.body.description;
   if (Array.isArray(req.body.prizeImages)) raffle.prizeImages = req.body.prizeImages;
   if (req.body.mainDrawDate !== undefined) raffle.mainDrawDate = req.body.mainDrawDate;
@@ -3901,6 +3935,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   if (req.body.assignedAdvisorIds !== undefined) raffle.assignedAdvisorIds = req.body.assignedAdvisorIds;
   if (req.body.commissionType !== undefined) raffle.commissionType = req.body.commissionType;
   if (req.body.commissionValue !== undefined) raffle.commissionValue = parseFloat(req.body.commissionValue) || 0;
+  if (req.body.commissionTiers !== undefined) raffle.commissionTiers = Array.isArray(req.body.commissionTiers) ? req.body.commissionTiers : [];
   if (req.body.templateConfig !== undefined && req.body.templateConfig !== null && typeof req.body.templateConfig === 'object') {
     const { templateImageBase64, ...settings } = req.body.templateConfig;
     // An image sent inside the settings (older app versions) goes to the template store
@@ -4157,6 +4192,44 @@ app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
   raffle.scheduledDeletionAt = new Date(drawMs + DB_PURGE_DAYS * 86400000).toISOString();
   saveDB();
   res.json(raffle);
+});
+
+// Re-organiza al azar los números (oportunidades) de las boletas. Solo si TODAS siguen disponibles
+// (ninguna vendida, apartada, con abonos ni comprador) y la boleta tiene 2 o más oportunidades.
+app.post('/api/raffles/:id/reshuffle-numbers', adminOnly, (req, res) => {
+  const raffle = (db.raffles || []).find(r => r.id === req.params.id);
+  if (!raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Rifa no encontrada.' });
+  if (raffle.scheduledDeletionAt) return res.status(400).json({ error: 'La rifa está cerrada.' });
+  const tickets = (db.tickets || []).filter(t => t.raffleId === raffle.id);
+  if (tickets.length === 0) return res.status(400).json({ error: 'La rifa no tiene boletas.' });
+  const untouched = t => t.status === 'DISPONIBLE' && !t.buyerName && !t.buyerPhone && !(t.totalPaid > 0) && !(Array.isArray(t.abonos) && t.abonos.length);
+  if (!tickets.every(untouched)) {
+    return res.status(409).json({ error: 'Ya hay boletas vendidas, apartadas o con abonos. Solo se puede reorganizar mientras todas estén disponibles.' });
+  }
+  if (!tickets.some(t => Array.isArray(t.numbers) && t.numbers.length >= 2)) {
+    return res.status(400).json({ error: 'La reorganización aplica solo cuando cada boleta tiene 2 o más oportunidades.' });
+  }
+  // Se reparte el mismo conjunto de números, en orden aleatorio (Fisher-Yates con crypto)
+  const crypto = require('crypto');
+  const pool = tickets.flatMap(t => t.numbers || []);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  let idx = 0;
+  tickets.forEach(t => {
+    const n = (t.numbers || []).length;
+    t.numbers = pool.slice(idx, idx + n);
+    idx += n;
+  });
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({
+    id: `audit-${Date.now()}`, type: 'RESHUFFLE_NUMBERS', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title,
+    detail: `Números reorganizados al azar en ${tickets.length} boletas (todas disponibles)`,
+    by: actorName(req), date: new Date().toISOString()
+  });
+  saveDB();
+  res.json({ message: 'Números reorganizados al azar.', tickets: tickets.length });
 });
 
 app.post('/api/raffles/:id/reopen', adminOnly, (req, res) => {
@@ -4688,6 +4761,7 @@ app.post('/api/raffles', adminOnly, (req, res) => {
     assignedAdvisorIds: selectedAdvisors,
     commissionType: commissionType || 'PORCENTAJE',
     commissionValue: parseFloat(commissionValue) || 10,
+    commissionTiers: Array.isArray(req.body.commissionTiers) ? req.body.commissionTiers : [],
     // Which lottery digits decide the winner, and whether "combinado" (any order) also wins
     winningDigitsPosition: 'ULTIMAS',
     allowCombined: false,
@@ -4970,6 +5044,27 @@ app.get('/api/tickets', (req, res) => {
       (t.buyerDocument || '').includes(q) ||
       t.numbers.some(n => n.includes(q))
     );
+  }
+
+  // Resolver asesor asignado dinámicamente si el número cae en el rango de un asesor
+  const compAdvisors = (db.advisors || []).filter(a => 
+    (!targetCompanyId || a.companyId === targetCompanyId) &&
+    a.status === 'ACTIVO' &&
+    a.mode === 'ASSIGNED' &&
+    Array.isArray(a.assignedTicketRanges) &&
+    a.assignedTicketRanges.length > 0
+  );
+
+  if (compAdvisors.length > 0) {
+    result.forEach(t => {
+      if (!t.advisorId || !t.advisorName) {
+        const matchingAdv = compAdvisors.find(a => ticketInAdvisorRanges(t, a));
+        if (matchingAdv) {
+          t.advisorId = matchingAdv.id;
+          t.advisorName = matchingAdv.name;
+        }
+      }
+    });
   }
 
   res.json(result.map(withVerification));
@@ -5891,7 +5986,7 @@ Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completam
 📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
 
 🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
@@ -5939,7 +6034,7 @@ Hola *${ticket.buyerName || 'Participante'}*, tu transferencia bancaria ha sido 
 📌 *Estado:* ${isFull ? 'PAGADA / CONFIRMADA (Activa para el sorteo)' : `ABONADA ($${totalPaid.toLocaleString('es-CO')} de $${Number(raffle.ticketPrice || 0).toLocaleString('es-CO')})`}
 
 🌐 *Puedes consultar y descargar tu Boleta Oficial con QR y Soporte Digital aquí:*
-https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
@@ -5985,7 +6080,7 @@ Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completam
 📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
 
 🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
@@ -6120,7 +6215,7 @@ Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completam
 📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
 
 🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-https://45-137-192-195.sslip.io/boleta?phone=${ticket.buyerPhone}
+${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
@@ -6975,6 +7070,7 @@ app.get('/api/commissions', (req, res) => {
   
   const commType = raffle ? (raffle.commissionType || 'PORCENTAJE') : 'PORCENTAJE';
   const commVal = raffle ? (parseFloat(raffle.commissionValue) || 10) : 10;
+  const tiers = raffle && Array.isArray(raffle.commissionTiers) && raffle.commissionTiers.length > 0 ? raffle.commissionTiers : null;
   const ticketPrice = raffle ? (parseFloat(raffle.ticketPrice) || 50000) : 50000;
 
   const raffleTickets = db.tickets.filter(t => t.raffleId === targetRaffleId);
@@ -6993,10 +7089,38 @@ app.get('/api/commissions', (req, res) => {
     const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
 
     let commissionEarned = 0;
-    if (commType === 'VALOR_FIJO') {
+    let activeTier = null;
+    let tierDescription = '';
+
+    if (commType === 'ESCALONADO' && tiers) {
+      const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
+      for (const t of sortedTiers) {
+        const min = Number(t.min || t.minBoletas) || 0;
+        if (totalTicketsSold >= min) {
+          activeTier = t;
+        }
+      }
+      if (activeTier) {
+        const rate = Number(activeTier.rate) || 0;
+        const tType = activeTier.type || 'PORCENTAJE';
+        const maxStr = (activeTier.max !== null && activeTier.max !== undefined && String(activeTier.max).trim() !== '') ? ` a ${activeTier.max}` : ' o más';
+        if (tType === 'VALOR_FIJO') {
+          commissionEarned = totalTicketsSold * rate;
+          tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
+        } else {
+          commissionEarned = (totalCollected * rate) / 100;
+          tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de recaudado`;
+        }
+      } else {
+        commissionEarned = (totalCollected * commVal) / 100;
+        tierDescription = `${commVal}% base`;
+      }
+    } else if (commType === 'VALOR_FIJO') {
       commissionEarned = totalTicketsSold * commVal;
+      tierDescription = `$${commVal.toLocaleString('es-CO')} COP por boleta`;
     } else {
       commissionEarned = (totalCollected * commVal) / 100;
+      tierDescription = `${commVal}% del dinero recaudado`;
     }
 
     const advPayouts = db.commissionPayouts.filter(p => p.advisorId === adv.id && (p.raffleId === targetRaffleId || !p.raffleId));
@@ -7013,6 +7137,8 @@ app.get('/api/commissions', (req, res) => {
       commissionEarned,
       commissionPaid,
       pendingCommission,
+      activeTier,
+      tierDescription,
       payoutsCount: advPayouts.length
     };
   });
@@ -7025,27 +7151,55 @@ app.get('/api/commissions', (req, res) => {
     raffleId: targetRaffleId,
     commissionType: commType,
     commissionValue: commVal,
+    commissionTiers: tiers,
     ticketPrice,
     globalCommissionEarned,
     globalCommissionPaid,
     globalPendingCommission,
     advisors: advisorStats,
-    payoutsHistory: db.commissionPayouts.filter(p => advisorIds.has(p.advisorId) && (p.raffleId === targetRaffleId || !p.raffleId))
+    payoutsHistory: (db.commissionPayouts || []).filter(p => advisorIds.has(p.advisorId) && (p.raffleId === targetRaffleId || !p.raffleId))
   });
 });
 
-// POST Commission Payout
-app.post('/api/commissions/payout', adminOnly, (req, res) => {
+// POST Commission Payout (con soporte en Drive, abonos o liquidaciones totales, método y fecha)
+app.post('/api/commissions/payout', adminOnly, async (req, res) => {
   if (!db.commissionPayouts) db.commissionPayouts = [];
-  const { advisorId, amount, note, raffleId } = req.body;
+  const { advisorId, amount, note, raffleId, paymentMethod, date, payoutType, approvalNumber, soporteBase64, soporteImageBase64 } = req.body || {};
   const { raffle, advisors } = commissionScope(req, raffleId);
   if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada.' });
   const targetRaffleId = raffle.id;
   const payoutAmount = parseFloat(amount) || 0;
 
+  // Si envían comprobante de foto base64, subir a Google Drive
+  let soporteDriveId = null;
+  let soporteUrl = null;
+  let soporteWebViewUrl = null;
+
+  const rawImage = soporteBase64 || soporteImageBase64;
+  if (rawImage && typeof rawImage === 'string' && rawImage.length > 50) {
+    try {
+      const cleanBase64 = rawImage.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      const filename = `comprobante_comision_${advisorId}_${Date.now()}.jpg`;
+      const up = await driveService.uploadFileToDrive({
+        buffer,
+        filename,
+        mimeType: 'image/jpeg'
+      });
+      if (up) {
+        soporteDriveId = up.fileId;
+        soporteUrl = up.directUrl;
+        soporteWebViewUrl = up.webViewUrl;
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudo subir soporte de comisión a Drive:', e.message);
+    }
+  }
+
   if (advisorId === 'ALL') {
     const commType = raffle ? (raffle.commissionType || 'PORCENTAJE') : 'PORCENTAJE';
     const commVal = raffle ? (parseFloat(raffle.commissionValue) || 10) : 10;
+    const tiers = raffle && Array.isArray(raffle.commissionTiers) && raffle.commissionTiers.length > 0 ? raffle.commissionTiers : null;
     const raffleTickets = db.tickets.filter(t => t.raffleId === targetRaffleId);
 
     let totalPaidOut = 0;
@@ -7054,7 +7208,23 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
       const totalTicketsSold = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'CONFIRMADA' || t.status === 'ABONO_PARCIAL').length;
       const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
 
-      let earned = commType === 'VALOR_FIJO' ? (totalTicketsSold * commVal) : ((totalCollected * commVal) / 100);
+      let earned = 0;
+      if (commType === 'ESCALONADO' && tiers) {
+        const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
+        let activeTier = sortedTiers[0];
+        for (const t of sortedTiers) {
+          if (totalTicketsSold >= (Number(t.min || t.minBoletas) || 0)) activeTier = t;
+        }
+        if (activeTier) {
+          const rate = Number(activeTier.rate) || 0;
+          earned = activeTier.type === 'VALOR_FIJO' ? (totalTicketsSold * rate) : ((totalCollected * rate) / 100);
+        }
+      } else if (commType === 'VALOR_FIJO') {
+        earned = totalTicketsSold * commVal;
+      } else {
+        earned = (totalCollected * commVal) / 100;
+      }
+
       const advPayouts = db.commissionPayouts.filter(p => p.advisorId === adv.id && (p.raffleId === targetRaffleId || !p.raffleId));
       const paid = advPayouts.reduce((sum, p) => sum + (p.amount || 0), 0);
       const pending = Math.max(0, earned - paid);
@@ -7066,7 +7236,14 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
           advisorName: adv.name,
           companyId: raffle.companyId,
           amount: pending,
-          date: new Date().toISOString(),
+          payoutType: 'TOTAL',
+          paymentMethod: paymentMethod || 'efectivo',
+          date: date ? new Date(date).toISOString() : new Date().toISOString(),
+          approvalNumber: approvalNumber || '',
+          soporteDriveId,
+          soporteUrl,
+          soporteWebViewUrl,
+          registeredBy: actorName(req),
           note: note || 'Liquidación Global de Comisiones',
           raffleId: targetRaffleId
         });
@@ -7088,8 +7265,15 @@ app.post('/api/commissions/payout', adminOnly, (req, res) => {
     advisorName: advisor.name,
     companyId: raffle.companyId,
     amount: payoutAmount,
-    date: new Date().toISOString(),
-    note: note || 'Pago de Comisión Asesor',
+    payoutType: payoutType || 'ABONO',
+    paymentMethod: paymentMethod || 'efectivo',
+    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    approvalNumber: approvalNumber || '',
+    soporteDriveId,
+    soporteUrl,
+    soporteWebViewUrl,
+    registeredBy: actorName(req),
+    note: note || (payoutType === 'TOTAL' ? 'Liquidación Total de Comisión' : 'Abono a Comisión'),
     raffleId: targetRaffleId
   };
 

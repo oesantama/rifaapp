@@ -272,6 +272,10 @@ class _TicketGridViewState extends State<TicketGridView> {
                         _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL', statusCounts['ABONO_PARCIAL'] ?? 0),
                         const SizedBox(width: 8),
                         _buildFilterChip(context, ticketVM, 'PAGADA', statusCounts['PAGADA'] ?? 0),
+                        if ((statusCounts['POR_VALIDAR'] ?? 0) > 0) ...[
+                          const SizedBox(width: 8),
+                          _buildFilterChip(context, ticketVM, 'POR_VALIDAR', statusCounts['POR_VALIDAR'] ?? 0),
+                        ],
                       ],
                     ),
                   ),
@@ -335,16 +339,28 @@ class _TicketGridViewState extends State<TicketGridView> {
 
   Widget _buildFilterChip(BuildContext context, TicketViewModel ticketVM, String status, int count) {
     bool isSelected = ticketVM.selectedStatusFilter == status;
-    String label = status == 'TODOS' ? 'Todas' : AppTheme.getStatusLabel(status);
+    bool isPorValidar = status == 'POR_VALIDAR';
+    String label = status == 'TODOS'
+        ? 'Todas'
+        : (isPorValidar ? '⚠️ Transferencias por Validar' : AppTheme.getStatusLabel(status));
 
     return FilterChip(
-      label: Text('$label ($count)'),
+      avatar: isPorValidar ? Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade900) : null,
+      label: Text(
+        '$label ($count)',
+        style: TextStyle(
+          fontWeight: isPorValidar ? FontWeight.bold : FontWeight.normal,
+          color: isPorValidar ? Colors.amber.shade900 : null,
+        ),
+      ),
       selected: isSelected,
       onSelected: (_) {
         ticketVM.setStatusFilter(status);
       },
-      selectedColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
-      checkmarkColor: AppTheme.primaryBlue,
+      backgroundColor: isPorValidar ? Colors.amber.shade50 : null,
+      side: isPorValidar ? BorderSide(color: Colors.amber.shade800, width: 1.2) : null,
+      selectedColor: isPorValidar ? Colors.amber.shade200 : AppTheme.primaryBlue.withValues(alpha: 0.2),
+      checkmarkColor: isPorValidar ? Colors.amber.shade900 : AppTheme.primaryBlue,
     );
   }
 
@@ -456,7 +472,26 @@ class _TicketGridViewState extends State<TicketGridView> {
                           ),
                         ),
                       ],
-                      if (ticket.saleChannel.isNotEmpty) ...[
+                      if (ticket.isSoldByBot || ticket.saleChannel.toLowerCase().contains('bot')) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF6366F1), width: 0.8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.smart_toy_rounded, size: 11, color: Color(0xFF4F46E5)),
+                              SizedBox(width: 2),
+                              Text('Bot', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF4F46E5))),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (ticket.saleChannel.isNotEmpty && !ticket.saleChannel.toLowerCase().contains('bot')) ...[
                         const SizedBox(width: 6),
                         Flexible(child: _buildChannelChip(ticket.saleChannel)),
                       ],
@@ -509,8 +544,38 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ],
                       ),
                     )
-                  else
-                    const Text('Disponible para venta', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  else ...[
+                    if (ticket.advisorName.trim().isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.blue.shade300, width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.badge_outlined, size: 12, color: Colors.blue.shade800),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'Asignada: ${ticket.advisorName.trim()}',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      const Text('Disponible para venta', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
                   const SizedBox(height: 4),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -531,7 +596,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ],
                       ),
                       const SizedBox(width: 6),
-                      // Who handled the ticket (hidden while nobody has taken it)
+                      // Who handled or owns the ticket: ALWAYS SHOW IF ASSIGNED
                       if (ticket.advisorName.trim().isNotEmpty)
                         Expanded(
                           child: Tooltip(
@@ -541,7 +606,11 @@ class _TicketGridViewState extends State<TicketGridView> {
                               textAlign: TextAlign.right,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 10.5, color: Colors.grey[700], fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: ticket.status == 'DISPONIBLE' ? Colors.blue.shade800 : Colors.grey[700],
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),

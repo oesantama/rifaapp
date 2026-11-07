@@ -71,8 +71,28 @@ class RaffleRepository {
 
   Future<Map<String, dynamic>> fetchCommissions({String? raffleId}) => _apiService.getCommissions(raffleId: raffleId);
 
-  Future<bool> postCommissionPayout({required String advisorId, required double amount, String? note, String? raffleId}) =>
-      _apiService.postCommissionPayout(advisorId: advisorId, amount: amount, note: note, raffleId: raffleId);
+  Future<bool> postCommissionPayout({
+    required String advisorId,
+    required double amount,
+    String? note,
+    String? raffleId,
+    String? paymentMethod,
+    String? date,
+    String? payoutType,
+    String? approvalNumber,
+    String? soporteBase64,
+  }) =>
+      _apiService.postCommissionPayout(
+        advisorId: advisorId,
+        amount: amount,
+        note: note,
+        raffleId: raffleId,
+        paymentMethod: paymentMethod,
+        date: date,
+        payoutType: payoutType,
+        approvalNumber: approvalNumber,
+        soporteBase64: soporteBase64,
+      );
 
   Future<bool> deleteAdvisor(String id, {String? reason}) => _apiService.deleteAdvisor(id, reason: reason);
 

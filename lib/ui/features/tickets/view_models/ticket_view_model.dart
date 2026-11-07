@@ -107,7 +107,13 @@ class TicketViewModel extends ChangeNotifier {
   List<Ticket> get searchedTickets =>
       _tickets.where((t) => (_selectedAdvisorFilter == null || t.advisorId == _selectedAdvisorFilter) && _matchesSearch(t)).toList();
 
-  static bool matchesStatus(Ticket t, String status) => status == 'TODOS' || t.status == status;
+  static bool matchesStatus(Ticket t, String status) {
+    if (status == 'TODOS') return true;
+    if (status == 'POR_VALIDAR') {
+      return t.abonos.any((a) => a.isTransfer && a.cashState == 'POR_VALIDAR');
+    }
+    return t.status == status;
+  }
 
   /// Number of tickets per status (plus 'TODOS') within [source].
   static Map<String, int> countByStatus(List<Ticket> source) {
@@ -115,6 +121,7 @@ class TicketViewModel extends ChangeNotifier {
     for (final t in source) {
       counts[t.status] = (counts[t.status] ?? 0) + 1;
     }
+    counts['POR_VALIDAR'] = source.where((t) => t.abonos.any((a) => a.isTransfer && a.cashState == 'POR_VALIDAR')).length;
     return counts;
   }
 

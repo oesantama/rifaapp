@@ -986,14 +986,34 @@ class ApiService {
     };
   }
 
-  Future<bool> postCommissionPayout({required String advisorId, required double amount, String? note, String? raffleId}) async {
+  Future<bool> postCommissionPayout({
+    required String advisorId,
+    required double amount,
+    String? note,
+    String? raffleId,
+    String? paymentMethod,
+    String? date,
+    String? payoutType,
+    String? approvalNumber,
+    String? soporteBase64,
+  }) async {
     if (!_useLocalFallback) {
       try {
         final response = await authPost(
           Uri.parse('$baseUrl/commissions/payout'),
           headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'advisorId': advisorId, 'amount': amount, 'note': note ?? '', 'raffleId': raffleId}),
-        ).timeout(const Duration(seconds: 3));
+          body: jsonEncode({
+            'advisorId': advisorId,
+            'amount': amount,
+            'note': note ?? '',
+            'raffleId': raffleId,
+            if (paymentMethod != null) 'paymentMethod': paymentMethod,
+            if (date != null) 'date': date,
+            if (payoutType != null) 'payoutType': payoutType,
+            if (approvalNumber != null) 'approvalNumber': approvalNumber,
+            if (soporteBase64 != null) 'soporteBase64': soporteBase64,
+          }),
+        ).timeout(const Duration(seconds: 30));
         if (response.statusCode == 200 || response.statusCode == 201) {
           return true;
         }
@@ -1214,6 +1234,14 @@ class ApiService {
     final response =
         await authPost(Uri.parse('$baseUrl/raffles/$raffleId/${reopen ? 'reopen' : 'close'}')).timeout(const Duration(seconds: 20));
     if (response.statusCode == 200) return Raffle.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  /// Re-shuffles the numbers of all tickets at random (only allowed while every ticket is still available).
+  Future<void> reshuffleRaffleNumbers(String raffleId) async {
+    final response =
+        await authPost(Uri.parse('$baseUrl/raffles/$raffleId/reshuffle-numbers')).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 200) return;
     throw ApiException.fromResponse(response);
   }
 

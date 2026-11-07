@@ -30,6 +30,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
+  late TextEditingController _ticketPriceController;
   late TextEditingController _prizeImagesController;
 
   late bool _isActive;
@@ -40,6 +41,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
   late String _commissionType;
   late TextEditingController _commissionValueController;
+  late List<CommissionTier> _commissionTiers;
 
   late bool _hasWeeklyDraws;
   late String _winningPosition;
@@ -117,6 +119,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     super.initState();
     _titleController = TextEditingController(text: widget.raffle.title);
     _descriptionController = TextEditingController(text: widget.raffle.description);
+    _ticketPriceController = TextEditingController(text: widget.raffle.ticketPrice.toStringAsFixed(0));
     _prizeImagesController = TextEditingController(text: widget.raffle.prizeImages.join('\n'));
     _prizeImagesController.addListener(_refreshPrizeImages);
     _mainDrawDateController = TextEditingController(text: DateFormatterColombia.formatShort(widget.raffle.mainDrawDate));
@@ -125,6 +128,13 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _selectedAdvisorIds = List.from(widget.raffle.assignedAdvisorIds);
     _commissionType = widget.raffle.commissionType;
     _commissionValueController = TextEditingController(text: widget.raffle.commissionValue.toStringAsFixed(0));
+    _commissionTiers = widget.raffle.commissionTiers.isNotEmpty
+        ? List.from(widget.raffle.commissionTiers)
+        : [
+            CommissionTier(min: 1, max: 20, rate: 10, type: 'PORCENTAJE'),
+            CommissionTier(min: 21, max: 50, rate: 15, type: 'PORCENTAJE'),
+            CommissionTier(min: 51, max: null, rate: 20, type: 'PORCENTAJE'),
+          ];
 
     _hasWeeklyDraws = widget.raffle.hasWeeklyDraws;
     _winningPosition = widget.raffle.winningDigitsPosition;
@@ -148,6 +158,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _prizeImagesController.removeListener(_refreshPrizeImages);
     _titleController.dispose();
     _descriptionController.dispose();
+    _ticketPriceController.dispose();
     _prizeImagesController.dispose();
     _mainDrawDateController.dispose();
     _weeklyPrizesStartDateController.dispose();
@@ -584,6 +595,32 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     );
   }
 
+  Future<void> _reshuffleNumbers(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Reorganizar números al azar?'),
+        content: const Text(
+            'Se mezclarán de nuevo, de forma aleatoria, los números de todas las boletas. Los números anteriores dejarán de ser válidos. Solo es posible mientras ninguna boleta esté vendida ni apartada.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reorganizar')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
+    try {
+      await ApiService().reshuffleRaffleNumbers(widget.raffle.id);
+      await ticketVM.loadTickets(raffleId: widget.raffle.id);
+      messenger.showSnackBar(const SnackBar(
+          backgroundColor: AppTheme.secondaryEmerald, content: Text('Números reorganizados al azar.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(e.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final advisorVM = Provider.of<AdvisorViewModel>(context);
@@ -642,6 +679,22 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                 TextFormField(
                   controller: _descriptionController,
                   decoration: const InputDecoration(labelText: 'Descripción del Premio', border: OutlineInputBorder()),
+                ),
+                const SizedBox(height: 12),
+
+                TextFormField(
+                  controller: _ticketPriceController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Valor de la boleta (COP) *',
+                    prefixText: '\$ ',
+                    helperText: 'El nuevo valor se aplica a las boletas aún disponibles. Las ya vendidas, apartadas o con abonos conservan su valor.',
+                    helperMaxLines: 3,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.attach_money),
+                  ),
+                  validator: (v) => (int.tryParse((v ?? '').trim()) ?? 0) <= 0 ? 'Ingrese un valor mayor a 0' : null,
                 ),
                 const SizedBox(height: 12),
 
@@ -823,7 +876,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       child: RadioListTile<String>(
                         value: 'PORCENTAJE',
                         groupValue: _commissionType,
-                        title: const Text('Porcentaje (%)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        title: const Text('Porcentaje Fijo (%)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                         onChanged: (v) => setState(() {
                           _commissionType = v!;
                           if (_commissionValueController.text == '5000') {
@@ -839,7 +892,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       child: RadioListTile<String>(
                         value: 'VALOR_FIJO',
                         groupValue: _commissionType,
-                        title: const Text('Valor Fijo (\$ COP)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        title: const Text('Valor Fijo (\$ COP)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                         onChanged: (v) => setState(() {
                           _commissionType = v!;
                           if (_commissionValueController.text == '10') {
@@ -850,23 +903,201 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
+                    ResponsiveFlexChild(
+                      expand: !isNarrowScreen(context),
+                      child: RadioListTile<String>(
+                        value: 'ESCALONADO',
+                        groupValue: _commissionType,
+                        title: const Text('Por Rangos / Metas', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                        onChanged: (v) => setState(() => _commissionType = v!),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                TextFormField(
-                  controller: _commissionValueController,
-                  decoration: InputDecoration(
-                    labelText: _commissionType == 'PORCENTAJE' ? 'Porcentaje de Ganancia (%) *' : 'Valor Fijo por Boleta (\$ COP) *',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: Icon(_commissionType == 'PORCENTAJE' ? Icons.percent : Icons.attach_money),
-                    helperText: _commissionType == 'PORCENTAJE'
-                        ? 'Ejemplo: 10% de \$50.000 = \$5.000 COP de comisión por boleta.'
-                        : 'Ejemplo: \$5.000 COP de comisión fija por cada boleta vendida.',
+                const SizedBox(height: 8),
+                if (_commissionType != 'ESCALONADO')
+                  TextFormField(
+                    controller: _commissionValueController,
+                    decoration: InputDecoration(
+                      labelText: _commissionType == 'PORCENTAJE' ? 'Porcentaje de Ganancia (%) *' : 'Valor Fijo por Boleta (\$ COP) *',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: Icon(_commissionType == 'PORCENTAJE' ? Icons.percent : Icons.attach_money),
+                      helperText: _commissionType == 'PORCENTAJE'
+                          ? 'Ejemplo: 10% de \$50.000 = \$5.000 COP de comisión por boleta.'
+                          : 'Ejemplo: \$5.000 COP de comisión fija por cada boleta vendida.',
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (v) => (v == null || v.isEmpty || double.tryParse(v) == null) ? 'Ingrese valor de comisión' : null,
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.stairs_outlined, color: AppTheme.primaryBlue, size: 20),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Escala de Comisiones por Cantidad de Boletas Vendidas:',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                            ),
+                            TextButton.icon(
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Agregar Rango', style: TextStyle(fontSize: 12)),
+                              onPressed: () {
+                                setState(() {
+                                  int lastMax = _commissionTiers.isNotEmpty && _commissionTiers.last.max != null 
+                                      ? _commissionTiers.last.max! + 1 
+                                      : (_commissionTiers.length + 1) * 20;
+                                  _commissionTiers.add(CommissionTier(min: lastMax, max: lastMax + 30, rate: 20, type: 'PORCENTAJE'));
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'El asesor ganará la comisión según la cantidad de boletas que logre vender (ej: 1 a 20 -> 10%, 21 a 50 -> 15%, más de 50 -> 20%).',
+                          style: TextStyle(fontSize: 11, color: Colors.black87),
+                        ),
+                        const SizedBox(height: 10),
+                        for (int i = 0; i < _commissionTiers.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 75,
+                                  child: TextFormField(
+                                    initialValue: _commissionTiers[i].min.toString(),
+                                    decoration: const InputDecoration(labelText: 'Desde', isDense: true, border: OutlineInputBorder()),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    onChanged: (v) {
+                                      int val = int.tryParse(v) ?? 1;
+                                      final cur = _commissionTiers[i];
+                                      _commissionTiers[i] = CommissionTier(min: val, max: cur.max, rate: cur.rate, type: cur.type);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 85,
+                                  child: TextFormField(
+                                    initialValue: _commissionTiers[i].max?.toString() ?? '',
+                                    decoration: const InputDecoration(labelText: 'Hasta (+)', hintText: 'En adelante', isDense: true, border: OutlineInputBorder()),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    onChanged: (v) {
+                                      int? val = int.tryParse(v.trim());
+                                      final cur = _commissionTiers[i];
+                                      _commissionTiers[i] = CommissionTier(min: cur.min, max: val, rate: cur.rate, type: cur.type);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    initialValue: _commissionTiers[i].rate.toStringAsFixed(0),
+                                    decoration: InputDecoration(
+                                      labelText: _commissionTiers[i].type == 'PORCENTAJE' ? 'Ganancia %' : 'Valor \$',
+                                      isDense: true,
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                    onChanged: (v) {
+                                      double val = double.tryParse(v) ?? 10.0;
+                                      final cur = _commissionTiers[i];
+                                      _commissionTiers[i] = CommissionTier(min: cur.min, max: cur.max, rate: val, type: cur.type);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                DropdownButton<String>(
+                                  value: _commissionTiers[i].type,
+                                  underline: const SizedBox(),
+                                  items: const [
+                                    DropdownMenuItem(value: 'PORCENTAJE', child: Text('%', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    DropdownMenuItem(value: 'VALOR_FIJO', child: Text('\$', style: TextStyle(fontWeight: FontWeight.bold))),
+                                  ],
+                                  onChanged: (nv) {
+                                    if (nv == null) return;
+                                    setState(() {
+                                      final cur = _commissionTiers[i];
+                                      _commissionTiers[i] = CommissionTier(min: cur.min, max: cur.max, rate: cur.rate, type: nv);
+                                    });
+                                  },
+                                ),
+                                if (_commissionTiers.length > 1)
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                                    tooltip: 'Quitar rango',
+                                    onPressed: () {
+                                      setState(() => _commissionTiers.removeAt(i));
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  validator: (v) => (v == null || v.isEmpty || double.tryParse(v) == null) ? 'Ingrese valor de comisión' : null,
-                ),
+
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+
+                // REORGANIZAR NÚMEROS AL AZAR (solo si todas las boletas siguen disponibles)
+                Builder(builder: (context) {
+                  final raffleTickets = Provider.of<TicketViewModel>(context)
+                      .tickets
+                      .where((t) => t.raffleId == widget.raffle.id)
+                      .toList();
+                  final allAvailable = raffleTickets.isNotEmpty && raffleTickets.every((t) => t.status == 'DISPONIBLE');
+                  final canReshuffle = allAvailable && widget.raffle.opportunitiesPerTicket >= 2;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(Icons.shuffle, color: AppTheme.primaryBlue, size: 20),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text('Reorganizar números al azar',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ),
+                      ]),
+                      const SizedBox(height: 4),
+                      Text(
+                        canReshuffle
+                            ? 'Ninguna boleta se ha vendido ni apartado: puedes volver a mezclar al azar los números de cada boleta si no te gusta la distribución actual.'
+                            : widget.raffle.opportunitiesPerTicket < 2
+                                ? 'Disponible solo cuando cada boleta tiene 2 o más oportunidades.'
+                                : 'No disponible: ya hay boletas vendidas, apartadas o con abonos.',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.shuffle, size: 18),
+                        label: const Text('Reorganizar al azar'),
+                        onPressed: canReshuffle ? () => _reshuffleNumbers(context) : null,
+                      ),
+                    ],
+                  );
+                }),
 
                 const SizedBox(height: 16),
                 const Divider(),
@@ -1409,6 +1640,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           bool ok = await raffleVM.updateRaffle(widget.raffle.id, {
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
+                            'ticketPrice': double.tryParse(_ticketPriceController.text.trim()) ?? widget.raffle.ticketPrice,
                             'prizeImages': _prizeImagesController.text
                                 .split(RegExp(r'[\n,]+'))
                                 .map((e) => e.trim())
@@ -1419,7 +1651,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                             'status': _isActive ? 'ACTIVA' : 'INACTIVA',
                             'assignedAdvisorIds': _selectedAdvisorIds,
                             'commissionType': _commissionType,
-                            'commissionValue': double.parse(_commissionValueController.text),
+                            'commissionValue': double.tryParse(_commissionValueController.text) ?? 10.0,
+                            'commissionTiers': _commissionTiers.map((t) => t.toJson()).toList(),
                             'hasWeeklyDraws': _hasWeeklyDraws,
                             'winningDigitsPosition': _winningPosition,
                             'allowCombined': _allowCombined,

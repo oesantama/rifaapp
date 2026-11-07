@@ -5,6 +5,7 @@
 const EVOLUTION_URL = process.env.EVOLUTION_URL || 'http://evolution_api:8080';
 const EVOLUTION_APIKEY = process.env.EVOLUTION_APIKEY || 'rifaapp_evo_secret_key_2026';
 const PUBLIC_WEBHOOK_URL = process.env.PUBLIC_WEBHOOK_URL || 'http://45.137.192.195/api/whatsapp/webhook';
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "https://45-137-192-195.sslip.io").replace(/\/+$/, "");
 
 /**
  * Normaliza números telefónicos para WhatsApp:
@@ -185,6 +186,119 @@ function updateSession(senderPhone, data, db, saveDBCallback, raffleId) {
 function cleanTitle(str) {
   if (!str) return '';
   return str.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function getBusinessDisplayName(company) {
+  if (!company) return 'Santa María';
+  const raw = company.name || company.companyName || '';
+  if (/santamaria/i.test(raw)) return 'Santa María';
+  return raw || 'Santa María';
+}
+
+function parseRange(str) {
+  if (!str) return null;
+  const parts = String(str).trim().split('-');
+  const start = parseInt(parts[0], 10);
+  const end = parts.length > 1 ? parseInt(parts[1], 10) : start;
+  if (isNaN(start) || isNaN(end) || start < 0 || end < start) return null;
+  return { start, end };
+}
+
+function ticketNumbersOf(ticket) {
+  const nums = (ticket.numbers || []).map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+  return nums.length ? nums : [ticket.ticketNumber];
+}
+
+function ticketInAdvisorRanges(ticket, advisor) {
+  if (!advisor || advisor.mode !== 'ASSIGNED') return true;
+  const ranges = (advisor.assignedTicketRanges || []).map(parseRange).filter(Boolean);
+  if (!ranges.length) return true;
+  return ticketNumbersOf(ticket).some(n => ranges.some(r => n >= r.start && n <= r.end));
+}
+
+function getAssignedAdvisorForTicket(ticket, raffle, db) {
+  if (!ticket) return null;
+  if (ticket.advisorId) {
+    const direct = (db.advisors || []).find(a => a.id === ticket.advisorId);
+    if (direct) return direct;
+  }
+  const companyId = raffle?.companyId || ticket.companyId;
+  const advisors = (db.advisors || []).filter(a => 
+    (!companyId || a.companyId === companyId) && 
+    a.status === 'ACTIVO' && 
+    a.mode === 'ASSIGNED' && 
+    Array.isArray(a.assignedTicketRanges) && 
+    a.assignedTicketRanges.length > 0
+  );
+  for (const adv of advisors) {
+    if (ticketInAdvisorRanges(ticket, adv)) {
+      return adv;
+    }
+  }
+  return null;
+}
+
+function buildMainMenuMessage(companyName, advisor = null) {
+  let msg = `👋 ¡Hola! Te comunicas con *${companyName}* 🏢✨\n`;
+  if (advisor) {
+    msg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🏢✨\n`;
+  }
+  msg += `_Constructora • Inmobiliaria • Rifas y Eventos_\n\n`;
+  msg += `Con gusto te atendemos. Por favor elige el área de tu interés:\n\n`;
+  msg += `1️⃣ 🎟️ *Rifas y Sorteos Oficiales*\n`;
+  msg += `   (Consulta de boletas, números disponibles, plan de premios y pagos)\n\n`;
+  msg += `2️⃣ 🏗️ *Constructora y Proyectos*\n`;
+  msg += `   (Construcción de viviendas, obras civiles, venta de lotes, remodelaciones y presupuestos)\n\n`;
+  msg += `3️⃣ 👤 *Hablar con un Asesor*\n`;
+  msg += `   (Atención humana personalizada para cualquier consulta)\n\n`;
+  msg += `👉 _Responde con el número de tu opción (*1*, *2* o *3*) o cuéntanos qué necesitas._`;
+  return msg;
+}
+
+function buildConstructoraMessage(companyName) {
+  let msg = `🏗️ *CONSTRUCTORA Y PROYECTOS - ${companyName}* 🏡✨\n`;
+  msg += `_Diseño, planeación y construcción de obras civiles e inmobiliarias con garantía y cumplimiento legal._\n\n`;
+  msg += `🛠️ *Nuestros Servicios Principales:*\n`;
+  msg += `• 🏠 *Construcción de Viviendas:* Casas campestres, urbanas, cabañas y fincas (llave en mano, obra gris o acabados de lujo).\n`;
+  msg += `• 📐 *Diseños y Planos Arquitectónicos:* Modelado 3D, cálculos estructurales y gestión de licencias.\n`;
+  msg += `• 🔨 *Remodelaciones y Obra Civil:* Fachadas, pisos, cocinas integrales, cubiertas, pintura y estructuras.\n`;
+  msg += `• 🏞️ *Venta de Lotes y Parcelas:* Terrenos disponibles para proyectos residenciales y campestres en la región.\n`;
+  msg += `• 🏊‍♂️ *Piscinas, Kioscos y Zonas Sociales.*\n\n`;
+  msg += `📋 *¿En qué te podemos colaborar hoy?*\n`;
+  msg += `• Escribe *COTIZAR* indicando el tipo de obra, medidas o ubicación para formular una propuesta.\n`;
+  msg += `• Escribe *ASESOR* para hablar directamente con nuestro director de proyectos o arquitecto.\n`;
+  msg += `• Escribe *MENU* para volver al menú de opciones.`;
+  return msg;
+}
+
+function buildAdvisorHandOffMessage(companyName, advisor = null) {
+  let msg = `👤 *¡TRANSFERIDO A ATENCIÓN HUMANA!* 📲✨\n\n`;
+  if (advisor) {
+    msg += `Nuestro asesor *${advisor.name}* de *${companyName}* ha sido notificado y te responderá directamente por este mismo chat en breve.\n\n`;
+  } else {
+    msg += `Hemos notificado a nuestro equipo de *${companyName}*. Un asesor humano se comunicará contigo por este mismo chat a la brevedad.\n\n`;
+  }
+  msg += `_(Hemos pausado las respuestas automáticas para este chat para que puedas conversar libremente con el asesor).\n\n`;
+  msg += `💡 *Si en cualquier momento deseas volver al menú automático, solo escribe MENU o BOT.*`;
+  return msg;
+}
+
+function buildRaffleMessage(mainRaffle, companyName, digits, opportunities, ticketPrice, drawDateFormatted, lotteryName) {
+  let msg = `🎟️ *RIFAS Y SORTEOS OFICIALES - ${companyName}* 🏆\n\n`;
+  msg += `🎯 *Gran Sorteo:* ${mainRaffle.title}\n`;
+  if (mainRaffle.description) msg += `🏆 *Premio Mayor:* ${mainRaffle.description}\n`;
+  msg += `🔢 *Modalidad:* ${digits} cifras (${opportunities} oportunidades por boleta)\n`;
+  msg += `📅 *Juega el:* ${drawDateFormatted} con ${lotteryName}\n`;
+  msg += `💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
+  if (mainRaffle.minAbono) msg += `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n`;
+  msg += `\n📌 *¿Qué deseas hacer?*\n`;
+  msg += `• Escribe un *número de ${digits} cifras* para consultar si está libre (ej: ${digits === 4 ? '1987' : '428'}).\n`;
+  msg += `• Escribe *DISPONIBLES* para ver opciones libres al azar.\n`;
+  msg += `• Escribe *PREMIOS* para conocer el plan de premios y semanales.\n`;
+  msg += `• Escribe *CUENTAS* para ver los medios de pago (Nequi / Bancolombia).\n`;
+  msg += `• Envía la *foto de tu comprobante* si ya realizaste tu pago.\n`;
+  msg += `• Escribe *MENU* para volver al menú de opciones.`;
+  return msg;
 }
 
 /**
@@ -470,7 +584,23 @@ _(Escribe el número de la opción o tu consulta)_`;
     company = db.companies[0];
   }
 
-  const companyName = company?.name || company?.companyName || 'Rifa Master';
+  const companyName = getBusinessDisplayName(company);
+  const session = getSession(senderPhone, db);
+
+  // 0. Si el chat está actualmente en atención manual por un asesor humano:
+  if (session?.humanAssisted) {
+    const isHumanResetCommand = cleanLower === 'menu' || cleanLower === 'menú' || cleanLower === 'bot' || 
+                                cleanLower === 'reiniciar' || cleanLower === 'volver' || 
+                                cleanLower === '1' || cleanLower === '2' || cleanLower === '3';
+    const hoursSinceAssisted = (Date.now() - (session.humanAssistedAt || 0)) / (1000 * 60 * 60);
+
+    if (!isHumanResetCommand && hoursSinceAssisted < 12) {
+      console.log(`👤 [WhatsApp Bot (${instance})] Chat ${senderPhone} en atención humana activa (hace ${hoursSinceAssisted.toFixed(1)}h); se omite auto-respuesta.`);
+      return { handled: true, humanAssisted: true };
+    } else {
+      updateSession(senderPhone, { humanAssisted: false }, db, saveDBCallback, null);
+    }
+  }
 
   // Buscar rifas activas de la empresa
   const activeRaffles = (db.raffles || []).filter(r => 
@@ -481,10 +611,16 @@ _(Escribe el número de la opción o tu consulta)_`;
   const mainRaffle = activeRaffles[0];
 
   if (!mainRaffle) {
-    let noRaffleMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n\n`;
-    noRaffleMsg += `Actualmente estamos afinando los detalles de nuestro próximo gran sorteo.\n`;
-    noRaffleMsg += `Muy pronto publicaremos las fechas, premios y abriremos la venta de boletas.\n\n`;
-    noRaffleMsg += `Escribe *CUENTAS* si deseas consultar información de contacto o medios de pago.`;
+    if (cleanLower === '2' || cleanLower.includes('constructora') || cleanLower.includes('obra')) {
+      await sendTextMessage(instance, senderPhone, buildConstructoraMessage(companyName));
+      return { handled: true };
+    }
+    if (cleanLower === '3' || cleanLower.includes('asesor') || cleanLower.includes('humano')) {
+      updateSession(senderPhone, { humanAssisted: true, humanAssistedAt: Date.now() }, db, saveDBCallback, null);
+      await sendTextMessage(instance, senderPhone, buildAdvisorHandOffMessage(companyName, advisor));
+      return { handled: true };
+    }
+    const noRaffleMsg = buildMainMenuMessage(companyName, advisor);
     await sendTextMessage(instance, senderPhone, noRaffleMsg);
     return { handled: true };
   }
@@ -502,7 +638,20 @@ _(Escribe el número de la opción o tu consulta)_`;
 
   // 1. RECEPCIÓN DE COMPROBANTES DE PAGO / TRANSFERENCIA (FOTO)
   if (hasImage) {
-    const session = getSession(senderPhone, db);
+    // Si la imagen viene acompañada de texto sobre obra o el usuario estaba en constructora:
+    if (session?.currentTopic === 'constructora' || cleanLower.includes('obra') || cleanLower.includes('constructora') || cleanLower.includes('anticipo') || cleanLower.includes('material')) {
+      const receiptReply = 
+`📸 *¡Comprobante para Constructora recibido con éxito!* 🏗️✅
+
+Hemos registrado el soporte de pago para *${companyName} Constructora y Proyectos*.
+Nuestro equipo administrativo validará la transferencia en cuenta y emitirá tu soporte de anticipo / abono oficial de obra.
+
+Un asesor se pondrá en contacto contigo para coordinar el avance o visita técnica.
+_(Escribe *MENU* para volver al menú de opciones)._`;
+      await sendTextMessage(instance, senderPhone, receiptReply);
+      return { handled: true };
+    }
+
     let targetTicket = null;
     let numberIdentified = '';
 
@@ -522,8 +671,14 @@ _(Escribe el número de la opción o tu consulta)_`;
         numberIdentified = freeTicket.numbers[0];
         targetTicket.status = 'RESERVADA';
         targetTicket.buyerPhone = senderPhone;
-        targetTicket.saleChannel = 'WhatsApp';
+        targetTicket.soldByBot = true;
+        targetTicket.saleChannel = 'Bot WhatsApp';
         targetTicket.assignedDate = new Date().toISOString();
+        const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
+        if (assignedAdv) {
+          targetTicket.advisorId = assignedAdv.id;
+          targetTicket.advisorName = assignedAdv.name;
+        }
       }
     }
 
@@ -537,6 +692,14 @@ _(Escribe el número de la opción o tu consulta)_`;
     const duplicateVoucher = detectedApproval ? checkDuplicateApprovalNumber(detectedApproval, targetTicket?.id, db) : null;
 
     if (targetTicket) {
+      targetTicket.soldByBot = true;
+      targetTicket.saleChannel = targetTicket.saleChannel || 'Bot WhatsApp';
+      const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
+      if (assignedAdv) {
+        targetTicket.advisorId = assignedAdv.id;
+        targetTicket.advisorName = assignedAdv.name;
+      }
+
       targetTicket.abonos = targetTicket.abonos || [];
       let existingAbono = targetTicket.abonos.find(a => a.isTransfer || a.metodoPago === 'transferencia');
       if (!existingAbono) {
@@ -545,8 +708,8 @@ _(Escribe el número de la opción o tu consulta)_`;
           amount: detectedAmount,
           metodoPago: 'transferencia',
           date: new Date().toISOString(),
-          sellerId: targetTicket.advisorId || (advisor ? advisor.id : ''),
-          sellerName: targetTicket.advisorName || (advisor ? advisor.name : 'Venta WhatsApp'),
+          sellerId: targetTicket.advisorId || (assignedAdv ? assignedAdv.id : ''),
+          sellerName: targetTicket.advisorName ? `${targetTicket.advisorName} (🤖 Bot WhatsApp)` : '🤖 Bot WhatsApp',
           note: `Transferencia reportada por WhatsApp${detectedApproval ? ` (Comprobante: #${detectedApproval})` : ''}`,
           approvalNumber: detectedApproval,
           originBank: detectedBank,
@@ -560,7 +723,17 @@ _(Escribe el número de la opción o tu consulta)_`;
         if (transferInfo.amount) existingAbono.amount = transferInfo.amount;
         if (transferInfo.approvalNumber) existingAbono.approvalNumber = transferInfo.approvalNumber;
         if (transferInfo.bank) existingAbono.originBank = transferInfo.bank;
+        if (targetTicket.advisorName) existingAbono.sellerName = `${targetTicket.advisorName} (🤖 Bot WhatsApp)`;
       }
+
+      targetTicket.auditLogs = targetTicket.auditLogs || [];
+      targetTicket.auditLogs.push({
+        id: `log-${Date.now()}`,
+        date: new Date().toISOString(),
+        user: '🤖 Bot WhatsApp',
+        action: 'VENTA_BOT',
+        description: `Comprobante de pago ($${Number(detectedAmount).toLocaleString('es-CO')}) reportado vía Bot WhatsApp${targetTicket.advisorName ? ` • Asesor: ${targetTicket.advisorName}` : ''}`
+      });
 
       targetTicket.pendingTransferValidation = true;
       targetTicket.totalPaid = (targetTicket.abonos || []).reduce((s, a) => s + (a.amount || 0), 0);
@@ -626,7 +799,7 @@ _(Escribe el número de la opción o tu consulta)_`;
       receiptReply += `📍 *Ciudad:* ${knownCity}, ${knownCountry}\n\n`;
       receiptReply += `✨ *Todos tus datos ya están completos y vinculados.* Nuestro equipo administrativo validará la transferencia en cuenta bancaria y activará tu boleta oficial.\n\n`;
       receiptReply += `🌐 *Puedes consultar tu boleta y Soporte Digital de Compra aquí:*\n`;
-      receiptReply += `https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}\n\n`;
+      receiptReply += `${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}\n\n`;
       receiptReply += `¡Muchas gracias y mucha suerte en el sorteo! 🍀`;
     } else {
       let registeredLines = [];
@@ -662,8 +835,8 @@ _(Escribe el número de la opción o tu consulta)_`;
   }
 
   // 1.5. RESPUESTA SOBRE ASESOR RECOMENDADO / REFERIDO
-  const session = getSession(senderPhone, db);
-  const targetTkt = session?.lastTicketId ? (db.tickets || []).find(t => t.id === session.lastTicketId) : (db.tickets || []).find(t => t.buyerPhone === senderPhone);
+  const refreshedSession = getSession(senderPhone, db);
+  const targetTkt = refreshedSession?.lastTicketId ? (db.tickets || []).find(t => t.id === refreshedSession.lastTicketId) : (db.tickets || []).find(t => t.buyerPhone === senderPhone);
   if (targetTkt && (!targetTkt.advisorName || targetTkt.advisorName === 'Venta WhatsApp')) {
     if (cleanLower === 'ninguno' || cleanLower === 'ninguna' || cleanLower === 'nadie' || cleanLower === 'directo' || cleanLower === 'no') {
       targetTkt.advisorId = null;
@@ -749,11 +922,13 @@ _(Escribe el número de la opción o tu consulta)_`;
       if (profile.city) targetTicket.buyerCity = profile.city;
       if (profile.country) targetTicket.buyerCountry = profile.country;
       targetTicket.buyerPhone = senderPhone;
-      targetTicket.saleChannel = targetTicket.saleChannel || 'WhatsApp';
+      targetTicket.soldByBot = true;
+      targetTicket.saleChannel = 'Bot WhatsApp';
       targetTicket.assignedDate = targetTicket.assignedDate || new Date().toISOString();
-      if (advisor) {
-        targetTicket.advisorId = advisor.id;
-        targetTicket.advisorName = advisor.name;
+      const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
+      if (assignedAdv) {
+        targetTicket.advisorId = assignedAdv.id;
+        targetTicket.advisorName = assignedAdv.name;
       }
       if (targetTicket.status === 'DISPONIBLE') {
         targetTicket.status = 'RESERVADA';
@@ -784,7 +959,7 @@ ${advisor ? `👤 *Asesor:* ${advisor.name}\n` : ''}📱 *WhatsApp:* ${senderPho
 💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP
 
 🌐 *Consulta tu boleta digital oficial y soporte de compra:*
-https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}
+${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}
 
 Tus datos han quedado formalmente registrados para el sorteo y la emisión de tu soporte de compra. Nuestro equipo validará el comprobante bancario para emitir la certificación oficial.
 _(Si deseas cambiar de número, escribe el nuevo número que deseas)._ ¡Mucha suerte! 🍀`;
@@ -815,7 +990,107 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
     }
   }
 
+  // =============================================================
+  // ENRUTAMIENTO MULTI-SERVICIO Y MENÚ DE ATENCIÓN (Rifas / Constructora / Asesor)
+  // =============================================================
 
+  // A. HABLAR CON UN ASESOR HUMANO (Opción 3)
+  if (cleanLower === '3' || 
+      cleanLower === 'asesor' || cleanLower === 'asesora' ||
+      cleanLower.includes('humano') || cleanLower.includes('persona') ||
+      cleanLower.includes('hablar con') || cleanLower.includes('comercial') ||
+      cleanLower.includes('llamar') || cleanLower.includes('atencion') ||
+      cleanLower.includes('atención') || cleanLower.includes('agente')) {
+    
+    updateSession(senderPhone, {
+      humanAssisted: true,
+      humanAssistedAt: Date.now()
+    }, db, saveDBCallback, mainRaffle?.id);
+
+    const handoffMsg = buildAdvisorHandOffMessage(companyName, advisor);
+    await sendTextMessage(instance, senderPhone, handoffMsg);
+    return { handled: true };
+  }
+
+  // B. CONSTRUCTORA Y PROYECTOS (Opción 2)
+  if (cleanLower === '2' || 
+      cleanLower.includes('constructora') || 
+      cleanLower.includes('construccion') || cleanLower.includes('construcción') ||
+      cleanLower.includes('obra') || cleanLower.includes('obras') ||
+      cleanLower.includes('remodelacion') || cleanLower.includes('remodelación') ||
+      cleanLower.includes('lote') || cleanLower.includes('lotes') ||
+      cleanLower.includes('parcela') || cleanLower.includes('parcelas') ||
+      cleanLower.includes('terreno') || cleanLower.includes('terrenos') ||
+      cleanLower.includes('inmobiliaria') ||
+      cleanLower.includes('plano') || cleanLower.includes('planos') ||
+      cleanLower.includes('diseño') || cleanLower.includes('diseno') ||
+      cleanLower.includes('casa campestre') || cleanLower.includes('construir')) {
+    
+    updateSession(senderPhone, {
+      currentTopic: 'constructora',
+      humanAssisted: false
+    }, db, saveDBCallback, mainRaffle?.id);
+
+    const constMsg = buildConstructoraMessage(companyName);
+    await sendTextMessage(instance, senderPhone, constMsg);
+    return { handled: true };
+  }
+
+  // C. SOLICITUD DE COTIZACIÓN DE CONSTRUCCIÓN
+  if (cleanLower.includes('cotizar') || cleanLower.includes('cotizacion') || cleanLower.includes('cotización') || cleanLower.includes('presupuesto')) {
+    updateSession(senderPhone, {
+      currentTopic: 'constructora',
+      humanAssisted: false
+    }, db, saveDBCallback, mainRaffle?.id);
+
+    const quoteMsg = 
+`📐 *¡SOLICITUD DE COTIZACIÓN DE OBRA!* 🏗️✨
+
+Para estructurar tu cotización personalizada con *${companyName} Constructora*, indícanos:
+1️⃣ *Tipo de proyecto:* (Casa campestre, vivienda urbana, cabaña, piscina, remodelación o lote).
+2️⃣ *Medidas estimadas:* (Metros cuadrados de construcción o área del terreno).
+3️⃣ *Ubicación:* (Municipio o vereda donde se desarrollará la obra).
+
+Un asesor técnico o arquitecto evaluará los requerimientos para formular la propuesta.
+_(Escribe *ASESOR* si deseas agendar visita técnica en el lote o llamada directa)._`;
+
+    await sendTextMessage(instance, senderPhone, quoteMsg);
+    return { handled: true };
+  }
+
+  // D. ENTRADA EXPLÍCITA AL FLUJO DE RIFAS (Opción 1)
+  if (cleanLower === '1' || cleanLower === 'rifa' || cleanLower === 'rifas' || 
+      cleanLower === 'sorteo' || cleanLower === 'sorteos' || 
+      cleanLower === 'boleta' || cleanLower === 'boletas' ||
+      cleanLower.includes('comprar boleta')) {
+    
+    updateSession(senderPhone, {
+      currentTopic: 'rifa',
+      humanAssisted: false
+    }, db, saveDBCallback, mainRaffle?.id);
+
+    const raffleMsg = buildRaffleMessage(mainRaffle, companyName, digits, opportunities, ticketPrice, drawDateFormatted, lotteryName);
+    await sendTextMessage(instance, senderPhone, raffleMsg);
+    return { handled: true };
+  }
+
+  // E. MENÚ PRINCIPAL MULTI-SERVICIO (GREETINGS, MENU, INICIO, AYUDA)
+  if (cleanLower === 'menu' || cleanLower === 'menú' || cleanLower === 'inicio' || 
+      cleanLower === 'opciones' || cleanLower === 'servicios' || cleanLower === 'volver' || 
+      cleanLower === 'bot' || cleanLower === 'ayuda' || cleanLower === 'hola' || 
+      cleanLower === 'buenas' || cleanLower === 'buen dia' || cleanLower === 'buenos dias' || 
+      cleanLower === 'buenas tardes' || cleanLower === 'buenas noches' || 
+      cleanLower === 'saludos' || cleanLower === 'cordial saludo') {
+    
+    updateSession(senderPhone, {
+      currentTopic: null,
+      humanAssisted: false
+    }, db, saveDBCallback, mainRaffle?.id);
+
+    const menuMsg = buildMainMenuMessage(companyName, advisor);
+    await sendTextMessage(instance, senderPhone, menuMsg);
+    return { handled: true };
+  }
 
   // 3. CONSULTA DE MEDIOS DE PAGO / CUENTAS (Priorizando cuentas de la rifa)
   if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
@@ -959,6 +1234,12 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
         }
 
         // Si ya teníamos datos del comprador en la sesión, transferirlos a la nueva boleta
+        const assignedAdv = getAssignedAdvisorForTicket(matchedTicket, mainRaffle, db) || advisor;
+        if (assignedAdv) {
+          matchedTicket.advisorId = assignedAdv.id;
+          matchedTicket.advisorName = assignedAdv.name;
+        }
+
         if (prevSession && (prevSession.buyerName || prevSession.buyerDocument)) {
           if (prevSession.buyerName) matchedTicket.buyerName = prevSession.buyerName;
           if (prevSession.buyerDocument) matchedTicket.buyerDocument = prevSession.buyerDocument;
@@ -966,13 +1247,18 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
           if (prevSession.buyerCity) matchedTicket.buyerCity = prevSession.buyerCity;
           if (prevSession.buyerCountry) matchedTicket.buyerCountry = prevSession.buyerCountry;
           matchedTicket.buyerPhone = senderPhone;
-          matchedTicket.saleChannel = matchedTicket.saleChannel || 'WhatsApp';
+          matchedTicket.soldByBot = true;
+          matchedTicket.saleChannel = 'Bot WhatsApp';
           matchedTicket.assignedDate = matchedTicket.assignedDate || new Date().toISOString();
-          if (advisor) {
-            matchedTicket.advisorId = advisor.id;
-            matchedTicket.advisorName = advisor.name;
-          }
           matchedTicket.status = 'RESERVADA';
+          matchedTicket.auditLogs = matchedTicket.auditLogs || [];
+          matchedTicket.auditLogs.push({
+            id: `log-${Date.now()}`,
+            date: new Date().toISOString(),
+            user: '🤖 Bot WhatsApp',
+            action: 'VENTA_BOT',
+            description: `Boleta reservada por Bot de WhatsApp${matchedTicket.advisorName ? ` • Asignada a: ${matchedTicket.advisorName}` : ''}`
+          });
           if (typeof saveDBCallback === 'function') {
             saveDBCallback(mainRaffle.id);
           }
@@ -994,14 +1280,19 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
 
 🎟️ *Tu nueva boleta es:* #${matchedTicket.ticketNumber}
 🔢 *Juegas con el número:* *${paddedNumber}* ${otherOpportunities.length > 0 ? `(y también con *${otherOpportunities.join(', ')}*)` : ''}
-${matchedTicket.buyerName ? `👤 *Titular:* ${matchedTicket.buyerName}\n` : ''}${matchedTicket.buyerDocument ? `🪪 *Cédula/NIT:* ${matchedTicket.buyerDocument}\n` : ''}💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
+${matchedTicket.buyerName ? `👤 *Titular:* ${matchedTicket.buyerName}\n` : ''}${matchedTicket.buyerDocument ? `🪪 *Cédula/NIT:* ${matchedTicket.buyerDocument}\n` : ''}${matchedTicket.advisorName ? `👤 *Asesor:* ${matchedTicket.advisorName}\n` : ''}💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
 🎯 *Sorteo:* ${mainRaffle.title} el ${drawDateFormatted}
 
-${!matchedTicket.buyerDocument ? '📋 *Por favor indícanos tu Nombre, Cédula/NIT, Correo electrónico y Ciudad* para vincular tus datos al soporte digital de compra y tu boleta oficial.' : `🌐 *Puedes consultar tu boleta actualizada:* https://45-137-192-195.sslip.io/boleta?phone=${senderPhone}`}
+${!matchedTicket.buyerDocument ? '📋 *Por favor indícanos tu Nombre, Cédula/NIT, Correo electrónico y Ciudad* para vincular tus datos al soporte digital de compra y tu boleta oficial.' : `🌐 *Puedes consultar tu boleta actualizada:* ${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}`}
 _(Si deseas cambiar a otro número, solo escribe el nuevo número)._ 🍀`;
 
           await sendTextMessage(instance, senderPhone, changeMsg);
           return { handled: true };
+        }
+
+        let advisorTxt = '';
+        if (assignedAdv) {
+          advisorTxt = `\n👤 *Asesor asignado:* *${assignedAdv.name}*\n💡 _(Este número se encuentra asignado a nuestro asesor *${assignedAdv.name}*. Si lo deseas, podemos apartártelo aquí directamente o puedes validar con él)._\n`;
         }
 
         const availReply = 
@@ -1011,8 +1302,7 @@ _(Si deseas cambiar a otro número, solo escribe el nuevo número)._ 🍀`;
 🔢 *Juegas con:* *${paddedNumber}* ${otherOpportunities.length > 0 ? `(y también con *${otherOpportunities.join(', ')}*)` : ''}
 💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP
 ${mainRaffle.minAbono ? `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n` : ''}🎯 *Sorteo:* ${mainRaffle.title}
-🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}
-
+🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}${advisorTxt}
 ✍️ *¿Deseas apartarlo ahora mismo?*
 Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la foto de tu comprobante de pago Nequi/Bancolombia) para reservártelo de inmediato a este número de WhatsApp.`;
 
@@ -1053,27 +1343,26 @@ Indícanos tu *NOMBRE COMPLETO, CÉDULA/NIT, CORREO y CIUDAD* (o envíanos la fo
     }
   }
 
-  // 9. SALUDO GENERAL Y MENÚ INFORMATIVO
-  let welcomeMsg = `👋 ¡Hola! Te comunicas con *${companyName}* 🎟️\n`;
-  if (advisor) {
-    welcomeMsg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🎟️\n`;
+  // 9. FALLBACK Y ENRUTAMIENTO INTELIGENTE
+  if (session?.currentTopic === 'constructora') {
+    const constFollowup = 
+`👷‍♂️ *Constructora y Proyectos - ${companyName}* 🏗️
+Hemos recibido tu mensaje. Para coordinar los detalles de tu obra, presupuesto o visita técnica:
+• Escribe *ASESOR* para hablar con nuestro director de proyectos.
+• Escribe *COTIZAR* para solicitar una cotización formal.
+• Escribe *MENU* para volver al menú de opciones.`;
+    await sendTextMessage(instance, senderPhone, constFollowup);
+    return { handled: true };
   }
 
-  welcomeMsg += `\n🎯 *Gran Sorteo:* ${mainRaffle.title}\n`;
-  if (mainRaffle.description) welcomeMsg += `🏆 *Premio Mayor:* ${mainRaffle.description}\n`;
-  welcomeMsg += `🔢 *Modalidad:* ${digits} cifras (${opportunities} oportunidades por boleta)\n`;
-  welcomeMsg += `📅 *Juega el:* ${drawDateFormatted} con ${lotteryName}\n`;
-  welcomeMsg += `💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
+  if (session?.currentTopic === 'rifa') {
+    const raffleMsg = buildRaffleMessage(mainRaffle, companyName, digits, opportunities, ticketPrice, drawDateFormatted, lotteryName);
+    await sendTextMessage(instance, senderPhone, raffleMsg);
+    return { handled: true };
+  }
 
-  welcomeMsg += 
-`\n📌 *¿Qué deseas hacer?*
-• Escribe cualquier *número de ${digits} cifras* para consultar si está libre (ej: *${digits === 4 ? '3456' : '428'}*).
-• Escribe *DISPONIBLES* para ver números libres al azar.
-• Escribe *PREMIOS* para conocer el plan de premios completo.
-• Escribe *CUENTAS* para ver los datos de Nequi / Bancolombia.
-• Envía la *foto de tu comprobante* si ya realizaste tu pago.`;
-
-  await sendTextMessage(instance, senderPhone, welcomeMsg);
+  const defaultMenu = buildMainMenuMessage(companyName, advisor);
+  await sendTextMessage(instance, senderPhone, defaultMenu);
   return { handled: true };
 }
 

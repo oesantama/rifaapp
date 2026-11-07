@@ -80,8 +80,9 @@ class Raffle {
   final String weeklyMinAbonoType; // PORCENTAJE or VALOR_FIJO
   final double weeklyMinAbonoValue; // e.g. 50 (%) or 50000 ($)
   final bool isWeeklyPrizeAccumulative; // Whether weekly prize accumulates if no qualifying winner
-  final String commissionType; // PORCENTAJE or VALOR_FIJO
+  final String commissionType; // PORCENTAJE, VALOR_FIJO, or ESCALONADO
   final double commissionValue; // e.g. 10 (%) or 5000 ($)
+  final List<CommissionTier> commissionTiers; // Escalas por rangos de ventas
   final String weeklyPrizesStartDate;
   final String status;
   final List<String> assignedAdvisorIds;
@@ -160,6 +161,7 @@ class Raffle {
     this.isWeeklyPrizeAccumulative = true,
     this.commissionType = 'PORCENTAJE',
     this.commissionValue = 10.0,
+    this.commissionTiers = const [],
     required this.status,
     this.assignedAdvisorIds = const [],
     this.companyId = 'comp-1',
@@ -211,6 +213,10 @@ class Raffle {
       isWeeklyPrizeAccumulative: json['isWeeklyPrizeAccumulative'] ?? true,
       commissionType: json['commissionType'] ?? 'PORCENTAJE',
       commissionValue: (json['commissionValue'] as num?)?.toDouble() ?? 10.0,
+      commissionTiers: [
+        for (final t in (json['commissionTiers'] as List? ?? []))
+          if (t is Map) CommissionTier.fromJson(Map<String, dynamic>.from(t)),
+      ],
       status: json['status'] ?? 'ACTIVA',
       assignedAdvisorIds: advsList,
       companyId: json['companyId'] ?? 'comp-1',
@@ -260,6 +266,7 @@ class Raffle {
         'isWeeklyPrizeAccumulative': isWeeklyPrizeAccumulative,
         'commissionType': commissionType,
         'commissionValue': commissionValue,
+        'commissionTiers': commissionTiers.map((t) => t.toJson()).toList(),
         'status': status,
         'assignedAdvisorIds': assignedAdvisorIds,
         'companyId': companyId,
@@ -353,4 +360,34 @@ class TransferAccount {
 
   /// One line, e.g. "Bancolombia • Ahorros • 123-456789-01 • llave @rifa • William S".
   String get label => [bank, accountType, accountNumber, if (key.isNotEmpty) 'llave $key', holder].where((p) => p.isNotEmpty).join(' • ');
+}
+
+class CommissionTier {
+  final int min;
+  final int? max;
+  final double rate;
+  final String type; // 'PORCENTAJE' or 'VALOR_FIJO'
+
+  CommissionTier({
+    required this.min,
+    this.max,
+    required this.rate,
+    this.type = 'PORCENTAJE',
+  });
+
+  factory CommissionTier.fromJson(Map<String, dynamic> json) {
+    return CommissionTier(
+      min: (json['min'] as num?)?.toInt() ?? (json['minBoletas'] as num?)?.toInt() ?? 1,
+      max: json['max'] != null ? int.tryParse(json['max'].toString()) : (json['maxBoletas'] != null ? int.tryParse(json['maxBoletas'].toString()) : null),
+      rate: (json['rate'] as num?)?.toDouble() ?? 10.0,
+      type: json['type'] ?? 'PORCENTAJE',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'min': min,
+    if (max != null) 'max': max,
+    'rate': rate,
+    'type': type,
+  };
 }

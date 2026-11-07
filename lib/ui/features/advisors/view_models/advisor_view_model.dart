@@ -128,6 +128,11 @@ class AdvisorViewModel extends ChangeNotifier {
     required double amount,
     String? note,
     String? raffleId,
+    String? paymentMethod,
+    String? date,
+    String? payoutType,
+    String? approvalNumber,
+    String? soporteBase64,
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -138,6 +143,11 @@ class AdvisorViewModel extends ChangeNotifier {
         amount: amount,
         note: note,
         raffleId: raffleId,
+        paymentMethod: paymentMethod,
+        date: date,
+        payoutType: payoutType,
+        approvalNumber: approvalNumber,
+        soporteBase64: soporteBase64,
       );
       if (ok) {
         await loadCommissions(raffleId: raffleId);

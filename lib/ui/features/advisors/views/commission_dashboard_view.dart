@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/advisor_sales_breakdown.dart';
+import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte;
+import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -33,114 +37,311 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
   void _showPayoutDialog(BuildContext context, {required String advisorId, required String advisorName, required double maxPending}) {
     final amountCtrl = TextEditingController(text: maxPending > 0 ? maxPending.toStringAsFixed(0) : '0');
     final noteCtrl = TextEditingController(text: advisorId == 'ALL' ? 'Liquidación masiva de comisiones' : 'Pago de comisión por ventas');
+    final approvalCtrl = TextEditingController();
+    
+    String payoutType = maxPending > 0 ? 'TOTAL' : 'ABONO';
+    String paymentMethod = 'efectivo'; // 'efectivo' or 'transferencia'
+    DateTime paymentDate = DateTime.now();
+    String? soporteBase64;
+    bool isUploadingImage = false;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(Icons.payments_outlined, color: Colors.green, size: 28),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  advisorId == 'ALL' ? 'Liquidar a TODOS los Asesores' : 'Liquidar Comisión: $advisorName',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              )
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (advisorId == 'ALL')
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.shade50,
-                      border: Border.all(color: Colors.amber.shade300),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.amber.shade900, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Se registrará el pago completo del saldo pendiente a cada asesor que tenga ganancias por cobrar.',
-                            style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
-                          ),
-                        )
-                      ],
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.payments_outlined, color: Colors.green, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      advisorId == 'ALL' ? 'Liquidar a TODOS los Asesores' : 'Registrar Pago / Comisión: $advisorName',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   )
-                else ...[
-                  Text('Saldo Pendiente por Cobrar: \$${maxPending.toStringAsFixed(0)} COP',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: amountCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Monto a Pagar / Liquidar (\$ COP) *',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
                 ],
-                const SizedBox(height: 10),
-                TextField(
-                  controller: noteCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Observación / Referencia de Pago',
-                    hintText: 'Ej: Transferencia Nequi #12345',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.note_alt_outlined),
+              ),
+              content: SizedBox(
+                width: 480,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (advisorId == 'ALL')
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            border: Border.all(color: Colors.amber.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.amber.shade900, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Se registrará el pago completo del saldo pendiente a cada asesor que tenga ganancias por cobrar.',
+                                  style: TextStyle(fontSize: 11, color: Colors.amber.shade900),
+                                ),
+                              )
+                            ],
+                          ),
+                        )
+                      else ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Saldo Pendiente:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                            Text('\$${maxPending.toStringAsFixed(0)} COP',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: maxPending > 0 ? Colors.red : Colors.green)),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Tipo de Pago: Abono o Liquidación Completa
+                        const Text('Tipo de Pago:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Center(child: Text('Abono a Comisión', style: TextStyle(fontSize: 11.5))),
+                                selected: payoutType == 'ABONO',
+                                onSelected: (sel) {
+                                  if (sel) {
+                                    setDialogState(() {
+                                      payoutType = 'ABONO';
+                                      if (amountCtrl.text == maxPending.toStringAsFixed(0) && maxPending > 20000) {
+                                        amountCtrl.text = (maxPending / 2).toStringAsFixed(0);
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Center(child: Text('Liquidación Total', style: TextStyle(fontSize: 11.5))),
+                                selected: payoutType == 'TOTAL',
+                                onSelected: (sel) {
+                                  if (sel) {
+                                    setDialogState(() {
+                                      payoutType = 'TOTAL';
+                                      amountCtrl.text = maxPending.toStringAsFixed(0);
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Método de Pago: Efectivo vs Transferencia
+                        const Text('Método de Entrega / Pago:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                avatar: const Icon(Icons.money, size: 16),
+                                label: const Text('Efectivo', style: TextStyle(fontSize: 12)),
+                                selected: paymentMethod == 'efectivo',
+                                onSelected: (sel) => setDialogState(() => paymentMethod = 'efectivo'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ChoiceChip(
+                                avatar: const Icon(Icons.account_balance, size: 16),
+                                label: const Text('Transferencia', style: TextStyle(fontSize: 12)),
+                                selected: paymentMethod == 'transferencia',
+                                onSelected: (sel) => setDialogState(() => paymentMethod = 'transferencia'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Fecha del pago
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.calendar_today, size: 16),
+                                label: Text('Fecha: ${DateFormat("dd/MM/yyyy").format(paymentDate)}', style: const TextStyle(fontSize: 12)),
+                                onPressed: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: paymentDate,
+                                    firstDate: DateTime(2025),
+                                    lastDate: DateTime.now().add(const Duration(days: 1)),
+                                  );
+                                  if (picked != null) {
+                                    setDialogState(() => paymentDate = picked);
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Monto a Pagar
+                        TextField(
+                          controller: amountCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Monto a Pagar (\$ COP) *',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.attach_money),
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 10),
+
+                        // Si es transferencia: Comprobante o referencia
+                        if (paymentMethod == 'transferencia') ...[
+                          TextField(
+                            controller: approvalCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'N° Aprobación / Comprobante Bancario',
+                              hintText: 'Ej: 1831555615',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.tag),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+
+                      // SOPORTE DE FOTO / COMPROBANTE (A GOOGLE DRIVE)
+                      const Text('Soporte de Pago (Foto / Recibo a Google Drive):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: isUploadingImage
+                                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : Icon(soporteBase64 != null ? Icons.check_circle : Icons.camera_alt_outlined, 
+                                         color: soporteBase64 != null ? Colors.green : Colors.blue),
+                              label: Text(
+                                soporteBase64 != null ? '✓ Foto Adjunta (Cambiar)' : 'Subir Foto Comprobante (Drive)',
+                                style: TextStyle(fontSize: 11.5, color: soporteBase64 != null ? Colors.green.shade800 : Colors.blue.shade800),
+                              ),
+                              onPressed: isUploadingImage
+                                  ? null
+                                  : () async {
+                                      setDialogState(() => isUploadingImage = true);
+                                      try {
+                                        final picked = await pickImageBase64();
+                                        if (picked != null) {
+                                          final compressed = compressImageDataUri(picked, maxSide: 1600);
+                                          setDialogState(() => soporteBase64 = compressed);
+                                        }
+                                      } catch (e) {
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(backgroundColor: Colors.red, content: Text('Error al cargar imagen: $e')),
+                                          );
+                                        }
+                                      } finally {
+                                        setDialogState(() => isUploadingImage = false);
+                                      }
+                                    },
+                            ),
+                          ),
+                          if (soporteBase64 != null) ...[
+                            const SizedBox(width: 6),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              tooltip: 'Quitar foto',
+                              onPressed: () => setDialogState(() => soporteBase64 = null),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (soporteBase64 != null) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            height: 100,
+                            width: double.infinity,
+                            color: Colors.grey.shade200,
+                            child: Image.memory(
+                              base64Decode(soporteBase64!.split(',').last),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+
+                      // Observación
+                      TextField(
+                        controller: noteCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Observación / Nota',
+                          hintText: 'Ej: Pago transferencia Nequi liquidación comisiones',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.note_alt_outlined),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('CONFIRMAR Y REGISTRAR PAGO'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald),
+                  onPressed: () async {
+                    double amt = double.tryParse(amountCtrl.text.trim()) ?? maxPending;
+                    if (amt <= 0 && advisorId != 'ALL') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(backgroundColor: Colors.red, content: Text('Ingrese un monto válido mayor a \$0')),
+                      );
+                      return;
+                    }
+
+                    final advVM = Provider.of<AdvisorViewModel>(context, listen: false);
+                    final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
+
+                    bool ok = await advVM.registerPayout(
+                      advisorId: advisorId,
+                      amount: amt,
+                      note: noteCtrl.text.trim(),
+                      raffleId: raffleVM.selectedRaffle?.id,
+                      paymentMethod: paymentMethod,
+                      date: paymentDate.toIso8601String(),
+                      payoutType: payoutType,
+                      approvalNumber: approvalCtrl.text.trim(),
+                      soporteBase64: soporteBase64,
+                    );
+
+                    if (ok && ctx.mounted) {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: AppTheme.secondaryEmerald,
+                          content: Text('¡Pago de comisión registrado exitosamente con respaldo en Drive!'),
+                        ),
+                      );
+                    }
+                  },
+                )
               ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: const Text('CONFIRMAR PAGO'),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryEmerald),
-              onPressed: () async {
-                double amt = double.tryParse(amountCtrl.text.trim()) ?? maxPending;
-                if (amt <= 0 && advisorId != 'ALL') {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(backgroundColor: Colors.red, content: Text('Ingrese un monto válido mayor a \$0')),
-                  );
-                  return;
-                }
-
-                final advVM = Provider.of<AdvisorViewModel>(context, listen: false);
-                final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
-
-                bool ok = await advVM.registerPayout(
-                  advisorId: advisorId,
-                  amount: amt,
-                  note: noteCtrl.text.trim(),
-                  raffleId: raffleVM.selectedRaffle?.id,
-                );
-
-                if (ok && ctx.mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: AppTheme.secondaryEmerald,
-                      content: Text('¡Pago de comisión registrado exitosamente!'),
-                    ),
-                  );
-                }
-              },
-            )
-          ],
+            );
+          },
         );
       },
     );
@@ -272,6 +473,28 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                           ),
                         ],
                       ),
+                      if (currentRaffle?.commissionType == 'ESCALONADO' && currentRaffle!.commissionTiers.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            for (final tier in currentRaffle.commissionTiers)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withValues(alpha: 0.25),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.amber, width: 0.8),
+                                ),
+                                child: Text(
+                                  '${tier.min}${tier.max != null ? "-${tier.max}" : "+"} boletas ➔ ${tier.rate.toStringAsFixed(0)}${tier.type == "PORCENTAJE" ? "%" : "\$"}',
+                                  style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -400,21 +623,34 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                       Text('Pagado: ${currency.format(paid)} | Pendiente: ${currency.format(pending)}',
                           textAlign: TextAlign.end,
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: pending > 0 ? Colors.red : Colors.green)),
+                      if (adv['tierDescription'] != null && adv['tierDescription'].toString().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: Colors.purple.shade50,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.purple.shade200, width: 0.8),
+                          ),
+                          child: Text(
+                            adv['tierDescription'],
+                            style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Colors.purple.shade900),
+                          ),
+                        ),
+                      ],
                     ],
                   );
                   final payButton = ElevatedButton.icon(
-                    onPressed: pending > 0
-                        ? () => _showPayoutDialog(
-                              context,
-                              advisorId: adv['advisorId'],
-                              advisorName: adv['advisorName'],
-                              maxPending: pending,
-                            )
-                        : null,
+                    onPressed: () => _showPayoutDialog(
+                      context,
+                      advisorId: adv['advisorId'],
+                      advisorName: adv['advisorName'],
+                      maxPending: pending,
+                    ),
                     icon: const Icon(Icons.attach_money, size: 16),
-                    label: Text(pending > 0 ? 'Liquidar' : 'Al día', style: const TextStyle(fontSize: 11)),
+                    label: Text(pending > 0 ? 'Liquidar' : 'Abonar', style: const TextStyle(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: pending > 0 ? Colors.orange.shade800 : Colors.grey,
+                      backgroundColor: pending > 0 ? Colors.orange.shade800 : AppTheme.primaryBlue,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     ),
                   );
@@ -533,20 +769,87 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                       double amt = (pay['amount'] as num?)?.toDouble() ?? 0.0;
                       String dateStr =
                           pay['date'] != null ? DateFormat('dd/MM/yyyy hh:mm a').format(DateTime.parse(pay['date'])) : 'Reciente';
+                      String method = (pay['paymentMethod'] ?? 'efectivo').toString().toLowerCase();
+                      String pType = (pay['payoutType'] ?? 'TOTAL').toString();
+                      String? approval = pay['approvalNumber'];
+                      bool hasSoporte = pay['soporteWebViewUrl'] != null || pay['soporteUrl'] != null;
 
                       return ListTile(
                         dense: true,
                         leading: CircleAvatar(
-                          backgroundColor: Colors.green.withValues(alpha: 0.15),
-                          child: const Icon(Icons.receipt_long, color: Colors.green, size: 20),
+                          backgroundColor: method == 'transferencia' ? Colors.blue.withValues(alpha: 0.15) : Colors.green.withValues(alpha: 0.15),
+                          child: Icon(method == 'transferencia' ? Icons.account_balance : Icons.payments, 
+                                      color: method == 'transferencia' ? Colors.blue : Colors.green, size: 20),
                         ),
-                        title: Text(
-                          'Pago a: ${pay['advisorName'] ?? "Asesor"}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        title: Wrap(
+                          spacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Pago a: ${pay['advisorName'] ?? "Asesor"}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: (pType == 'ABONO' ? Colors.orange : Colors.green).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                pType == 'ABONO' ? 'ABONO' : 'LIQUIDACIÓN',
+                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: pType == 'ABONO' ? Colors.orange.shade900 : Colors.green.shade900),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                method == 'transferencia' ? '🏛️ Transferencia' : '💵 Efectivo',
+                                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey),
+                              ),
+                            ),
+                          ],
                         ),
-                        subtitle: Text(
-                          'Fecha: $dateStr • ${pay['note'] ?? "Sin observación"}',
-                          style: const TextStyle(fontSize: 11),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 2),
+                            Text(
+                              'Fecha: $dateStr${approval != null && approval.isNotEmpty ? " • Ref: #$approval" : ""} • ${pay['note'] ?? "Sin observación"}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            if (hasSoporte) ...[
+                              const SizedBox(height: 4),
+                              InkWell(
+                                onTap: () => showSoporte(
+                                  context,
+                                  url: pay['soporteUrl'],
+                                  webViewUrl: pay['soporteWebViewUrl'],
+                                  driveId: pay['soporteDriveId'],
+                                  title: 'Comprobante de Pago a ${pay['advisorName']}',
+                                ),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.blue.shade300, width: 0.8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.image_outlined, size: 12, color: Colors.blue),
+                                      SizedBox(width: 4),
+                                      Text('Ver Comprobante (Drive)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         trailing: Text(
                           currency.format(amt),
