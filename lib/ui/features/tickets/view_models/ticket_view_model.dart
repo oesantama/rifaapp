@@ -99,11 +99,13 @@ class TicketViewModel extends ChangeNotifier {
     // Sin distinguir mayúsculas, tildes ni espacios repetidos: "maria jose" encuentra "María José"
     final q = foldText(_searchQuery);
     if (q.isEmpty) return true;
-    return t.ticketNumber.toString().contains(q) ||
+    // Asesor, oportunidad (número que juega), nombre, celular, cédula y correo del comprador. NO el id interno de la boleta:
+    // buscar "204" traía boletas cuyo id contiene 204 aunque su oportunidad fuera otra.
+    return foldText(t.advisorName).contains(q) ||
         foldText(t.buyerName).contains(q) ||
         t.buyerPhone.contains(q) ||
         foldText(t.buyerDocument).contains(q) ||
-        foldText(t.advisorName).contains(q) ||
+        foldText(t.buyerEmail).contains(q) ||
         t.numbers.any((n) => n.contains(q));
   }
 

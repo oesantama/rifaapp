@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rifaapp/data/services/auth_http.dart';
 import 'package:rifaapp/data/repositories/raffle_repository.dart';
 import 'package:rifaapp/ui/features/legal/legal_widgets.dart';
@@ -25,6 +26,10 @@ class _LoginViewState extends State<LoginView> {
   final FocusNode _userFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
   bool _obscurePassword = true;
+  // "Recordar contraseña": recuerda el usuario y le pide al navegador (o al administrador de contraseñas del celular) guardar la contraseña.
+  // La contraseña nunca se guarda en la aplicación.
+  bool _rememberMe = false;
+  static const _kRememberUser = 'login_remember_user';
   String? _errorMessage;
   bool _isLoading = false;
 
@@ -36,6 +41,32 @@ class _LoginViewState extends State<LoginView> {
     if (authVM.sessionExpired && authVM.loginErrorMessage.isNotEmpty) {
       _errorMessage = authVM.loginErrorMessage;
     }
+    _loadRemembered();
+  }
+
+  Future<void> _loadRemembered() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final user = prefs.getString(_kRememberUser);
+      if (user != null && user.isNotEmpty && mounted) {
+        setState(() {
+          _rememberMe = true;
+          if (_userController.text.isEmpty) _userController.text = user;
+        });
+        _focusPassword();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveRemembered() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_rememberMe) {
+        await prefs.setString(_kRememberUser, _userController.text.trim());
+      } else {
+        await prefs.remove(_kRememberUser);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -75,7 +106,11 @@ class _LoginViewState extends State<LoginView> {
       unexpected = 'No hubo respuesta del servidor. Intente de nuevo en unos segundos.';
     }
 
-    if (success) TextInput.finishAutofillContext();
+    if (success) {
+      // shouldSave: el navegador ofrece guardar la contraseña solo si la persona marcó "Recordar contraseña"
+      TextInput.finishAutofillContext(shouldSave: _rememberMe);
+      await _saveRemembered();
+    }
 
     if (mounted) {
       setState(() {
@@ -514,6 +549,31 @@ class _LoginViewState extends State<LoginView> {
                         ),
                       ],
                     ),
+                  ),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: _isLoading ? null : () => setState(() => _rememberMe = !_rememberMe),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: _rememberMe,
+                                visualDensity: VisualDensity.compact,
+                                side: const BorderSide(color: Colors.white54),
+                                onChanged: _isLoading ? null : (v) => setState(() => _rememberMe = v ?? false),
+                              ),
+                              const Flexible(
+                                child: Text('Recordar contraseña', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   // Password Recovery Link

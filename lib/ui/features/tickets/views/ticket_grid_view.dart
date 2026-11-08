@@ -136,7 +136,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                       final searchField = TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: authVM.isAsesor ? 'Buscar en mis boletas...' : 'Buscar N° boleta, número o comprador...',
+                          hintText: authVM.isAsesor ? 'Buscar en mis boletas...' : 'Buscar oportunidad, comprador, celular, cédula, correo o asesor...',
                           prefixIcon: const Icon(Icons.search),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(

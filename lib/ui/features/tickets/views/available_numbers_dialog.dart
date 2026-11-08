@@ -567,7 +567,7 @@ $advisorHeader
     if (_searchFilter.trim().isNotEmpty) {
       final query = foldText(_searchFilter);
       availableTickets = availableTickets.where((t) {
-        return t.displayNumber.toLowerCase().contains(query) || t.ticketNumber.toString().contains(query);
+        return t.numbers.any((n) => n.contains(query));
       }).toList();
     }
 
