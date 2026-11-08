@@ -1648,10 +1648,13 @@ $advisorHeader
       );
     }
 
+    // Con muchas columnas la tarjeta es angosta: sin textos ("2 Oportunidades", "LIBRE"), solo los números
+    final compact = width < 118;
+
     // MULTI-OPPORTUNITY or FULL-BOARD CARD
     return Container(
       width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: compact ? const EdgeInsets.symmetric(horizontal: 4, vertical: 6) : const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(10),
@@ -1670,7 +1673,7 @@ $advisorHeader
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header: Opportunities count or Boleta label + State badge
-          Row(
+          if (!compact) Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
@@ -1700,16 +1703,16 @@ $advisorHeader
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          if (!compact) const SizedBox(height: 6),
 
           // Numbers list/grid: each opportunity has its own badge with large font
           Wrap(
-            spacing: 5,
-            runSpacing: 4,
+            spacing: compact ? 3 : 5,
+            runSpacing: compact ? 3 : 4,
             alignment: WrapAlignment.center,
             children: numbers.map((n) {
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: compact ? const EdgeInsets.symmetric(horizontal: 4, vertical: 3) : const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: isAvailable
                       ? (_darkTheme ? const Color(0xFF064E3B).withValues(alpha: 0.5) : const Color(0xFFDCFCE7))
@@ -1725,9 +1728,9 @@ $advisorHeader
                   n,
                   style: TextStyle(
                     color: numColor,
-                    fontSize: widget.raffle.digits >= 4 ? 13.5 : 15,
+                    fontSize: compact ? (widget.raffle.digits >= 4 ? 11 : 12.5) : (widget.raffle.digits >= 4 ? 13.5 : 15),
                     fontWeight: FontWeight.w900,
-                    letterSpacing: 0.6,
+                    letterSpacing: compact ? 0.2 : 0.6,
                     fontFamily: 'monospace',
                     decoration: isAvailable ? TextDecoration.none : TextDecoration.lineThrough,
                   ),
