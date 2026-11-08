@@ -72,7 +72,10 @@ class DashboardScreen extends StatelessWidget {
         final commToCollect = authVM.isAsesor
             ? numOf(myComm?['pendingBalance'])
             : commAdvisors.fold<double>(0.0, (sum, a) => sum + numOf((a as Map)['pendingBalance']));
-        final commTier = (myComm?['tierDescription'] ?? '').toString();
+        final commRateType = (myComm?['rateType'] ?? 'PORCENTAJE').toString();
+        final commRateValue = numOf(myComm?['rateValue']);
+        final commPending = (myComm?['pendingTicketsCount'] as num?)?.toInt() ?? 0;
+        final payText = commissionPayText(commRateType, commRateValue);
 
         double progress = countTotal > 0 ? ((countPagadas + countAbonadas + countReservadas) / countTotal) : 0.0;
 
@@ -240,7 +243,7 @@ class DashboardScreen extends StatelessWidget {
                         title: authVM.isAsesor ? 'Mis Ganancias Generadas' : 'Comisiones Generadas',
                         value: currency.format(commEarned),
                         subtitle: authVM.isAsesor
-                            ? (commTier.isNotEmpty ? commTier : 'Sobre lo que ya recaudé')
+                            ? (myComm != null ? 'Mi pago: $payText' : 'Sobre lo que ya recaudé')
                             : 'Sobre lo recaudado • Pagadas: ${currency.format(commPaid)}',
                         icon: Icons.workspace_premium,
                         iconColor: Colors.purple,
@@ -248,9 +251,13 @@ class DashboardScreen extends StatelessWidget {
                       StatCard(
                         title: authVM.isAsesor ? 'Me Falta por Ganar' : 'Comisiones por Generar',
                         value: currency.format(commToEarn),
-                        subtitle: commToCollect > 0
-                            ? 'Al cobrarse ${currency.format(commToCollect)} de boletas apartadas o abonadas'
-                            : 'Sin boletas pendientes de pago',
+                        subtitle: commToCollect <= 0 && commToEarn <= 0
+                            ? 'Sin boletas pendientes de pago'
+                            : (authVM.isAsesor && myComm != null
+                                ? (commRateType == 'VALOR_FIJO'
+                                    ? '$payText: ${commRateValue > 0 ? (commToEarn / commRateValue).round() : 0} boletas apartadas sin pagar'
+                                    : '$payText: al cobrarse ${currency.format(commToCollect)} de $commPending boletas')
+                                : 'Al cobrarse ${currency.format(commToCollect)} de boletas apartadas o abonadas'),
                         icon: Icons.hourglass_empty,
                         iconColor: Colors.teal,
                       ),

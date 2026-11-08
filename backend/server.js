@@ -7839,7 +7839,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   }
 
   return {
-    pendingToEarn, pendingBalance, pendingTicketsCount,
+    pendingToEarn, pendingBalance, pendingTicketsCount, rateType, rateValue,
     type, advTickets, totalTicketsSold, totalCollected, commissionEarned, activeTier, tierDescription,
     streetSold, streetCollected, officeSold, officeCollected,
     zoneUndefined: type === 'INTEGRAL' ? advTickets.filter(t => !SALE_ZONES.includes(t.saleZone)).length : 0
@@ -7899,6 +7899,9 @@ app.get('/api/commissions', (req, res) => {
       commissionPaid,
       pendingCommission,
       // Lo que aún no se ha ganado porque las boletas apartadas/abonadas no se han pagado del todo
+      // Cómo se le paga ahora mismo: PORCENTAJE (% de lo recaudado) o VALOR_FIJO (valor por boleta)
+      rateType: c.rateType,
+      rateValue: c.rateValue,
       pendingToEarn: c.pendingToEarn,
       pendingBalance: c.pendingBalance,
       pendingTicketsCount: c.pendingTicketsCount,

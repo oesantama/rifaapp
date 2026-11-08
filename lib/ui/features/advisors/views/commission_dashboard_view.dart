@@ -12,6 +12,12 @@ import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 
+/// Cómo se le paga al asesor, dicho claro: "10% de lo recaudado" o "$10 por boleta vendida".
+String commissionPayText(String rateType, double value) {
+  final v = value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
+  return rateType == 'VALOR_FIJO' ? '\$$v por boleta vendida' : '$v% de lo recaudado';
+}
+
 class CommissionDashboardView extends StatefulWidget {
   const CommissionDashboardView({super.key});
 
@@ -359,9 +365,12 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
 
     String commTypeStr = currentRaffle?.commissionType ?? 'PORCENTAJE';
     double commVal = currentRaffle?.commissionValue ?? 10.0;
-    String commBadgeText = commTypeStr == 'PORCENTAJE'
-        ? '${commVal.toStringAsFixed(0)}% por boleta vendida'
-        : '\$${commVal.toStringAsFixed(0)} COP por boleta vendida';
+    // Dice claro cómo se paga: porcentaje de lo recaudado, valor fijo por boleta, o escalonado (cambia según las boletas vendidas)
+    String commBadgeText = switch (commTypeStr) {
+      'PORCENTAJE' => '${commVal.toStringAsFixed(0)}% del dinero recaudado',
+      'ESCALONADO' => 'escalonada: cambia según las boletas que venda',
+      _ => '\$${commVal.toStringAsFixed(0)} COP por boleta vendida',
+    };
 
     if (commData == null) {
       return const Center(child: CircularProgressIndicator());
@@ -402,6 +411,8 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     int mySold = 0;
     double myToEarn = 0.0;
     double myToCollect = 0.0;
+    String myRateType = 'PORCENTAJE';
+    double myRateValue = 0.0;
     int myPendingTickets = 0;
 
     if (myAdvisorStat != null) {
@@ -411,6 +422,8 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
       mySold = (myAdvisorStat['totalTicketsSold'] as num?)?.toInt() ?? 0;
       myToEarn = (myAdvisorStat['pendingToEarn'] as num?)?.toDouble() ?? 0.0;
       myToCollect = (myAdvisorStat['pendingBalance'] as num?)?.toDouble() ?? 0.0;
+      myRateType = (myAdvisorStat['rateType'] ?? 'PORCENTAJE').toString();
+      myRateValue = (myAdvisorStat['rateValue'] as num?)?.toDouble() ?? 0.0;
       myPendingTickets = (myAdvisorStat['pendingTicketsCount'] as num?)?.toInt() ?? 0;
     }
 
@@ -495,7 +508,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                                   border: Border.all(color: Colors.amber, width: 0.8),
                                 ),
                                 child: Text(
-                                  '${tier.min}${tier.max != null ? "-${tier.max}" : "+"} boletas ➔ ${tier.rate.toStringAsFixed(0)}${tier.type == "PORCENTAJE" ? "%" : "\$"}',
+                                  '${tier.min}${tier.max != null ? "-${tier.max}" : "+"} boletas ➔ ${tier.type == "PORCENTAJE" ? "${tier.rate.toStringAsFixed(0)}% de lo recaudado" : "\$${tier.rate.toStringAsFixed(0)} por boleta"}',
                                   style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                               ),
@@ -754,7 +767,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 val: currency.format(myEarned),
                 icon: Icons.savings_outlined,
                 color: Colors.purple,
-                subtitle: 'Sobre lo que ya recaudaste, según tu esquema',
+                subtitle: 'Tu pago: ${commissionPayText(myRateType, myRateValue)}',
               ),
               _buildMetricCard(
                 title: 'Ganancia Pagada / Cobrada',
@@ -775,9 +788,11 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 val: currency.format(myToEarn),
                 icon: Icons.hourglass_empty_outlined,
                 color: Colors.teal,
-                subtitle: myPendingTickets > 0
-                    ? 'Al cobrarse ${currency.format(myToCollect)} de $myPendingTickets boletas apartadas o abonadas'
-                    : 'No tienes boletas pendientes de pago',
+                subtitle: myPendingTickets == 0
+                    ? 'No tienes boletas pendientes de pago'
+                    : (myRateType == 'VALOR_FIJO'
+                        ? '${commissionPayText(myRateType, myRateValue)}: ${myRateValue > 0 ? (myToEarn / myRateValue).round() : 0} boletas apartadas sin pagar'
+                        : '${commissionPayText(myRateType, myRateValue)}: al cobrarse ${currency.format(myToCollect)} de $myPendingTickets boletas'),
               ),
             ]),
           ],
