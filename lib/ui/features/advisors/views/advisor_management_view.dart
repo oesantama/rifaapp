@@ -281,7 +281,7 @@ class AdvisorManagementView extends StatelessWidget {
                         ),
                         DropdownMenuItem(
                           value: 'ASSIGNED',
-                          child: Text('Boletas Asignadas (Ver solo su rango específico)'),
+                          child: Text('Boletas Asignadas (solo en rifas independientes)'),
                         ),
                       ],
                       onChanged: (v) => setState(() => mode = v!),
@@ -315,7 +315,7 @@ class AdvisorManagementView extends StatelessWidget {
                         controller: rangeCtrl,
                         decoration: const InputDecoration(
                           labelText: 'Rangos Asignados (Ej: 1-100, 201-300)',
-                          helperText: 'Números impresos en las boletas. Para agregar más luego use "Asignar números".',
+                          helperText: 'Solo aplica en rifas independientes (talonarios). En las rifas normales el asesor vende todas las boletas.',
                           helperMaxLines: 2,
                           border: OutlineInputBorder(),
                         ),

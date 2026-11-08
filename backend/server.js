@@ -4498,7 +4498,7 @@ function salesLockView(raffle) {
         name: a.name,
         code: a.code,
         assignedRanges: assigned ? a.assignedTicketRanges : [],
-        availableInRanges: assigned ? available.filter(t => ticketInAdvisorRanges(t, a)).length : null,
+        availableInRanges: assigned && raffle.isIndependentBook ? available.filter(t => ticketInAdvisorRanges(t, a, raffle)).length : null,
         sold: tickets.filter(t => t.advisorId === a.id && t.status !== 'DISPONIBLE').length,
         locked: !!own,
         reason: own ? own.reason || '' : '',
@@ -5490,11 +5490,14 @@ app.get('/api/tickets', (req, res) => {
     rangeAdvisorsByCompany.get(a.companyId).push(a);
   }
   if (rangeAdvisorsByCompany.size > 0) {
-    const raffleCompany = new Map((db.raffles || []).map(r => [r.id, r.companyId]));
+    const raffleById = new Map((db.raffles || []).map(r => [r.id, r]));
     result = result.map(t => {
       if (t.advisorId && t.advisorName) return t;
-      const candidates = rangeAdvisorsByCompany.get(raffleCompany.get(t.raffleId));
-      const matchingAdv = candidates && candidates.find(a => ticketInAdvisorRanges(t, a));
+      const tr = raffleById.get(t.raffleId);
+      // Solo las rifas independientes reparten números por rangos
+      if (!tr || !tr.isIndependentBook) return t;
+      const candidates = rangeAdvisorsByCompany.get(tr.companyId);
+      const matchingAdv = candidates && candidates.find(a => ticketInAdvisorRanges(t, a, tr));
       return matchingAdv ? { ...t, advisorId: matchingAdv.id, advisorName: matchingAdv.name } : t;
     });
   }
@@ -6224,8 +6227,8 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     const block = advisorSaleBlock(ticketRaffle, req.auth.record.id);
     if (block) return res.status(403).json({ error: `${block} Comuníquese con el administrador.`, code: 'SALES_LOCKED' });
   }
-  // An advisor working with assigned numbers can only sell inside them
-  if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record)) {
+  // An advisor working with assigned numbers can only sell inside them (solo en rifas independientes)
+  if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE' && !ticketInAdvisorRanges(ticket, req.auth.record, ticketRaffle)) {
     return res.status(403).json({ error: 'Esta boleta no está en sus números asignados. Solicite más boletas al administrador.' });
   }
 
@@ -7189,7 +7192,12 @@ function ticketNumbersOf(ticket) {
   return nums.length ? nums : [ticket.ticketNumber];
 }
 
-function ticketInAdvisorRanges(ticket, advisor) {
+/**
+ * Los números asignados (rangos) a un asesor SOLO aplican en rifas independientes (talonarios). En una rifa normal todos los
+ * asesores venden cualquier boleta: los rangos de un asesor no se heredan a las rifas nuevas.
+ */
+function ticketInAdvisorRanges(ticket, advisor, raffle) {
+  if (raffle && !raffle.isIndependentBook) return true;
   if (!advisor || advisor.mode !== 'ASSIGNED') return true;
   const ranges = (advisor.assignedTicketRanges || []).map(parseRange).filter(Boolean);
   if (!ranges.length) return true;

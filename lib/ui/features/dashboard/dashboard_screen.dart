@@ -40,7 +40,7 @@ class DashboardScreen extends StatelessWidget {
                   t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
                   (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
             }
-            return adv.coversTicket(t);
+            return adv.coversTicket(t, independent: currentRaffle?.isIndependentBook ?? true);
           }).toList();
         }
 

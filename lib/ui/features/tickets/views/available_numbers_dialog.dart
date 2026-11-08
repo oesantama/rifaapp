@@ -108,8 +108,10 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
     required List<Ticket> allRaffleTickets,
     required Advisor? advisor,
     required List<Advisor> allAdvisors,
+    bool independent = true,
   }) {
-    if (advisor == null) {
+    // Los números asignados por asesor solo existen en rifas independientes
+    if (advisor == null || !independent) {
       return allRaffleTickets;
     }
 
@@ -139,6 +141,7 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
       allRaffleTickets: allTickets,
       advisor: _selectedAdvisor,
       allAdvisors: allAdvisors,
+      independent: widget.raffle.isIndependentBook,
     );
   }
 
@@ -261,6 +264,7 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
               allRaffleTickets: allRaffleTickets,
               advisor: currentAdvisor,
               allAdvisors: advisors,
+              independent: widget.raffle.isIndependentBook,
             );
             final availableForExport = scopedForExport.where((t) => t.status == 'DISPONIBLE').toList();
             final activeTotal = contentMode == 'ALL_STATUS' ? scopedForExport.length : availableForExport.length;

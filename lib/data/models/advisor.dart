@@ -78,8 +78,9 @@ class Advisor {
 
   /// A ticket belongs to the advisor's numbers when any of its numbers falls inside a range
   /// (same rule the server applies when selling).
-  bool coversTicket(Ticket ticket) {
-    if (!worksWithAssignedNumbers) return true;
+  /// Los números asignados solo aplican en rifas independientes: en una rifa normal ([independent] false) cubre todas.
+  bool coversTicket(Ticket ticket, {bool independent = true}) {
+    if (!independent || !worksWithAssignedNumbers) return true;
     final ranges = parsedRanges;
     if (ranges.isEmpty) return true;
     final numbers = ticket.numbers.map(int.tryParse).whereType<int>().toList();

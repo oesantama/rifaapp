@@ -280,7 +280,9 @@ function ticketNumbersOf(ticket) {
   return nums.length ? nums : [ticket.ticketNumber];
 }
 
-function ticketInAdvisorRanges(ticket, advisor) {
+function ticketInAdvisorRanges(ticket, advisor, raffle) {
+  // Los rangos de números solo aplican en rifas independientes
+  if (raffle && !raffle.isIndependentBook) return true;
   if (!advisor || advisor.mode !== 'ASSIGNED') return true;
   const ranges = (advisor.assignedTicketRanges || []).map(parseRange).filter(Boolean);
   if (!ranges.length) return true;
@@ -295,6 +297,8 @@ function getAssignedAdvisorForTicket(ticket, raffle, db) {
     // Cada asesor pertenece a una sola empresa: uno de otra empresa nunca se asigna
     if (direct && (!companyId || direct.companyId === companyId)) return direct;
   }
+  // Sin rifa independiente no se asigna asesor por rango de números
+  if (!raffle || !raffle.isIndependentBook) return null;
   const advisors = (db.advisors || []).filter(a => 
     (!companyId || a.companyId === companyId) && 
     a.status === 'ACTIVO' && 
@@ -303,7 +307,7 @@ function getAssignedAdvisorForTicket(ticket, raffle, db) {
     a.assignedTicketRanges.length > 0
   );
   for (const adv of advisors) {
-    if (ticketInAdvisorRanges(ticket, adv)) {
+    if (ticketInAdvisorRanges(ticket, adv, raffle)) {
       return adv;
     }
   }

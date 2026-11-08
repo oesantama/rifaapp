@@ -557,7 +557,9 @@ class AdvisorNumbersBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final authVM = context.watch<AuthViewModel>();
     final adv = authVM.activeAdvisor;
-    if (!authVM.isAsesor || adv == null || adv.mode != 'ASSIGNED') return const SizedBox.shrink();
+    // Los números asignados solo existen en rifas independientes
+    final independentRaffle = context.watch<RaffleViewModel>().selectedRaffle?.isIndependentBook ?? false;
+    if (!authVM.isAsesor || adv == null || adv.mode != 'ASSIGNED' || !independentRaffle) return const SizedBox.shrink();
     final available = context.watch<TicketViewModel>().tickets.where((t) => t.status == 'DISPONIBLE' && adv.coversTicket(t)).length;
     final request = adv.rangeRequest;
 
