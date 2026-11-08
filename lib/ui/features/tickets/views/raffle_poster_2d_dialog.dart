@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/features/tickets/views/poster_marker_icons.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
@@ -48,6 +49,11 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
   double _posterScale = 0.75; // Zoom scale for poster preview (0.40 to 1.20)
   bool _colorByStatus = false; // false = unicolor, true = color per status
   String _singleCircleColorHex = '#DC2626'; // Default red
+  // Icono que se dibuja sobre los números apartados o vendidos (uno para todos o uno por estado) y si va dentro de un círculo o solo
+  String _markIconKey = kDefaultMarkerKey;
+  bool _iconByStatus = false;
+  bool _iconOnly = false; // true = solo el icono (sin círculo de fondo)
+  final Map<String, String> _statusMarkIcons = {'PAGADA': 'close', 'ABONO_PARCIAL': 'close', 'RESERVADA': 'close'};
 
   // Circle color per ticket status (used when _colorByStatus is on); editable and saved with the template
   final Map<String, String> _statusCircleColors = Map.of(_defaultStatusCircleColors);
@@ -111,6 +117,15 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       _dotScale = (config['dotScale'] as num?)?.toDouble() ?? 1.0;
       _colorByStatus = (config['colorByStatus'] as bool?) ?? false;
       _singleCircleColorHex = (config['singleCircleColorHex'] as String?) ?? '#DC2626';
+      _markIconKey = (config['markIcon'] as String?) ?? kDefaultMarkerKey;
+      _iconByStatus = (config['iconByStatus'] as bool?) ?? false;
+      _iconOnly = (config['iconOnly'] as bool?) ?? false;
+      final savedIcons = config['statusMarkIcons'];
+      if (savedIcons is Map) {
+        savedIcons.forEach((k, v) {
+          if (_statusMarkIcons.containsKey(k) && v is String) _statusMarkIcons[k.toString()] = v;
+        });
+      }
       final savedStatusColors = config['statusCircleColors'];
       if (savedStatusColors is Map) {
         savedStatusColors.forEach((k, v) {
@@ -322,6 +337,35 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
     }
   }
 
+  /// Icono que corresponde a la boleta según su estado (o el único elegido).
+  PosterMarker _markerForTicket(Ticket t) {
+    if (!_iconByStatus) return posterMarkerByKey(_markIconKey);
+    final status = (t.status == 'CONFIRMADA') ? 'PAGADA' : t.status;
+    return posterMarkerByKey(_statusMarkIcons[status] ?? _markIconKey);
+  }
+
+  Widget _buildIconButton({required String label, required String iconKey, required ValueChanged<String> onPicked}) {
+    final marker = posterMarkerByKey(iconKey);
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () async {
+        final picked = await pickPosterMarker(context, current: iconKey, title: 'Icono: $label');
+        if (picked != null) onPicked(picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 4, 10, 4),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.amber.shade300)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(width: 22, height: 22, child: Center(child: marker.build(18, Colors.black87))),
+          const SizedBox(width: 6),
+          Text('$label: ${marker.label}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
+          const SizedBox(width: 4),
+          const Icon(Icons.edit, size: 12, color: Colors.black45),
+        ]),
+      ),
+    );
+  }
+
   Color _getCircleColorForTicket(Ticket matchedTicket) {
     if (_colorByStatus) {
       switch (matchedTicket.status) {
@@ -389,6 +433,10 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
       'colorByStatus': _colorByStatus,
       'singleCircleColorHex': _singleCircleColorHex,
       'statusCircleColors': _statusCircleColors,
+      'markIcon': _markIconKey,
+      'iconByStatus': _iconByStatus,
+      'iconOnly': _iconOnly,
+      'statusMarkIcons': _statusMarkIcons,
     };
 
     bool ok = await raffleVM.updateRaffleTemplateConfig(widget.raffle.id, newConfig);
@@ -812,7 +860,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                                     ),
                                   ),
                                   _buildSliderControl(
-                                    label: '🔴 Círculo Rojo: ${_dotScale.toStringAsFixed(1)}x',
+                                    label: '🔴 Tamaño de la marca: ${_dotScale.toStringAsFixed(1)}x',
                                     slider: Slider(
                                       value: _dotScale,
                                       min: 0.5,
@@ -872,9 +920,50 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                                     ),
                               ],
                             ),
+                            const SizedBox(height: 10),
+                            // ROW 4: icono que marca los números apartados o vendidos
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                const Text('🖼️ Icono de marca:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.brown)),
+                                ChoiceChip(
+                                  label: const Text('Todos iguales', style: TextStyle(fontSize: 11)),
+                                  selected: !_iconByStatus,
+                                  selectedColor: Colors.amber.shade200,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _iconByStatus = false);
+                                  },
+                                ),
+                                ChoiceChip(
+                                  label: const Text('Por estado', style: TextStyle(fontSize: 11)),
+                                  selected: _iconByStatus,
+                                  selectedColor: Colors.amber.shade200,
+                                  onSelected: (val) {
+                                    if (val) setState(() => _iconByStatus = true);
+                                  },
+                                ),
+                                if (!_iconByStatus)
+                                  _buildIconButton(label: 'Icono', iconKey: _markIconKey, onPicked: (k) => setState(() => _markIconKey = k))
+                                else
+                                  for (final status in _statusColorLabels.keys)
+                                    _buildIconButton(
+                                      label: _statusColorLabels[status]!,
+                                      iconKey: _statusMarkIcons[status]!,
+                                      onPicked: (k) => setState(() => _statusMarkIcons[status] = k),
+                                    ),
+                                FilterChip(
+                                  label: const Text('Solo el icono (sin círculo)', style: TextStyle(fontSize: 11)),
+                                  selected: _iconOnly,
+                                  selectedColor: Colors.amber.shade200,
+                                  onSelected: (v) => setState(() => _iconOnly = v),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 4),
                             Text(
-                              'Toque un color para cambiarlo. Pulse "Guardar Plantilla" para conservar la configuración.',
+                              'Toque un color o un icono para cambiarlo (carros, casas, balones, velas y más). Pulse "Guardar Plantilla" para conservar la configuración.',
                               style: TextStyle(fontSize: 11, color: Colors.brown.shade400),
                             ),
                           ],
@@ -1229,6 +1318,19 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                       Builder(
                         builder: (_) {
                           final circleColor = _getCircleColorForTicket(matchedTicket);
+                          final marker = _markerForTicket(matchedTicket);
+                          if (_iconOnly) {
+                            // Solo el icono, con el color elegido y una sombra suave para que se lea sobre cualquier fondo
+                            return Transform.scale(
+                              scale: _dotScale,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  boxShadow: marker.emoji != null ? null : [BoxShadow(color: Colors.white.withValues(alpha: 0.9), blurRadius: 3, spreadRadius: 1)],
+                                ),
+                                child: marker.build(_cellHeight * 0.80, circleColor),
+                              ),
+                            );
+                          }
                           return Transform.scale(
                             scale: _dotScale,
                             child: Container(
@@ -1246,13 +1348,7 @@ class _RafflePoster2dDialogState extends State<RafflePoster2dDialog> {
                                   ),
                                 ],
                               ),
-                              child: Center(
-                                child: Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                  size: _cellHeight * 0.50,
-                                ),
-                              ),
+                              child: Center(child: marker.build(_cellHeight * 0.50, Colors.white)),
                             ),
                           );
                         },
