@@ -11,6 +11,7 @@ import 'package:rifaapp/data/models/advisor.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/core/utils/available_numbers_pdf.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/file_saver.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
@@ -63,6 +64,11 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
   bool _showFullBoard = false; // false = solo disponibles, true = tablero completo
   bool _darkTheme = true; // true = luxury dark, false = clean light
   bool _isExporting = false;
+  bool _isExportingPdf = false;
+  // Paginación de la vista (y de la imagen que se descarga): cuántas boletas por página y cuál se ve
+  static const _pageSizes = [100, 200, 500, 1000];
+  int _pageSize = 200;
+  int _page = 0;
   String _searchFilter = '';
   int? _userSelectedColumns; // null = auto based on digits and opportunities
 
@@ -194,6 +200,40 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
       if (mounted) {
         setState(() => _isExporting = false);
       }
+    }
+  }
+
+  /// PDF con TODAS las boletas del filtro actual (no solo la página visible), en bloques de 100 números.
+  Future<void> _downloadPdf({required List<Ticket> scopedTickets, required List<Ticket> availableTickets}) async {
+    setState(() => _isExportingPdf = true);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(duration: Duration(seconds: 3), content: Text('Generando el PDF con todas las boletas, un momento...')));
+    try {
+      await Future.delayed(const Duration(milliseconds: 150)); // deja pintar el aviso antes del trabajo pesado
+      final isAdv = !_isGeneral && _selectedAdvisor != null;
+      await AvailableNumbersPdf.download(
+        raffle: widget.raffle,
+        tickets: _showFullBoard ? scopedTickets : availableTickets,
+        fullBoard: _showFullBoard,
+        scopeTitle: isAdv ? 'ASESOR ASIGNADO: ${_selectedAdvisor!.name.toUpperCase()}' : 'DISPONIBILIDAD GENERAL',
+        scopeSub: isAdv
+            ? (_selectedAdvisor!.phone.isNotEmpty ? 'Telefono: ${_selectedAdvisor!.phone}' : '')
+            : 'Toda la rifa  |  Boletas libres para reserva y venta inmediata',
+        contactLine: isAdv && _selectedAdvisor!.phone.isNotEmpty
+            ? 'Elige tu numero de la suerte! Para apartar comunicate al: ${_selectedAdvisor!.phone}'
+            : 'Elige tu numero de la suerte antes de que se agote!',
+        totalScoped: scopedTickets.length,
+        totalAvailable: scopedTickets.where((t) => t.status == 'DISPONIBLE').length,
+      );
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text('✓ PDF descargado con todas las boletas.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('Error al generar el PDF: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
     }
   }
 
@@ -523,8 +563,8 @@ class _AvailableNumbersDialogState extends State<AvailableNumbersDialog> {
     final text = '''
 🎟️ *NÚMEROS DISPONIBLES - ${widget.raffle.title.toUpperCase()}*
 $advisorHeader
-📅 *Sorteo:* ${widget.raffle.mainDrawDate} con ${widget.raffle.mainLottery}
-💰 *Valor Boleta:* ${currency.format(widget.raffle.ticketPrice)}
+📅 *Sorteo:* ${_dateOnly(widget.raffle.mainDrawDate)} con ${widget.raffle.mainLottery}
+💰 *Valor Boleta:* ${_money(widget.raffle.ticketPrice)}
 ✅ *Total Disponibles:* ${availableTickets.length} boletas libres
 
 *Boletas y Números disponibles:*
@@ -623,6 +663,7 @@ $advisorHeader
               maxOpps: maxOpps,
             ),
             const Divider(height: 1),
+            _buildPaginationBar(total: _showFullBoard ? scopedTickets.length : availableTickets.length),
 
             // MAIN PREVIEW & CANVAS AREA (SMOOTH MOUSE/TOUCH SCROLLING + ZOOM)
             Expanded(
@@ -913,7 +954,10 @@ $advisorHeader
                     fillColor: Theme.of(context).scaffoldBackgroundColor,
                   ),
                   style: const TextStyle(fontSize: 12),
-                  onChanged: (val) => setState(() => _searchFilter = val),
+                  onChanged: (val) => setState(() {
+                    _searchFilter = val;
+                    _page = 0;
+                  }),
                 ),
               ),
 
@@ -968,7 +1012,10 @@ $advisorHeader
                   ),
                 ],
                 selected: {_showFullBoard},
-                onSelectionChanged: (set) => setState(() => _showFullBoard = set.first),
+                onSelectionChanged: (set) => setState(() {
+                  _showFullBoard = set.first;
+                  _page = 0;
+                }),
                 style: const ButtonStyle(visualDensity: VisualDensity.compact),
               ),
 
@@ -1007,11 +1054,25 @@ $advisorHeader
                 ),
               ),
 
+              // Download PDF (todas las boletas, en bloques)
+              FilledButton.icon(
+                onPressed: _isExportingPdf ? null : () => _downloadPdf(scopedTickets: scopedTickets, availableTickets: availableTickets),
+                icon: _isExportingPdf
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                label: const Text('PDF'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+
               // Download Image PNG
               FilledButton.icon(
                 onPressed: _isExporting ? null : _downloadImage,
                 icon: const Icon(Icons.image_outlined, size: 16),
-                label: const Text('Descargar Imagen'),
+                label: Text(isMobile ? 'Imagen' : 'Imagen (esta página)'),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                   foregroundColor: Colors.white,
@@ -1026,6 +1087,79 @@ $advisorHeader
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Solo la fecha (dd/MM/yyyy), sin hora: "2027-03-06T12:00:00.000" -> "06/03/2027"
+  static String _dateOnly(String raw) {
+    final d = DateTime.tryParse(raw);
+    if (d != null) return DateFormat('dd/MM/yyyy').format(d);
+    return raw.length >= 10 ? raw.substring(0, 10) : raw;
+  }
+
+  /// $150.000 (con el signo al inicio)
+  static String _money(num v) => '\$${NumberFormat('#,##0', 'es_CO').format(v)}';
+
+  int _pagesFor(int total) => total <= 0 ? 1 : (total / _pageSize).ceil();
+
+  /// Barra de páginas: cuántas boletas por página y navegación. La imagen que se descarga es la página visible;
+  /// el PDF trae todas.
+  Widget _buildPaginationBar({required int total}) {
+    final pages = _pagesFor(total);
+    final page = _page.clamp(0, pages - 1);
+    final from = total == 0 ? 0 : page * _pageSize + 1;
+    final to = math.min(total, (page + 1) * _pageSize);
+    void go(int p) => setState(() {
+          _page = p.clamp(0, pages - 1);
+          if (_verticalScrollController.hasClients) _verticalScrollController.jumpTo(0);
+        });
+    return Container(
+      color: Theme.of(context).cardColor,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Text('Boletas por página:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          SegmentedButton<int>(
+            showSelectedIcon: false,
+            segments: [for (final n in _pageSizes) ButtonSegment(value: n, label: Text('$n', style: const TextStyle(fontSize: 11)))],
+            selected: {_pageSize},
+            onSelectionChanged: (v) => setState(() {
+              _pageSize = v.first;
+              _page = 0;
+            }),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          IconButton(
+            tooltip: 'Primera página',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.first_page),
+            onPressed: page > 0 ? () => go(0) : null,
+          ),
+          IconButton(
+            tooltip: 'Página anterior',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_left),
+            onPressed: page > 0 ? () => go(page - 1) : null,
+          ),
+          Text('Página ${page + 1} de $pages  •  boletas $from-$to de $total',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          IconButton(
+            tooltip: 'Página siguiente',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.chevron_right),
+            onPressed: page < pages - 1 ? () => go(page + 1) : null,
+          ),
+          IconButton(
+            tooltip: 'Última página',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.last_page),
+            onPressed: page < pages - 1 ? () => go(pages - 1) : null,
           ),
         ],
       ),
@@ -1055,16 +1189,17 @@ $advisorHeader
     final isAdv = !_isGeneral && _selectedAdvisor != null;
     final scopeTitle = isAdv ? 'ASESOR ASIGNADO: ${_selectedAdvisor!.name.toUpperCase()}' : 'DISPONIBILIDAD GENERAL';
     final scopeSub = isAdv
-        ? 'Código: ${_selectedAdvisor!.code}${_selectedAdvisor!.phone.isNotEmpty ? " • Teléfono: ${_selectedAdvisor!.phone}" : ""}'
+        ? (_selectedAdvisor!.phone.isNotEmpty ? 'Teléfono: ${_selectedAdvisor!.phone}' : '')
         : 'Toda la rifa • Boletas libres para reserva y venta inmediata';
 
     // Canvas width
     const canvasWidth = 1140.0;
 
     final allTickets = _showFullBoard ? sortedScoped : sortedAvailable;
-    const maxVisualCount = 200;
-    final hasTruncated = allTickets.length > maxVisualCount;
-    final ticketsToRender = hasTruncated ? allTickets.take(maxVisualCount).toList() : allTickets;
+    final pages = _pagesFor(allTickets.length);
+    final page = _page.clamp(0, pages - 1);
+    final hasTruncated = pages > 1;
+    final ticketsToRender = allTickets.skip(page * _pageSize).take(_pageSize).toList();
 
     return Container(
       width: canvasWidth,
@@ -1221,7 +1356,7 @@ $advisorHeader
                 _buildMetricItem(
                   icon: Icons.calendar_month_rounded,
                   label: 'Sorteo',
-                  value: widget.raffle.mainDrawDate,
+                  value: _dateOnly(widget.raffle.mainDrawDate),
                   sub: widget.raffle.mainLottery,
                   textColor: textColor,
                   textMuted: textMuted,
@@ -1229,7 +1364,7 @@ $advisorHeader
                 _buildMetricItem(
                   icon: Icons.attach_money_rounded,
                   label: 'Valor Boleta',
-                  value: currency.format(widget.raffle.ticketPrice),
+                  value: _money(widget.raffle.ticketPrice),
                   sub: 'Pago único',
                   textColor: textColor,
                   textMuted: textMuted,
@@ -1303,7 +1438,7 @@ $advisorHeader
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Mostrando las primeras 200 boletas de un total de ${allTickets.length}. Para ver el inventario completo o filtrar por asesor, descargue el archivo Excel (.xlsx) o use el selector de asesores.',
+                      'Página ${page + 1} de $pages: boletas ${page * _pageSize + 1} a ${math.min(allTickets.length, (page + 1) * _pageSize)} de ${allTickets.length}. Para tener todas en un solo archivo descargue el PDF o el Excel (.xlsx).',
                       style: TextStyle(
                         color: textColor,
                         fontWeight: FontWeight.w600,

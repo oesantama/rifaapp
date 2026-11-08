@@ -1,4 +1,6 @@
 import 'package:url_launcher/url_launcher.dart';
+import 'ui/core/utils/apk_updater.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'ui/core/utils/url_launcher_helper.dart' as web_launcher;
 import 'version.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -189,11 +191,15 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
             else
               ElevatedButton.icon(
                 onPressed: () {
-                  final url = Provider.of<AppConfigViewModel>(context, listen: false).androidApkUrl;
-                  launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                  ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
+                  // El APK se baja del MISMO servidor al que está conectada la app (siempre la versión publicada ahí) y se instala encima
+                  ApkUpdateDialog.show(context, '${ApiService.publicBaseUrl}/descargar-apk').then((_) {
+                    // Si no se instaló, el aviso vuelve a salir en el próximo chequeo
+                    _updateBannerShown = false;
+                  });
                 },
                 icon: const Icon(Icons.download),
-                label: const Text('Descargar actualización'),
+                label: const Text('Descargar e instalar'),
               ),
           ],
         ),

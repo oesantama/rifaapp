@@ -8,6 +8,18 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.0] - 2026-11-08
+
+### Nuevo
+- **Actualización de la app Android desde la propia app**: al haber una versión nueva aparece el aviso "Descargar e instalar"; baja el APK del servidor y abre el instalador (solo se confirma, no se pierden datos).
+- **Números disponibles**: paginación (100/200/500/1000 por página) y descarga en PDF con todas las boletas en bloques de 100.
+- Casilla "Recordar contraseña" en el inicio de sesión.
+
+### Mejoras
+- Lista de boletas hasta 14 veces más rápida; el navegador ya no vuelve a bajar el código de la app si no cambió.
+- Abono mínimo de los sorteos semanales según cada sorteo; búsqueda sin tildes y sin id interno de la boleta.
+- Asesores asociados a rifas al crearlos o editarlos.
+
 ## [3.2.0] - 2026-10-21
 
 ### Nuevo
