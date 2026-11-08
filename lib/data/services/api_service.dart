@@ -1579,8 +1579,15 @@ class ApiService {
 
   /// Payments already registered with this transfer approval number (current, voided or of voided sales),
   /// and whether the repeat is impossible (`blocked`: it cannot pay another ticket) with the reason.
-  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber, {String? ticketId}) async {
-    final uri = Uri.parse('$baseUrl/transfers/check').replace(queryParameters: {'raffleId': raffleId, 'approvalNumber': approvalNumber, if (ticketId != null) 'ticketId': ticketId});
+  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber,
+      {String? ticketId, double? amount, double? proofAmount}) async {
+    final uri = Uri.parse('$baseUrl/transfers/check').replace(queryParameters: {
+      'raffleId': raffleId,
+      'approvalNumber': approvalNumber,
+      if (ticketId != null) 'ticketId': ticketId,
+      if (amount != null && amount > 0) 'amount': amount.round().toString(),
+      if (proofAmount != null && proofAmount > 0) 'proofAmount': proofAmount.round().toString(),
+    });
     final response = await authGet(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) throw ApiException.fromResponse(response);
     final body = Map<String, dynamic>.from(jsonDecode(response.body));
@@ -1588,6 +1595,7 @@ class ApiService {
       'matches': [for (final m in (body['matches'] as List? ?? [])) Map<String, dynamic>.from(m)],
       'blocked': body['blocked'] == true,
       'blockReason': '${body['blockReason'] ?? ''}',
+      'note': '${body['note'] ?? ''}',
     };
   }
 

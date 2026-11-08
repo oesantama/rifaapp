@@ -62,6 +62,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   final _approvalController = TextEditingController();
   final _approvalFocus = FocusNode();
   String? _approvalCheckedKey; // approval number already checked (or confirmed as repeated)
+  String? _approvalCheckedSig; // número + valor del abono + valor leído del comprobante con los que se revisó
   bool _approvalDuplicateConfirmed = false;
   bool _supportDuplicateConfirmed = false;
   // Número de aprobación repetido que no se puede usar (esa transferencia no alcanza para otra boleta)
@@ -224,17 +225,25 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     final text = _approvalController.text.trim();
     final key = approvalKey(text);
     if (key.length < 3) return false;
-    if (key == _approvalCheckedKey) return true;
+    // Una transferencia puede pagar varias boletas: la revisión depende también del valor del abono y del valor leído del comprobante
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final proofAmounts = ((_proofRead?['amounts'] as List?) ?? []).whereType<num>().map((e) => e.toDouble()).toList();
+    final proofAmount = proofAmounts.isEmpty ? 0.0 : proofAmounts.reduce((a, b) => a > b ? a : b);
+    final sig = '$key|${amount.round()}|${proofAmount.round()}';
+    if (key == _approvalCheckedKey && sig == _approvalCheckedSig) return true;
     if (_checkingApproval) return false;
     setState(() => _checkingApproval = true);
     try {
-      final check = await context.read<TicketViewModel>().checkTransferApproval(widget.ticket.raffleId, text, ticketId: widget.ticket.id);
+      final check = await context
+          .read<TicketViewModel>()
+          .checkTransferApproval(widget.ticket.raffleId, text, ticketId: widget.ticket.id, amount: amount, proofAmount: proofAmount);
       final matches = (check['matches'] as List).map((e) => Map<String, dynamic>.from(e)).toList();
       final blocked = check['blocked'] == true;
       if (!mounted) return false;
       setState(() => _checkingApproval = false);
       if (matches.isEmpty) {
         setState(() {
+          _approvalCheckedSig = sig;
           _approvalCheckedKey = key;
           _approvalDuplicateConfirmed = false;
           _approvalBlockedKey = null;
@@ -244,6 +253,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       final proceed = await showApprovalMatchesDialog(context, text, matches, blocked: blocked, blockReason: '${check['blockReason'] ?? ''}');
       if (!mounted) return false;
       setState(() {
+        _approvalCheckedSig = proceed && !blocked ? sig : null;
         _approvalCheckedKey = proceed && !blocked ? key : null;
         _approvalDuplicateConfirmed = proceed && !blocked;
         _approvalBlockedKey = blocked ? key : null;
@@ -253,6 +263,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
         // Back to the field so the user can correct the number
         _approvalController.selection = TextSelection(baseOffset: 0, extentOffset: _approvalController.text.length);
         _approvalFocus.requestFocus();
+      }
+      if (proceed && !blocked && '${check['note'] ?? ''}'.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(duration: const Duration(seconds: 8), content: Text('${check['note']}')));
       }
       return proceed && !blocked;
     } catch (e) {

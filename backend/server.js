@@ -5890,6 +5890,7 @@ function findPaymentMatches(test, companyId, maskContact) {
       buyerDocument: mask(sale.buyerDocument),
       advisorName: sale.advisorName || '',
       amount: abono.amount || 0,
+      proofTotal: abono.proofTotal || null,
       registeredAt: abono.date || null,
       registeredBy: abono.sellerName || '',
       transferDate: abono.transferDate || null,
@@ -5918,26 +5919,69 @@ function findPaymentMatches(test, companyId, maskContact) {
 }
 
 /**
- * Un número de aprobación repetido solo puede ser legítimo si esa transferencia fue por MÁS que el valor de una boleta
- * (alcanza para pagar otra). Si lo ya registrado con esa aprobación es igual o menor al valor de la boleta, es imposible
- * que pague otra: no se deja continuar. Tampoco se puede usar dos veces en la misma boleta. Las anuladas no cuentan.
+ * Un número de aprobación repetido es legítimo cuando UNA transferencia paga varias boletas (ej.: $180.000 repartidos en
+ * 4 abonos). Se valida contra el valor TOTAL de la transferencia:
+ *  • total conocido (leído del comprobante, o guardado en un pago anterior con esa aprobación): se descuenta lo ya aplicado
+ *    y solo se permite abonar hasta lo que queda; si el abono es mayor que lo que queda (por ejemplo, escribir otra vez el
+ *    valor completo), se bloquea.
+ *  • total desconocido (comprobante ilegible): regla anterior: si lo ya registrado es igual o menor al valor de una boleta,
+ *    no pudo alcanzar para otra y se bloquea.
+ * Tampoco se puede usar dos veces en la misma boleta. Los pagos anulados no cuentan.
+ * opts = { amount: abono que se quiere registrar, proofTotal: valor total leído del comprobante }
  */
-function approvalRepeatRule(matches, ticket, raffle) {
+function approvalRepeatRule(matches, ticket, raffle, opts = {}) {
   const live = (matches || []).filter(m => m.state === 'VIGENTE');
-  if (!live.length) return { blocked: false, registered: 0, price: 0, reason: '' };
+  if (!live.length) return { blocked: false, registered: 0, price: 0, total: 0, remaining: 0, reason: '', note: '' };
   const price = Number((ticket && ticket.price) || (raffle && raffle.ticketPrice) || 0);
   const registered = live.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
   const money = n => `$${Math.round(n).toLocaleString('es-CO')}`;
   if (ticket && live.some(m => m.ticketId === ticket.id)) {
-    return { blocked: true, registered, price, reason: 'Este número de aprobación ya está registrado en esta misma boleta: no se puede usar dos veces.' };
+    return { blocked: true, registered, price, total: 0, remaining: 0, note: '', reason: 'Este número de aprobación ya está registrado en esta misma boleta: no se puede usar dos veces.' };
+  }
+  const stored = Math.max(0, ...live.map(m => Number(m.proofTotal) || 0));
+  const read = Number(opts.proofTotal) || 0;
+  const total = read > 0 ? read : stored;
+  const amount = Number(opts.amount) || 0;
+  // Lo que esta boleta todavía debe: el abono nunca puede pasarse de ahí, venga de la transferencia que venga
+  const ticketPending = ticket ? Math.max(0, Math.round((Number(ticket.price) || price) - (Number(ticket.totalPaid) || 0))) : 0;
+  if (total > 0) {
+    const remaining = Math.round(total - registered);
+    const used = `${money(registered)} en ${live.length} pago${live.length === 1 ? '' : 's'}`;
+    // Máximo que se puede registrar en ESTA boleta con esta transferencia: lo que queda de la transferencia y lo que debe la boleta
+    const maxAllowed = ticket ? Math.min(Math.max(remaining, 0), ticketPending) : Math.max(remaining, 0);
+    if (remaining <= 0) {
+      return { blocked: true, registered, price, total, remaining: 0, note: '', reason: `Esta transferencia fue por ${money(total)} y ya se aplicó completa (${used}). No queda saldo para otra boleta: revise el número.` };
+    }
+    if (amount > remaining + 0.5) {
+      const boletaLimit = ticket && ticketPending < remaining ? ` (y esta boleta solo debe ${money(ticketPending)})` : '';
+      return {
+        blocked: true, registered, price, total, remaining, maxAllowed, note: '',
+        reason: `Esta transferencia fue por ${money(total)}; ya se aplicaron ${used} y solo quedan ${money(remaining)}. Este abono de ${money(amount)} la excede: registre como máximo ${money(maxAllowed)}${boletaLimit}.`
+      };
+    }
+    if (ticket && amount > ticketPending + 0.5) {
+      return {
+        blocked: true, registered, price, total, remaining, maxAllowed, note: '',
+        reason: `Este abono de ${money(amount)} supera lo que debe esta boleta (${money(ticketPending)}). De la transferencia quedan ${money(remaining)} para otras boletas: registre como máximo ${money(maxAllowed)} aquí.`
+      };
+    }
+    const left = amount > 0 ? `con este abono quedarían ${money(remaining - amount)} disponibles` : `quedan ${money(remaining)} disponibles para otras boletas`;
+    const cap = ticket && maxAllowed < remaining && amount <= 0 ? ` En esta boleta puede abonar como máximo ${money(maxAllowed)}.` : '';
+    return { blocked: false, registered, price, total, remaining, maxAllowed, reason: '', note: `Esta transferencia fue por ${money(total)}; ya se aplicaron ${used}; ${left}.${cap}` };
   }
   if (registered <= price) {
     return {
-      blocked: true, registered, price,
-      reason: `Este número de aprobación ya está registrado por ${money(registered)}, un valor igual o menor al de una boleta (${money(price)}). Una transferencia de ese valor no puede pagar otra boleta: revise el número.`
+      blocked: true, registered, price, total: 0, remaining: 0, note: '',
+      reason: `Este número de aprobación ya está registrado por ${money(registered)}, un valor igual o menor al de una boleta (${money(price)}). No pude leer el valor total de la transferencia en el comprobante: adjunte una imagen legible para validar si alcanza para otra boleta.`
     };
   }
-  return { blocked: false, registered, price, reason: '' };
+  return { blocked: false, registered, price, total: 0, remaining: 0, reason: '', note: '' };
+}
+
+/** Valor total de la transferencia según el comprobante: el mayor valor en pesos que se lee en la imagen. */
+function proofTotalOf(read) {
+  const amounts = (read && Array.isArray(read.amounts) ? read.amounts : []).filter(v => Number.isFinite(v) && v > 0);
+  return amounts.length ? Math.max(...amounts) : 0;
 }
 
 // Checks an approval number before saving (the app asks when the user leaves the field)
@@ -5948,8 +5992,8 @@ app.get('/api/transfers/check', (req, res) => {
   if (key.length < 3) return res.json({ matches: [] });
   const matches = findApprovalMatches(key, raffle.companyId, req.auth.role === 'asesor');
   const ticket = req.query.ticketId ? (db.tickets || []).find(t => t.id === req.query.ticketId && t.raffleId === raffle.id) : null;
-  const rule = approvalRepeatRule(matches, ticket, raffle);
-  res.json({ matches, blocked: rule.blocked, blockReason: rule.reason, registeredTotal: rule.registered, ticketPrice: rule.price });
+  const rule = approvalRepeatRule(matches, ticket, raffle, { amount: Number(req.query.amount) || 0, proofTotal: Number(req.query.proofAmount) || 0 });
+  res.json({ matches, blocked: rule.blocked, blockReason: rule.reason, note: rule.note, registeredTotal: rule.registered, ticketPrice: rule.price, transferTotal: rule.total, remaining: rule.remaining });
 });
 
 // Lee el comprobante (OCR en el servidor, sin costo): referencia, valor y banco. Para prellenar y validar el formulario.
@@ -6025,6 +6069,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   // Its hash detects the same image being used again.
   let supportHash = null;
   let referenceFlag = null;
+  let proofTotal = 0; // valor total de la transferencia según el comprobante
   if (isTransfer) {
     const proof = req.body.soporteImageBase64 || req.body.soporteBase64;
     if (!proof) {
@@ -6037,6 +6082,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     // La referencia escrita debe ser la del comprobante (se lee la imagen en el servidor). Si no coincide, el usuario
     // debe corregirla; si insiste, el pago queda con una alerta ALTA para revisión. Si no se puede leer, no bloquea.
     const proofRead = await ocrService.readProof(proofBuffer);
+    proofTotal = proofTotalOf(proofRead);
     const refCheck = ocrService.verifyReference(proofRead, transfer.approvalNumber);
     if (refCheck.status === 'MISMATCH') {
       if (req.body.allowReferenceMismatch !== true) {
@@ -6152,7 +6198,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     const approvalMatches = findApprovalMatches(approvalKey(transfer.approvalNumber), companyId, maskContact);
     if (approvalMatches.length) {
       // Imposible de repetir: no se puede continuar ni confirmando
-      const repeatRule = approvalRepeatRule(approvalMatches, ticket, raffle);
+      const repeatRule = approvalRepeatRule(approvalMatches, ticket, raffle, { amount: abonoAmount, proofTotal });
       if (repeatRule.blocked) {
         return res.status(409).json({ error: repeatRule.reason, code: 'DUPLICATE_APPROVAL_BLOCKED', matches: approvalMatches });
       }
@@ -6260,6 +6306,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
       transferAccountId: transfer.transferAccountId,
       ...(req.body.allowDuplicateApproval === true ? { duplicateApprovalConfirmed: true } : {}),
       ...(supportHash ? { soporteHash: supportHash } : {}),
+      ...(proofTotal > 0 ? { proofTotal } : {}),
       ...(riskFlags.length ? { riskFlags } : {})
     } : {}),
     ...soporte

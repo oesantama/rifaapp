@@ -206,8 +206,9 @@ class TicketViewModel extends ChangeNotifier {
   }
 
   /// Payments already registered with this transfer approval number; throws if the check fails.
-  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber, {String? ticketId}) =>
-      _repository.checkTransferApproval(raffleId, approvalNumber, ticketId: ticketId);
+  Future<Map<String, dynamic>> checkTransferApproval(String raffleId, String approvalNumber,
+          {String? ticketId, double? amount, double? proofAmount}) =>
+      _repository.checkTransferApproval(raffleId, approvalNumber, ticketId: ticketId, amount: amount, proofAmount: proofAmount);
 
   /// Reads the proof image on the server (reference, amount, bank).
   Future<Map<String, dynamic>> readTransferProof(String imageDataUri) => _repository.readTransferProof(imageDataUri);
