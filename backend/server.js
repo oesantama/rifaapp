@@ -1369,7 +1369,9 @@ app.get(['/descargar-apk', '/descargar', '/rifamaster.apk', '/app.apk'], (req, r
   const found = possiblePaths.find(p => fs.existsSync(p));
   if (found) {
     res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-    res.setHeader('Content-Disposition', 'attachment; filename="RifaMaster.apk"');
+    // Mismo nombre que el de GitHub (rifa-master.apk) para que el archivo se llame igual venga de donde venga
+    res.setHeader('Content-Disposition', 'attachment; filename="rifa-master.apk"');
+    res.setHeader('Cache-Control', 'no-cache');
     return res.sendFile(path.resolve(found));
   }
   return res.status(404).send('APK en proceso de compilación o no disponible.');
@@ -2397,9 +2399,13 @@ function resolveAccount(payload) {
 // Public: what the login screen and the ads banner need (no secrets)
 app.get('/api/public/app-config', (req, res) => {
   const m = monetizationSettings();
+  // Sin un enlace propio configurado, el APK se descarga de ESTE servidor (siempre la versión publicada aquí y conectada a estos datos);
+  // el enlace por defecto de GitHub trae un APK que puede apuntar a otro servidor.
+  const ownApkUrl = `${req.protocol}://${req.get('host')}/descargar-apk`;
+  const configuredApk = String(m.androidApkUrl || '');
   res.json({
     demoEnabled: !!m.demoEnabled,
-    androidApkUrl: m.androidApkUrl,
+    androidApkUrl: !configuredApk || /github\.com\/oesantama\//i.test(configuredApk) ? ownApkUrl : configuredApk,
     ad: {
       title: m.adTitle, text: m.adText, upgradeTitle: m.upgradeTitle, upgradeText: m.upgradeText,
       priceText: m.priceText, contactWhatsApp: m.contactWhatsApp, contactUrl: m.contactUrl
