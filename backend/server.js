@@ -213,15 +213,22 @@ function ensureVerificationSecret(target) {
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid reading mistakes
+// El código se calcula con HMAC (≈9 µs). En la lista de 5000 boletas eso eran ~45 ms por consulta y bloqueaba el servidor para todos:
+// se guarda por boleta junto con los datos de los que depende, así que cambia solo si cambian.
+const verificationCodeCache = new Map();
+
 function ticketVerificationCode(ticket) {
   if (!ticket || ticket.status === 'DISPONIBLE' || !db.settings || !db.settings.verificationSecret) return null;
-  const mac = require('crypto')
-    .createHmac('sha256', db.settings.verificationSecret)
-    .update(`${ticket.id}|${ticket.raffleId}|${ticket.assignedDate || ''}|${(ticket.annulments || []).length}`)
-    .digest();
+  const secret = db.settings.verificationSecret;
+  const input = `${ticket.id}|${ticket.raffleId}|${ticket.assignedDate || ''}|${(ticket.annulments || []).length}`;
+  const cached = verificationCodeCache.get(ticket.id);
+  if (cached && cached.input === input && cached.secret === secret) return cached.code;
+  const mac = require('crypto').createHmac('sha256', secret).update(input).digest();
   let code = '';
   for (let i = 0; i < 10; i++) code += CODE_ALPHABET[mac[i] % CODE_ALPHABET.length];
-  return `${code.slice(0, 5)}-${code.slice(5)}`;
+  code = `${code.slice(0, 5)}-${code.slice(5)}`;
+  verificationCodeCache.set(ticket.id, { input, secret, code });
+  return code;
 }
 
 function withVerification(ticket) {
@@ -1413,7 +1420,10 @@ if (staticDir) {
   app.get(['/', '/index.html'], (req, res) => sendIndexHtml(res));
   app.use(express.static(staticDir, {
     setHeaders: (res, filePath) => {
-      if (filePath.endsWith('.html') || filePath.endsWith('main.dart.js') || filePath.endsWith('flutter_bootstrap.js') ||
+      // main.dart.js pesa ~1,9 MB comprimido: con revalidación (ETag → 304) un usuario que ya lo tiene no lo vuelve a bajar, pero siempre recibe la versión nueva
+      if (filePath.endsWith('main.dart.js')) {
+        res.setHeader('Cache-Control', 'no-cache');
+      } else if (filePath.endsWith('.html') || filePath.endsWith('flutter_bootstrap.js') ||
           filePath.endsWith('flutter_service_worker.js') || filePath.endsWith('/sw.js') || filePath.endsWith('build.json') || filePath.endsWith('version.json')) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
@@ -2233,11 +2243,15 @@ async function reloadFromFirestore() {
   if (seededChannels || seededBanks || seededLotteries || seededSecret) saveDB();
 }
 
+// Cambia con cada guardado: sirve para saber si lo que se calculó de la base de datos sigue vigente.
+let dbVersion = 0;
+
 function saveDB() {
   if (!isDbLoaded) {
     console.warn('⚠️ saveDB ignorado: La base de datos aún no ha sido cargada.');
     return;
   }
+  dbVersion++;
   const stored = security.hasMasterKey() ? security.encryptObject(db) : db;
   try {
     // Written in place (data.json is a bind-mounted file, so it cannot be replaced by rename)
@@ -5334,10 +5348,19 @@ app.get('/api/raffles/:id/revision', (req, res) => {
 });
 
 // GET Tickets (with multi-tenant isolation)
+// Lista de boletas ya serializada (≈1,6 MB para 5000 boletas): varios equipos piden la misma lista casi al mismo tiempo
+// cuando alguien vende. Se reutiliza mientras no haya cambios guardados (y como máximo 5 s) para no recalcularla para cada uno.
+const ticketListCache = new Map();
+
 app.get('/api/tickets', (req, res) => {
   const { raffleId, advisorId, status, search, numberSearch, companyId } = req.query;
   if (raffleId) {
     res.setHeader('X-Raffle-Revision', String(getRaffleRevision(raffleId)));
+  }
+  const cacheKey = `${req.auth ? req.auth.role + ':' + (req.auth.record.id || '') : ''}|${req.originalUrl}`;
+  const hit = ticketListCache.get(cacheKey);
+  if (hit && hit.version === dbVersion && Date.now() - hit.at < 5000) {
+    return res.type('application/json').send(hit.body);
   }
   
   let targetCompanyId = companyId;
@@ -5349,27 +5372,21 @@ app.get('/api/tickets', (req, res) => {
   let result = db.tickets || [];
 
   if (targetCompanyId) {
-    const companyRaffleIds = (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId).map(r => r.id);
-    result = result.filter(t => companyRaffleIds.includes(t.raffleId));
+    const companyRaffleIds = new Set((db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId).map(r => r.id));
+    result = result.filter(t => companyRaffleIds.has(t.raffleId));
   }
 
   if (raffleId) {
     result = result.filter(t => t.raffleId === raffleId);
-  } else if (targetCompanyId) {
-    const availableRaffles = (db.raffles || []).filter(r => !r.companyId || r.companyId === targetCompanyId);
-    if (availableRaffles.length > 0) {
-      result = result.filter(t => availableRaffles.some(r => r.id === t.raffleId));
-    }
   }
 
   // Restricción para asesores: si el administrador le quitó el check en una rifa,
   // no podrá ver números disponibles (DISPONIBLE), solo lo que ya vendió.
   if (req.auth && req.auth.role === 'asesor') {
     const myAdvId = req.auth.record.id;
+    const authorizedByRaffle = new Map((db.raffles || []).map(r => [r.id, !r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(myAdvId)]));
     result = result.filter(t => {
-      const r = (db.raffles || []).find(rf => rf.id === t.raffleId);
-      const isAssigned = r && (!r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(myAdvId));
-      if (isAssigned) return true;
+      if (authorizedByRaffle.get(t.raffleId)) return true;
       return t.advisorId === myAdvId || (t.abonos && t.abonos.some(a => a.sellerId === myAdvId));
     });
   }
@@ -5420,7 +5437,10 @@ app.get('/api/tickets', (req, res) => {
     });
   }
 
-  res.json(result.map(withVerification));
+  const body = JSON.stringify(result.map(withVerification));
+  if (ticketListCache.size > 30) ticketListCache.clear();
+  ticketListCache.set(cacheKey, { version: dbVersion, at: Date.now(), body });
+  res.type('application/json').send(body);
 });
 
 // POST Register Ticket Sale or Abono

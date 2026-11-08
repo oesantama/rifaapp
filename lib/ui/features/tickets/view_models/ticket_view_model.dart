@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rifaapp/data/services/auth_http.dart';
@@ -76,6 +77,8 @@ class TicketViewModel extends ChangeNotifier {
       }
       if (remoteRev > _currentRevision) {
         _isBackgroundSyncing = true;
+        // Cuando alguien vende, TODOS los equipos se enteran a la vez: un retraso aleatorio evita que pidan la lista completa en el mismo instante
+        await Future.delayed(Duration(milliseconds: 100 + Random().nextInt(1500)));
         final seq = _loadSeq;
         final freshTickets = await _repository.fetchTickets(raffleId: raffleId);
         if (seq != _loadSeq || _isLoading) {
