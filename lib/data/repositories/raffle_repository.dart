@@ -159,7 +159,8 @@ class RaffleRepository {
   Future<void> resolveDeletionRequest(String id, String status, {String note = ''}) =>
       _apiService.resolveDeletionRequest(id, status, note: note);
 
-  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false}) => _apiService.closeRaffle(raffleId, reopen: reopen);
+  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false, String? advisorMode, List<String>? advisorIds}) =>
+      _apiService.closeRaffle(raffleId, reopen: reopen, advisorMode: advisorMode, advisorIds: advisorIds);
 
   Future<Uint8List> exportRaffle(String raffleId) => _apiService.exportRaffle(raffleId);
 

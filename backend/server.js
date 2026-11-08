@@ -4270,7 +4270,13 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
     transferAccounts = checked.accounts;
   }
 
-  if (req.body.status !== undefined) raffle.status = req.body.status;
+  if (req.body.status !== undefined) {
+    const before = raffle.status;
+    raffle.status = req.body.status;
+    // Inactivar una rifa cierra las ventas de todos los asesores; al reactivarla se pregunta a quiénes se les reactivan
+    if (raffle.status === 'INACTIVA' && before !== 'INACTIVA') lockAdvisorSales(raffle, actorName(req), 'Rifa inactivada');
+    else if (raffle.status === 'ACTIVA' && before === 'INACTIVA') applyReactivationLock(raffle, req);
+  }
   if (req.body.title !== undefined) {
     const oldTitle = raffle.title;
     const newTitle = String(req.body.title).trim();
@@ -4361,16 +4367,10 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
     return res.status(403).json({ error: 'No tiene permisos para eliminar rifas de otra empresa.' });
   }
 
-  db.raffles.splice(index, 1);
-  for (const type of Object.keys(raffle.templates || {})) {
-    deleteTemplate(raffle.id, type).catch(err => console.error('⚠️ No se pudo borrar la plantilla:', err.message));
-  }
-  // Cascade delete tickets, winners, transactions for this raffle
-  db.tickets = (db.tickets || []).filter(t => t.raffleId !== id);
-  db.winners = (db.winners || []).filter(w => w.raffleId !== id);
-  db.cashTransactions = (db.cashTransactions || []).filter(ct => ct.raffleId !== id);
-  db.commissionPayouts = (db.commissionPayouts || []).filter(cp => cp.raffleId !== id);
-  db.cashDeliveries = (db.cashDeliveries || []).filter(d => d.raffleId !== id);
+  // Elimina TODO: la rifa, sus boletas, pagos, ganadores y entregas de la base de datos, y su carpeta de Google Drive (a la papelera de Drive).
+  // Antes se guarda una copia de seguridad de la base de datos por si fue un error.
+  createSnapshot('antes_de_eliminar_rifa_manual').catch(() => {});
+  purgeRaffle(raffle, `Eliminada manualmente por ${actorName(req)}`);
 
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({
@@ -4430,6 +4430,40 @@ function autoLockAtMs(raffle, lock) {
 function hour12(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
+}
+
+/** Una rifa cerrada o inactiva no vende más boletas a nadie (ni asesores ni administrador). */
+const raffleSalesClosed = raffle => !!raffle && (raffle.status === 'INACTIVA' || !!raffle.scheduledDeletionAt);
+
+/** Cierra las ventas de TODOS los asesores de la rifa (se hace sola al cerrarla o inactivarla). */
+function lockAdvisorSales(raffle, by, reason) {
+  raffle.salesLock = { ...salesLockOf(raffle), locked: true, reason, lockedBy: by, lockedAt: new Date().toISOString(), advisors: {} };
+}
+
+/**
+ * Al reactivar una rifa se decide a quién se le reactivan las ventas: advisorMode ALL (todos), SOME (solo advisorIds)
+ * o sin indicar (los asesores siguen bloqueados y el administrador los habilita después).
+ */
+function applyReactivationLock(raffle, req) {
+  const body = req.body || {};
+  const mode = String(body.advisorMode || '');
+  const lock = salesLockOf(raffle);
+  const companyAdvisors = (db.advisors || []).filter(a => a.companyId === raffle.companyId);
+  let detail = 'ventas de asesores siguen bloqueadas';
+  if (mode === 'ALL') {
+    raffle.salesLock = { ...lock, locked: false, reason: '', lockedBy: null, lockedAt: null, advisors: {} };
+    detail = 'ventas reactivadas para todos los asesores';
+  } else if (mode === 'SOME') {
+    const allowed = new Set(Array.isArray(body.advisorIds) ? body.advisorIds : []);
+    const advisors = {};
+    for (const a of companyAdvisors) {
+      if (!allowed.has(a.id)) advisors[a.id] = { reason: 'No reactivado al reabrir la rifa', by: actorName(req), at: new Date().toISOString() };
+    }
+    raffle.salesLock = { ...lock, locked: false, reason: '', lockedBy: null, lockedAt: null, advisors };
+    detail = `ventas reactivadas solo para ${allowed.size} asesor(es)`;
+  }
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.push({ id: `audit-${Date.now()}`, type: 'REOPEN_RAFFLE', companyId: raffle.companyId, targetId: raffle.id, targetName: raffle.title, detail: `Rifa reactivada: ${detail}`, by: actorName(req), date: new Date().toISOString() });
 }
 
 /** Why this advisor cannot sell new tickets of the raffle right now, or null. */
@@ -4575,6 +4609,8 @@ app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
   raffle.closedBy = actorName(req);
   // Eliminación definitiva 45 días después del cierre (hasta entonces se puede consultar y descargar la información)
   raffle.scheduledDeletionAt = new Date(now + CLOSE_GRACE_DAYS * 86400000).toISOString();
+  // Al cerrar la rifa se inhabilitan las ventas de todos los asesores
+  lockAdvisorSales(raffle, actorName(req), 'Rifa cerrada');
   saveDB();
   res.json(raffle);
 });
@@ -4649,6 +4685,7 @@ app.post('/api/raffles/:id/reopen', adminOnly, (req, res) => {
   delete raffle.closedBy;
   delete raffle.scheduledDeletionAt;
   delete raffle.statusBeforeClose;
+  applyReactivationLock(raffle, req);
   saveDB();
   res.json(raffle);
 });
@@ -4704,7 +4741,8 @@ async function checkRaffleLifecycle() {
           raffle.statusBeforeClose = raffle.status || 'ACTIVA';
           raffle.status = 'INACTIVA';
           raffle.closedAt = raffle.closedAt || new Date(now).toISOString();
-          raffle.closedBy = raffle.closedBy || 'Sistema (30 días cumplidos del sorteo)';
+          raffle.closedBy = raffle.closedBy || 'Sistema (45 días cumplidos del sorteo)';
+          lockAdvisorSales(raffle, 'Sistema', 'Rifa cerrada');
           dbChanged = true;
         }
 
@@ -6178,8 +6216,8 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     });
   }
   const ticketRaffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
-  if (ticket.status === 'DISPONIBLE' && ticketRaffle && ticketRaffle.scheduledDeletionAt) {
-    return res.status(400).json({ error: 'La rifa está cerrada: ya no se pueden vender boletas.' });
+  if (ticket.status === 'DISPONIBLE' && raffleSalesClosed(ticketRaffle)) {
+    return res.status(400).json({ error: 'La rifa está cerrada o inactiva: ya no se pueden vender boletas.', code: 'RAFFLE_CLOSED' });
   }
   // The admin may have stopped advisors from selling new tickets (payments of sold tickets are still allowed)
   if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE') {
@@ -8153,6 +8191,20 @@ function repairCrossCompanyAdvisors(database = db) {
 
 async function startServer() {
   await loadDB();
+  try {
+    // Rifas cerradas antes de este cambio: sin ventas para los asesores y eliminación 45 días después del cierre
+    let fixedClosed = 0;
+    for (const r of db.raffles || []) {
+      if (!r.scheduledDeletionAt) continue;
+      if (!salesLockOf(r).locked) { lockAdvisorSales(r, 'Sistema', 'Rifa cerrada'); fixedClosed++; }
+      const manual = r.closedBy && !/^Sistema/.test(r.closedBy);
+      const limit = Date.parse(r.closedAt || '') + CLOSE_GRACE_DAYS * 86400000;
+      if (manual && Number.isFinite(limit) && Date.parse(r.scheduledDeletionAt) > limit) { r.scheduledDeletionAt = new Date(limit).toISOString(); fixedClosed++; }
+    }
+    if (fixedClosed > 0) { console.log(`🔒 Ajustadas ${fixedClosed} rifas cerradas (ventas bloqueadas / eliminación a 45 días).`); saveDB(); }
+  } catch (err) {
+    console.error('⚠️ No se pudieron ajustar las rifas cerradas:', err.message);
+  }
   try {
     // Fotos de rifas guardadas con enlaces de Drive que no son imagen (página de vista / uc?export=view): se pasan al enlace directo
     let fixed = 0;

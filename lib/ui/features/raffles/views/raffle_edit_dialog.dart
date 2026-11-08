@@ -1,5 +1,6 @@
 import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:rifaapp/data/models/advisor.dart';
+import 'package:rifaapp/ui/features/raffles/views/reactivate_advisors_dialog.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/data/services/api_service.dart';
@@ -1664,7 +1665,14 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                           final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
                           final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
 
+                          // Si estaba inactiva y se reactiva: se pregunta a quiénes se les reactivan las ventas
+                          Map<String, dynamic>? reactivation;
+                          if (_isActive && widget.raffle.status != 'ACTIVA') {
+                            reactivation = await askReactivateAdvisors(context);
+                            if (reactivation == null) return;
+                          }
                           bool ok = await raffleVM.updateRaffle(widget.raffle.id, {
+                            if (reactivation != null) ...reactivation,
                             'title': _titleController.text.trim(),
                             'description': _descriptionController.text.trim(),
                             'ticketPrice': double.tryParse(_ticketPriceController.text.trim()) ?? widget.raffle.ticketPrice,

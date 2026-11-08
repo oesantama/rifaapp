@@ -1250,10 +1250,14 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
-  /// Closes a raffle after its draw (deleted in 7 days) / reopens it. Returns the raffle.
-  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false}) async {
-    final response =
-        await authPost(Uri.parse('$baseUrl/raffles/$raffleId/${reopen ? 'reopen' : 'close'}')).timeout(const Duration(seconds: 20));
+  /// Closes a raffle after its draw (deleted 45 days later) / reopens it. When reopening, [advisorMode] says who can sell again:
+  /// 'ALL' or 'SOME' (with [advisorIds]). Returns the raffle.
+  Future<Raffle> closeRaffle(String raffleId, {bool reopen = false, String? advisorMode, List<String>? advisorIds}) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/raffles/$raffleId/${reopen ? 'reopen' : 'close'}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({if (advisorMode != null) 'advisorMode': advisorMode, if (advisorIds != null) 'advisorIds': advisorIds}),
+    ).timeout(const Duration(seconds: 20));
     if (response.statusCode == 200) return Raffle.fromJson(jsonDecode(response.body));
     throw ApiException.fromResponse(response);
   }
