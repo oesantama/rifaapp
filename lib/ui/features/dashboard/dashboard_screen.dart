@@ -54,17 +54,25 @@ class DashboardScreen extends StatelessWidget {
         double totalConfirmed = targetTickets.where((t) => t.confirmedByAdmin).fold(0.0, (sum, t) => sum + t.totalPaid);
         double pendingTurnIn = totalCollected - totalConfirmed;
 
-        // Solo las ventas de calle comisionan (las de oficina/punto no)
-        final advisorTypes = {for (final a in context.read<AdvisorViewModel>().advisors) a.id: a.type};
-        bool commissionable(Ticket t) =>
-            (t.saleZone.isNotEmpty ? t.saleZone : (advisorTypes[t.advisorId] == 'PUNTO' ? 'OFICINA' : 'CALLE')) == 'CALLE' && t.advisorId.isNotEmpty;
-        int soldTicketsCount = targetTickets.where((t) => t.status != 'DISPONIBLE' && commissionable(t)).length;
-        double commissionPerTicket = currentRaffle != null
-            ? (currentRaffle.commissionType == 'PORCENTAJE'
-                ? (currentRaffle.ticketPrice * (currentRaffle.commissionValue / 100))
-                : currentRaffle.commissionValue)
-            : 0.0;
-        double totalAdvisorsCommission = soldTicketsCount * commissionPerTicket;
+        // Comisiones: las calcula el servidor (rango vigente, solo ventas de calle, sobre lo realmente recaudado).
+        // Antes se estimaba aquí con una tarifa plana por boleta y no coincidía con la liquidación.
+        final commData = Provider.of<AdvisorViewModel>(context).commissionsData;
+        final commAdvisors = (commData?['advisors'] as List?) ?? const [];
+        Map<String, dynamic>? myComm;
+        if (authVM.isAsesor && authVM.activeAdvisor != null) {
+          final me = authVM.activeAdvisor!;
+          for (final a in commAdvisors) {
+            if (a['advisorId'] == me.id) myComm = Map<String, dynamic>.from(a as Map);
+          }
+        }
+        double numOf(dynamic v) => (v as num?)?.toDouble() ?? 0.0;
+        final commEarned = authVM.isAsesor ? numOf(myComm?['commissionEarned']) : numOf(commData?['globalCommissionEarned']);
+        final commPaid = authVM.isAsesor ? numOf(myComm?['commissionPaid']) : numOf(commData?['globalCommissionPaid']);
+        final commToEarn = authVM.isAsesor ? numOf(myComm?['pendingToEarn']) : numOf(commData?['globalPendingToEarn']);
+        final commToCollect = authVM.isAsesor
+            ? numOf(myComm?['pendingBalance'])
+            : commAdvisors.fold<double>(0.0, (sum, a) => sum + numOf((a as Map)['pendingBalance']));
+        final commTier = (myComm?['tierDescription'] ?? '').toString();
 
         double progress = countTotal > 0 ? ((countPagadas + countAbonadas + countReservadas) / countTotal) : 0.0;
 
@@ -73,6 +81,7 @@ class DashboardScreen extends StatelessWidget {
             await raffleVM.loadRaffles();
             await ticketVM.loadTickets(raffleId: currentRaffle?.id);
             await winnerVM.loadWinners();
+            if (context.mounted) await context.read<AdvisorViewModel>().loadCommissions(raffleId: currentRaffle?.id);
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -228,11 +237,22 @@ class DashboardScreen extends StatelessWidget {
                         iconColor: AppTheme.secondaryEmerald,
                       ),
                       StatCard(
-                        title: authVM.isAsesor ? 'Mis Ganancias Generadas' : 'Comisiones Pagadas a Asesores',
-                        value: currency.format(totalAdvisorsCommission),
-                        subtitle: authVM.isAsesor ? 'Ganancia por mi gestión' : 'Comisiones totales liquidadas',
+                        title: authVM.isAsesor ? 'Mis Ganancias Generadas' : 'Comisiones Generadas',
+                        value: currency.format(commEarned),
+                        subtitle: authVM.isAsesor
+                            ? (commTier.isNotEmpty ? commTier : 'Sobre lo que ya recaudé')
+                            : 'Sobre lo recaudado • Pagadas: ${currency.format(commPaid)}',
                         icon: Icons.workspace_premium,
                         iconColor: Colors.purple,
+                      ),
+                      StatCard(
+                        title: authVM.isAsesor ? 'Me Falta por Ganar' : 'Comisiones por Generar',
+                        value: currency.format(commToEarn),
+                        subtitle: commToCollect > 0
+                            ? 'Al cobrarse ${currency.format(commToCollect)} de boletas apartadas o abonadas'
+                            : 'Sin boletas pendientes de pago',
+                        icon: Icons.hourglass_empty,
+                        iconColor: Colors.teal,
                       ),
                       StatCard(
                         title: 'Pozo Acumulado',

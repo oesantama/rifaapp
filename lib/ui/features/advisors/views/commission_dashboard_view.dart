@@ -370,6 +370,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     double globalEarned = (commData['globalCommissionEarned'] as num?)?.toDouble() ?? 0.0;
     double globalPaid = (commData['globalCommissionPaid'] as num?)?.toDouble() ?? 0.0;
     double globalPending = (commData['globalPendingCommission'] as num?)?.toDouble() ?? 0.0;
+    double globalToEarn = (commData['globalPendingToEarn'] as num?)?.toDouble() ?? 0.0;
 
     List advisorsList = commData['advisors'] as List? ?? [];
     List payoutsHistory = commData['payoutsHistory'] as List? ?? [];
@@ -399,12 +400,18 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     double myPaid = 0.0;
     double myPending = 0.0;
     int mySold = 0;
+    double myToEarn = 0.0;
+    double myToCollect = 0.0;
+    int myPendingTickets = 0;
 
     if (myAdvisorStat != null) {
       myEarned = (myAdvisorStat['commissionEarned'] as num?)?.toDouble() ?? 0.0;
       myPaid = (myAdvisorStat['commissionPaid'] as num?)?.toDouble() ?? 0.0;
       myPending = (myAdvisorStat['pendingCommission'] as num?)?.toDouble() ?? 0.0;
       mySold = (myAdvisorStat['totalTicketsSold'] as num?)?.toInt() ?? 0;
+      myToEarn = (myAdvisorStat['pendingToEarn'] as num?)?.toDouble() ?? 0.0;
+      myToCollect = (myAdvisorStat['pendingBalance'] as num?)?.toDouble() ?? 0.0;
+      myPendingTickets = (myAdvisorStat['pendingTicketsCount'] as num?)?.toInt() ?? 0;
     }
 
     return SingleChildScrollView(
@@ -534,6 +541,13 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 color: Colors.orange.shade800,
                 subtitle: 'Saldo actual a liquidar',
               ),
+              _buildMetricCard(
+                title: 'Por Ganar (sin pagar)',
+                val: currency.format(globalToEarn),
+                icon: Icons.hourglass_empty_outlined,
+                color: Colors.teal,
+                subtitle: 'Se generará cuando se paguen las boletas apartadas o abonadas',
+              ),
             ]),
 
             const SizedBox(height: 20),
@@ -644,6 +658,9 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                       Text('Pagado: ${currency.format(paid)} | Pendiente: ${currency.format(pending)}',
                           textAlign: TextAlign.end,
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: pending > 0 ? Colors.red : Colors.green)),
+                      if (((adv['pendingToEarn'] as num?) ?? 0) > 0)
+                        Text('Por ganar: ${currency.format(adv['pendingToEarn'])} (${adv['pendingTicketsCount'] ?? 0} boletas sin pagar)',
+                            textAlign: TextAlign.end, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.teal.shade700)),
                       if (adv['tierDescription'] != null && adv['tierDescription'].toString().isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Container(
@@ -737,7 +754,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 val: currency.format(myEarned),
                 icon: Icons.savings_outlined,
                 color: Colors.purple,
-                subtitle: 'Calculado según esquema',
+                subtitle: 'Sobre lo que ya recaudaste, según tu esquema',
               ),
               _buildMetricCard(
                 title: 'Ganancia Pagada / Cobrada',
@@ -752,6 +769,15 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 icon: Icons.hourglass_top_outlined,
                 color: myPending > 0 ? Colors.red : Colors.green,
                 subtitle: myPending > 0 ? 'Por cobrar al administrador' : '¡Estás al día sin saldos!',
+              ),
+              _buildMetricCard(
+                title: 'Por Ganar (boletas sin pagar)',
+                val: currency.format(myToEarn),
+                icon: Icons.hourglass_empty_outlined,
+                color: Colors.teal,
+                subtitle: myPendingTickets > 0
+                    ? 'Al cobrarse ${currency.format(myToCollect)} de $myPendingTickets boletas apartadas o abonadas'
+                    : 'No tienes boletas pendientes de pago',
               ),
             ]),
           ],

@@ -7784,6 +7784,9 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   let commissionEarned = 0;
   let activeTier = null;
   let tierDescription = '';
+  // Tarifa vigente (la del rango actual, o la base) para calcular lo que AÚN no se ha ganado
+  let rateType = commType === 'VALOR_FIJO' ? 'VALOR_FIJO' : 'PORCENTAJE';
+  let rateValue = commVal;
 
   if (type === 'PUNTO') {
     tierDescription = 'Asesor de punto: no comisiona';
@@ -7794,6 +7797,8 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
     }
     if (activeTier) {
       const rate = Number(activeTier.rate) || 0;
+      rateType = (activeTier.type || 'PORCENTAJE') === 'VALOR_FIJO' ? 'VALOR_FIJO' : 'PORCENTAJE';
+      rateValue = rate;
       const maxStr = (activeTier.max !== null && activeTier.max !== undefined && String(activeTier.max).trim() !== '') ? ` a ${activeTier.max}` : ' o más';
       if ((activeTier.type || 'PORCENTAJE') === 'VALOR_FIJO') {
         commissionEarned = streetSold * rate;
@@ -7815,7 +7820,26 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   }
   if (type === 'INTEGRAL' && officeSold > 0) tierDescription += ` • ${officeSold} de oficina sin comisión`;
 
+  // Lo que todavía NO se ha ganado: boletas de calle apartadas o con abono parcial que aún no están pagadas.
+  //  • Porcentaje: el % vigente sobre el saldo que falta cobrar de esas boletas.
+  //  • Valor fijo por boleta: cada boleta apartada (las abonadas ya cuentan como vendidas) y todavía sin comisión.
+  let pendingToEarn = 0;
+  let pendingBalance = 0;
+  let pendingTicketsCount = 0;
+  if (type !== 'PUNTO') {
+    for (const t of street) {
+      if (t.status !== 'RESERVADA' && t.status !== 'ABONO_PARCIAL') continue;
+      const balance = Math.max(0, (Number(t.price) || 0) - (Number(t.totalPaid) || 0));
+      if (balance <= 0) continue;
+      pendingTicketsCount++;
+      pendingBalance += balance;
+      if (rateType === 'PORCENTAJE') pendingToEarn += balance * rateValue / 100;
+      else if (t.status === 'RESERVADA') pendingToEarn += rateValue;
+    }
+  }
+
   return {
+    pendingToEarn, pendingBalance, pendingTicketsCount,
     type, advTickets, totalTicketsSold, totalCollected, commissionEarned, activeTier, tierDescription,
     streetSold, streetCollected, officeSold, officeCollected,
     zoneUndefined: type === 'INTEGRAL' ? advTickets.filter(t => !SALE_ZONES.includes(t.saleZone)).length : 0
@@ -7874,6 +7898,10 @@ app.get('/api/commissions', (req, res) => {
       commissionEarned: c.commissionEarned,
       commissionPaid,
       pendingCommission,
+      // Lo que aún no se ha ganado porque las boletas apartadas/abonadas no se han pagado del todo
+      pendingToEarn: c.pendingToEarn,
+      pendingBalance: c.pendingBalance,
+      pendingTicketsCount: c.pendingTicketsCount,
       activeTier: c.activeTier,
       tierDescription: c.tierDescription,
       payoutsCount: advPayouts.length
@@ -7883,6 +7911,7 @@ app.get('/api/commissions', (req, res) => {
   const globalCommissionEarned = advisorStats.reduce((sum, a) => sum + a.commissionEarned, 0);
   const globalCommissionPaid = advisorStats.reduce((sum, a) => sum + a.commissionPaid, 0);
   const globalPendingCommission = advisorStats.reduce((sum, a) => sum + a.pendingCommission, 0);
+  const globalPendingToEarn = advisorStats.reduce((sum, a) => sum + a.pendingToEarn, 0);
 
   res.json({
     raffleId: targetRaffleId,
@@ -7893,6 +7922,7 @@ app.get('/api/commissions', (req, res) => {
     globalCommissionEarned,
     globalCommissionPaid,
     globalPendingCommission,
+    globalPendingToEarn,
     advisors: advisorStats,
     payoutsHistory: (db.commissionPayouts || []).filter(p => advisorIds.has(p.advisorId) && (p.raffleId === targetRaffleId || !p.raffleId))
   });
