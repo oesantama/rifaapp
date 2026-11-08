@@ -1,5 +1,6 @@
 import 'dart:html' as html;
 import 'dart:js' as js;
+import 'dart:async';
 
 void openWebWindow(String url) {
   try {
@@ -28,6 +29,26 @@ void promptPwaInstall() {
   try {
     js.context.callMethod('promptPWAInstall');
   } catch (_) {}
+}
+
+/// 'granted' / 'denied' / 'default' / 'UNSUPPORTED'
+String pushPermissionState() {
+  try {
+    return '${js.context.callMethod('rifaPushState')}';
+  } catch (_) {
+    return 'UNSUPPORTED';
+  }
+}
+
+/// Pide permiso y suscribe este navegador a las notificaciones. Devuelve la suscripción (JSON) o DENIED / UNSUPPORTED / ERROR.
+Future<String> enableWebPush(String publicKey) async {
+  final completer = Completer<String>();
+  try {
+    js.context.callMethod('rifaEnablePushCb', [publicKey, (dynamic r) => completer.complete('$r')]);
+  } catch (e) {
+    completer.complete('ERROR: $e');
+  }
+  return completer.future.timeout(const Duration(seconds: 60), onTimeout: () => 'ERROR: tiempo agotado');
 }
 
 void downloadApk() {

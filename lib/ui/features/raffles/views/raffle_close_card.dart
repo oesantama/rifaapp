@@ -72,7 +72,7 @@ class RaffleCloseCard extends StatelessWidget {
                   Text('"${raffle.title}" quedará INACTIVA.', style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   const Text(
-                    'Estará disponible 7 días más para consultar y descargar su información. Pasado ese tiempo se ELIMINARÁ '
+                    'Estará disponible 45 días más para consultar y descargar su información. Pasado ese tiempo se ELIMINARÁ '
                     'TODA su información: boletas, compradores, pagos, ganadores, entregas de caja y soportes en Google Drive. '
                     'Esto no se puede deshacer.',
                     style: TextStyle(height: 1.4),
@@ -96,7 +96,7 @@ class RaffleCloseCard extends StatelessWidget {
                     contentPadding: EdgeInsets.zero,
                     value: understood,
                     onChanged: (v) => setD(() => understood = v == true),
-                    title: const Text('Entiendo que en 7 días se eliminará toda la información de esta rifa.'),
+                    title: const Text('Entiendo que en 45 días se eliminará toda la información de esta rifa.'),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
                 ],
@@ -170,7 +170,7 @@ class RaffleCloseCard extends StatelessWidget {
               closed
                   ? 'Faltan $days día(s). Cerrada el ${_day(raffle.closedAt)} por ${raffle.closedBy ?? ''}. Descargue su información (Excel y '
                       'soportes) antes de esa fecha: después se borrará todo y no se podrá recuperar.'
-                  : 'Cuando termine (premios entregados y caja al día), ciérrela. Quedará 7 días disponible para descargar su información '
+                  : 'Cuando termine (premios entregados y caja al día), ciérrela. Quedará 45 días disponible para descargar su información '
                       'y luego se eliminará.',
               style: const TextStyle(fontSize: 12.5, height: 1.4),
             ),

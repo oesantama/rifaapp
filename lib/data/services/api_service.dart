@@ -1728,6 +1728,38 @@ class ApiService {
   // -------------------------------------------------------------
   // WhatsApp Bot API
   // -------------------------------------------------------------
+  /// Avisos del usuario: { unread, alerts: [...] }
+  Future<Map<String, dynamic>> getAlerts() async {
+    final response = await authGet(Uri.parse('$baseUrl/alerts')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> markAlertsRead({List<String>? ids}) async {
+    final response = await authPost(Uri.parse('$baseUrl/alerts/read'),
+        headers: {'Content-Type': 'application/json'}, body: jsonEncode({if (ids != null) 'ids': ids}));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  Future<String> getPushPublicKey() async {
+    final response = await authGet(Uri.parse('$baseUrl/push/public-key')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return '${jsonDecode(response.body)['publicKey']}';
+    throw ApiException.fromResponse(response);
+  }
+
+  Future<void> pushSubscribe(Map<String, dynamic> subscription) async {
+    final response = await authPost(Uri.parse('$baseUrl/push/subscribe'),
+        headers: {'Content-Type': 'application/json'}, body: jsonEncode({'subscription': subscription}));
+    if (response.statusCode != 200) throw ApiException.fromResponse(response);
+  }
+
+  /// Salud del bot: estado de la conexión de WhatsApp y su actividad reciente.
+  Future<Map<String, dynamic>> getBotHealth() async {
+    final response = await authGet(Uri.parse('$baseUrl/bot/health')).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   Future<Map<String, dynamic>> getWhatsAppStatus() async {
     final response = await authGet(Uri.parse('$baseUrl/whatsapp/status'));
     if (response.statusCode == 200) {

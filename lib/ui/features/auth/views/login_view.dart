@@ -121,8 +121,15 @@ class _LoginViewState extends State<LoginView> {
           _passwordController.clear();
         }
       });
-      // Siempre se devuelve el cursor a la contraseña para poder escribirla de nuevo
-      if (!success) _focusPassword();
+      // Tras un intento fallido el navegador deja el campo "enfocado" pero sin conexión con el teclado (hay que refrescar).
+      // Se cierra el contexto de autocompletado, se suelta el foco y se vuelve a pedir en el siguiente ciclo: crea una conexión nueva.
+      if (!success) {
+        TextInput.finishAutofillContext(shouldSave: false);
+        _passwordFocus.unfocus();
+        Future.delayed(const Duration(milliseconds: 120), () {
+          if (mounted) _focusPassword();
+        });
+      }
     }
   }
 
@@ -487,8 +494,6 @@ class _LoginViewState extends State<LoginView> {
                         TextField(
                           controller: _userController,
                           focusNode: _userFocus,
-                          // readOnly (y no enabled:false): deshabilitar un campo enfocado en web suelta la conexión del teclado
-                          readOnly: _isLoading,
                           autofillHints: const [AutofillHints.username],
                           textInputAction: TextInputAction.next,
                           keyboardType: TextInputType.emailAddress,
@@ -517,7 +522,6 @@ class _LoginViewState extends State<LoginView> {
                         TextField(
                           controller: _passwordController,
                           focusNode: _passwordFocus,
-                          readOnly: _isLoading,
                           obscureText: _obscurePassword,
                           autofillHints: const [AutofillHints.password],
                           textInputAction: TextInputAction.done,

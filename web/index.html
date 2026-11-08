@@ -87,6 +87,31 @@
       });
     }
 
+    // Notificaciones push: pide permiso y suscribe este navegador. Devuelve la suscripción (JSON) o DENIED / UNSUPPORTED / ERROR.
+    window.rifaEnablePush = async function(publicKey) {
+      try {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'UNSUPPORTED';
+        var permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+        if (permission !== 'granted') return 'DENIED';
+        var reg = await navigator.serviceWorker.ready;
+        var padding = '='.repeat((4 - publicKey.length % 4) % 4);
+        var base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+        var raw = atob(base64);
+        var key = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; ++i) key[i] = raw.charCodeAt(i);
+        var sub = await reg.pushManager.getSubscription();
+        if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        return JSON.stringify(sub);
+      } catch (e) {
+        return 'ERROR: ' + e;
+      }
+    };
+    window.rifaEnablePushCb = function(publicKey, cb) { window.rifaEnablePush(publicKey).then(cb, function(e) { cb('ERROR: ' + e); }); };
+    window.rifaPushState = function() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'UNSUPPORTED';
+      return Notification.permission;
+    };
+
     // Recarga completa: elimina service workers y cachés para cargar la versión nueva del servidor
     window.hardReload = async function() {
       try {

@@ -124,3 +124,34 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+
+
+// ---------------------------------------------------------------------------
+// Notificaciones push (Web Push): sorteo cerca y efectivo sin legalizar
+// ---------------------------------------------------------------------------
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: 'Rifa Master', body: event.data ? event.data.text() : '' }; }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Rifa Master', {
+      body: data.body || '',
+      icon: 'icons/Icon-192.png',
+      badge: 'icons/Icon-192.png',
+      tag: data.tag || 'rifamaster',
+      data: { url: data.url || './' }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const c of clients) {
+        if ('focus' in c) return c.focus();
+      }
+      return self.clients.openWindow(target);
+    })
+  );
+});

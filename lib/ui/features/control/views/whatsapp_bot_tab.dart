@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
+import 'package:rifaapp/ui/features/control/views/bot_health_card.dart';
 
 class WhatsAppBotTab extends StatefulWidget {
   const WhatsAppBotTab({super.key});
@@ -228,6 +229,8 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const BotHealthCard(),
+              const SizedBox(height: 16),
               // Header Card
               Card(
                 elevation: 2,

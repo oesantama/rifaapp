@@ -490,7 +490,7 @@ app.get('/privacidad', (req, res) => {
 <h2>6. Seguridad</h2>
 <p>Las comunicaciones viajan cifradas (HTTPS), las contraseñas se guardan con hash y la base de datos se almacena cifrada. Cada empresa solo accede a sus propios datos.</p>
 <h2>7. Conservación y eliminación</h2>
-<ul><li>Cuando una empresa cierra una rifa, sus datos (boletas, compradores, pagos, ganadores y soportes) se eliminan automáticamente <b>7 días después</b> del cierre.</li>
+<ul><li>Cuando una empresa cierra una rifa, sus datos (boletas, compradores, pagos, ganadores y soportes) se eliminan automáticamente <b>45 días después</b> del cierre.</li>
 <li>Las cuentas de usuario se conservan mientras estén activas o hasta que se solicite su eliminación.</li>
 <li>Las copias de seguridad se renuevan periódicamente y se eliminan con el tiempo; pueden conservar datos por un período adicional limitado.</li>
 <li>Algunos datos pueden conservarse cuando una obligación legal o contable lo exija.</li></ul>
@@ -520,7 +520,7 @@ app.get('/terminos', (req, res) => {
 <h2>4. Planes, pagos y publicidad</h2>
 <p>El plan Gratis incluye publicidad. El plan PRO se paga por períodos (1, 3, 6 o 12 meses) según los precios publicados en la aplicación; al vencer sin renovación, la cuenta vuelve al plan Gratis. Los pagos de los planes no son reembolsables, salvo que la ley disponga lo contrario.</p>
 <h2>5. Datos y eliminación</h2>
-<p>El tratamiento de datos se rige por la <a href="/privacidad">Política de privacidad</a>. Al cerrar una rifa, sus datos se eliminan 7 días después; la empresa debe descargar antes la información que necesite conservar.</p>
+<p>El tratamiento de datos se rige por la <a href="/privacidad">Política de privacidad</a>. Al cerrar una rifa, sus datos se eliminan 45 días después; la empresa debe descargar antes la información que necesite conservar.</p>
 <h2>6. Disponibilidad y responsabilidad</h2>
 <p>El servicio se presta "tal como está". Se hacen copias de seguridad periódicas, pero ${b} no responde por pérdidas derivadas de un uso indebido, de información incorrecta registrada por los usuarios, ni de las relaciones entre las empresas y sus compradores. En lo permitido por la ley, la responsabilidad de ${b} se limita al valor pagado por el plan en los últimos 3 meses.</p>
 <h2>7. Suspensión y terminación</h2>
@@ -2736,6 +2736,15 @@ const agilService = require('./agilService')({
   }
 });
 agilService.registerRoutes(app, { adminOnly, targetCompanyOf });
+
+// Alertas y notificaciones push: sorteo a 3 días con boletas sin completar y efectivo sin legalizar por 7 días o más
+const alertService = require('./alertService')({
+  getDb: () => db,
+  saveDB: () => saveDB(),
+  weeklyMinAbonoOf,
+  whatsappService
+});
+alertService.registerRoutes(app, { adminOnly });
 whatsappService.setDocumentHandler(agilService.handleIncomingDocument);
 agilService.start();
 
@@ -2857,6 +2866,12 @@ app.post('/api/bot/handoffs/:id/resolve', adminOnly, (req, res) => {
   if (db.whatsappSessions && db.whatsappSessions[key]) db.whatsappSessions[key].humanAssisted = false;
   saveDB();
   res.json({ ok: true });
+});
+
+// Salud del bot: estado de la conexión de WhatsApp de la empresa y su actividad reciente (el registro sobrevive a los reinicios)
+app.get('/api/bot/health', adminOnly, (req, res) => {
+  const instanceName = whatsappService.getInstanceName(req.auth);
+  res.json({ instanceName, health: whatsappService.getHealth(instanceName), log: whatsappService.getBotLog(instanceName, 40) });
 });
 
 app.get('/api/whatsapp/status', async (req, res) => {
@@ -4377,7 +4392,8 @@ app.delete('/api/raffles/:id', adminOnly, (req, res) => {
 // 2) A los 6 meses (180 días) del sorteo: se elimina por completo de la base de datos
 //    (con copia de seguridad de respaldo previa).
 // ---------------------------------------------------------------------------
-const DRIVE_CLEANUP_DAYS = 30; // 30 días después del sorteo -> Borrar soportes en Drive e inhabilitar
+const CLOSE_GRACE_DAYS = 45;   // una rifa cerrada queda 45 días disponible para consultar/descargar y luego se elimina todo
+const DRIVE_CLEANUP_DAYS = 45; // 45 días después del sorteo (rifas que nadie cerró) -> Borrar soportes en Drive e inhabilitar
 const DB_PURGE_DAYS = 180;     // 6 meses (180 días) después del sorteo -> Eliminar de la base de datos
 
 function drawDayOf(raffle) {
@@ -4557,8 +4573,8 @@ app.post('/api/raffles/:id/close', adminOnly, (req, res) => {
   raffle.status = 'INACTIVA';
   raffle.closedAt = new Date(now).toISOString();
   raffle.closedBy = actorName(req);
-  // Eliminación definitiva de la base de datos a los 180 días (6 meses) del sorteo
-  raffle.scheduledDeletionAt = new Date(drawMs + DB_PURGE_DAYS * 86400000).toISOString();
+  // Eliminación definitiva 45 días después del cierre (hasta entonces se puede consultar y descargar la información)
+  raffle.scheduledDeletionAt = new Date(now + CLOSE_GRACE_DAYS * 86400000).toISOString();
   saveDB();
   res.json(raffle);
 });
@@ -4680,8 +4696,10 @@ async function checkRaffleLifecycle() {
       if (isNaN(drawMs)) continue;
       const daysSinceDraw = Math.floor((now - drawMs) / 86400000);
 
-      // ETAPA 1: Pasados 30 días del sorteo -> Inhabilitar y eliminar soportes de Drive
-      if (daysSinceDraw >= DRIVE_CLEANUP_DAYS) {
+      // ETAPA 1: Pasados 45 días del sorteo -> Inhabilitar y eliminar soportes de Drive
+      // (una rifa cerrada a mano conserva sus soportes hasta su fecha de eliminación: 45 días después del cierre)
+      const waitingPurge = raffle.scheduledDeletionAt && Date.parse(raffle.scheduledDeletionAt) > now;
+      if (daysSinceDraw >= DRIVE_CLEANUP_DAYS && !waitingPurge) {
         if (raffle.status !== 'INACTIVA') {
           raffle.statusBeforeClose = raffle.status || 'ACTIVA';
           raffle.status = 'INACTIVA';
@@ -4720,7 +4738,7 @@ async function checkRaffleLifecycle() {
 
           raffle.driveCleanedAt = new Date(now).toISOString();
           if (!raffle.scheduledDeletionAt) {
-            raffle.scheduledDeletionAt = new Date(drawMs + DB_PURGE_DAYS * 86400000).toISOString();
+            raffle.scheduledDeletionAt = new Date(now + CLOSE_GRACE_DAYS * 86400000).toISOString();
           }
           dbChanged = true;
 
@@ -8155,11 +8173,15 @@ async function startServer() {
   } catch (err) {
     console.error('⚠️ No se pudo revisar la asignación de asesores:', err.message);
   } // the first save after loading also takes the daily safety copy
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
+    // Vigila la conexión de WhatsApp: si una instancia queda atascada, la reinicia sola
+    if (!process.env.NO_BOT_WATCHDOG) whatsappService.startWatchdog();
+    alertService.start();
 
-    // Keep-Alive Self-Ping Interval (Mantiene el servidor despiazado 24/7 en Render gratis)
-    const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || 'https://rifaapp-backend.onrender.com';
+    // Keep-Alive Self-Ping: solo en Render (en el VPS no hace falta y pegaba a un servidor ajeno)
+    const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || '';
+    if (!RENDER_EXTERNAL_URL) return;
     const https = require('https');
     const http = require('http');
 
@@ -8179,3 +8201,13 @@ async function startServer() {
 }
 
 startServer();
+
+// Cierre ordenado (los despliegues envían SIGTERM): se deja de recibir, se termina lo que está en curso y se sale en seguida.
+// Sin esto Docker espera 10 s y mata el proceso, y el bot queda sin atender todo ese tiempo.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    console.log(`↩️ ${sig}: cerrando el servidor.`);
+    setTimeout(() => process.exit(0), 1500).unref();
+    process.exit(0);
+  });
+}

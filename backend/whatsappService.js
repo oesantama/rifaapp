@@ -653,7 +653,7 @@ async function handleHowHeardAnswer({ instance, senderPhone, cfg, db, saveDBCall
 /**
  * Cerebro del Bot: Procesa los mensajes entrantes de WhatsApp y responde de forma inteligente
  */
-async function handleWebhookEvent(body, db, saveDBCallback) {
+async function handleWebhookEventInner(body, db, saveDBCallback) {
   const event = body.event || body.type;
   if (event !== 'messages.upsert' && event !== 'MESSAGES_UPSERT') {
     return { ignored: true };
@@ -1571,6 +1571,56 @@ async function storeReceiptMedia(ctx, media) {
   return out;
 }
 
+/**
+ * Cuánto de una transferencia (número de aprobación) ya se aplicó y cuánto queda, según el valor total que muestra el
+ * comprobante (el leído ahora o el guardado en un pago anterior). Es la misma regla de la web: una transferencia puede
+ * pagar varias boletas mientras la suma no pase de su valor total.
+ */
+function approvalAvailability(db, approval, proofTotal) {
+  const key = approvalKeyOf(approval);
+  if (!key) return { known: false, count: 0, registered: 0, total: 0, remaining: 0, ticketIds: [] };
+  let registered = 0, stored = 0, count = 0;
+  const ticketIds = [];
+  for (const t of db.tickets || []) {
+    for (const a of t.abonos || []) {
+      if (approvalKeyOf(a.approvalNumber) !== key || !(Number(a.amount) > 0)) continue;
+      registered += Number(a.amount);
+      stored = Math.max(stored, Number(a.proofTotal) || 0);
+      count++;
+      ticketIds.push(t.id);
+    }
+  }
+  const total = Number(proofTotal) > 0 ? Number(proofTotal) : stored;
+  return { known: total > 0, count, registered, total, remaining: total > 0 ? Math.round(total - registered) : 0, ticketIds };
+}
+
+/**
+ * Entiende "1 50000, 2 30000": cada pedazo es el número de la lista (o una oportunidad de la boleta) y el valor.
+ * "1 todo" aplica el saldo completo. Devuelve { allocs, error }.
+ */
+function parseSplitReply(text, candidates, ticketPrice) {
+  const allocs = [];
+  const used = new Set();
+  const chunks = String(text || '').split(/[,;\n]+/).map(c => c.trim()).filter(Boolean);
+  if (!chunks.length) return { error: 'No entendí el reparto.' };
+  for (const chunk of chunks) {
+    const nums = chunk.match(/\d[\d.]*/g) || [];
+    const wantsAll = /\b(todo|todos|saldo|total|completo)\b/i.test(chunk);
+    if (!nums.length || (nums.length < 2 && !wantsAll)) return { error: `No entendí "${chunk}". Escribe el número de la lista y el valor, por ejemplo *1 50000*.` };
+    const ref = nums[0].replace(/\./g, '');
+    let ticket = null;
+    if (ref.length <= 2) ticket = candidates[parseInt(ref, 10) - 1] || null;
+    else ticket = candidates.find(t => (t.numbers || []).some(n => n === ref || n === ref.padStart(String(n).length, '0'))) || null;
+    if (!ticket) return { error: `No encontré la boleta "${nums[0]}" entre tus boletas con saldo.` };
+    if (used.has(ticket.id)) return { error: `La boleta ${numbersOf(ticket)} aparece dos veces: júntalas en un solo valor.` };
+    used.add(ticket.id);
+    const amount = (wantsAll && nums.length < 2) ? balanceOf(ticket, ticketPrice) : parseInt(nums[nums.length - 1].replace(/\./g, ''), 10);
+    if (!(amount > 0)) return { error: `El valor de la boleta ${numbersOf(ticket)} no es válido.` };
+    allocs.push({ ticketId: ticket.id, amount });
+  }
+  return { allocs };
+}
+
 const accountLabelOf = a => [a.bank, a.accountType, a.accountNumber, a.key ? `llave ${a.key}` : '', a.holder].filter(Boolean).join(' • ');
 
 /**
@@ -1650,18 +1700,80 @@ async function startReceiptFlow(ctx, info) {
 async function receiptSelectTarget(ctx, plan, payable) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, session } = ctx;
   let candidates = payable || myTickets(db, mainRaffle.id, senderPhone).filter(t => balanceOf(t, ticketPrice) > 0);
+
+  // La misma transferencia no se puede registrar dos veces en la misma boleta, y solo se puede aplicar hasta su valor total
+  const apKey = approvalKeyOf(plan.approval);
+  if (apKey) {
+    candidates = candidates.filter(t => !(t.abonos || []).some(a => approvalKeyOf(a.approvalNumber) === apKey && Number(a.amount) > 0));
+    const av = approvalAvailability(db, plan.approval, plan.proofTotal);
+    if (av.count > 0 && av.known) {
+      if (av.remaining <= 0) {
+        setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+        await sendTextMessage(instance, senderPhone, `🚫 Este comprobante (No. ${plan.approval}) fue por *${money(av.total)}* y ya está aplicado por completo (${money(av.registered)} en ${av.count} pago${av.count === 1 ? '' : 's'}). No me queda saldo de esta transferencia para otra boleta.\n\nSi crees que es un error, escribe *ASESOR*.`);
+        return;
+      }
+      plan = { ...plan, availNote: `Este comprobante fue por ${money(av.total)}; ya se aplicaron ${money(av.registered)} y quedan ${money(av.remaining)} por aplicar.` };
+      if (plan.amount > av.remaining) {
+        plan = { ...plan, amount: av.remaining, availNote: `${plan.availNote} Solo puedo aplicar ${money(av.remaining)}.` };
+      }
+    }
+    if (candidates.length === 0) {
+      setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, `🚫 Este comprobante ya está registrado en tus boletas con saldo. Si es otro pago, envíame de nuevo la foto del nuevo comprobante.`);
+      return;
+    }
+  }
   // Si el cliente nombró el número en el mensaje, se usa esa boleta
   if (plan.hint) {
     const byHint = candidates.filter(t => (t.numbers || []).includes(plan.hint));
     if (byHint.length === 1) candidates = byHint;
   }
+  // Si ninguna boleta puede recibir todo el valor, el comprobante se reparte entre varias
+  const maxBalance = Math.max(...candidates.map(t => balanceOf(t, ticketPrice)));
+  if (candidates.length >= 2 && plan.amount > maxBalance) {
+    await receiptStartSplit(ctx, plan, candidates);
+    return;
+  }
   if (candidates.length === 1) {
     await receiptConfirm(ctx, candidates[0], plan);
     return;
   }
-  let msg = `📸 *¡Recibí tu comprobante por ${money(plan.amount)}!*\n\nTienes varias boletas con saldo. *¿A cuál corresponde este pago?* Responde con el número de la lista:\n\n`;
+  let msg = `📸 *¡Recibí tu comprobante por ${money(plan.amount)}!*\n\n${plan.availNote ? `ℹ️ ${plan.availNote}\n\n` : ''}Tienes varias boletas con saldo. *¿A cuál corresponde este pago?* Responde con el número de la lista:\n\n`;
   candidates.forEach((t, i) => { msg += `${i + 1}️⃣ ${numbersOf(t)} — saldo ${money(balanceOf(t, ticketPrice))}\n`; });
+  msg += `0️⃣ *Repartirlo entre varias boletas*\n`;
   setPending(senderPhone, { type: 'RECEIPT_WHICH', ...plan, candidateIds: candidates.map(t => t.id) }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg.trim());
+}
+
+async function receiptStartSplit(ctx, plan, candidates) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice } = ctx;
+  // También en el reparto se identifica la cuenta de destino (se le pregunta al cliente si el comprobante no lo deja claro)
+  const accounts = mainRaffle.transferAccounts || [];
+  if (accounts.length && !plan.account) {
+    const foundAccounts = (plan.accountIds || []).map(id => accounts.find(a => a.id === id)).filter(Boolean);
+    if (accounts.length === 1) plan = { ...plan, account: accounts[0] };
+    else if (foundAccounts.length === 1) plan = { ...plan, account: foundAccounts[0] };
+    else {
+      const options = foundAccounts.length > 1 ? foundAccounts : accounts;
+      let ask = `🏦 *¿A cuál de nuestras cuentas hiciste la transferencia?*\n\nNo logré identificarla en el comprobante. Responde con el número:\n\n`;
+      options.forEach((a, i) => { ask += `${i + 1}️⃣ ${accountLabelOf(a)}\n`; });
+      setPending(senderPhone, { type: 'RECEIPT_ACCOUNT', split: true, candidateIds: candidates.map(t => t.id), amount: plan.amount, availNote: plan.availNote || '', ...planCarry(plan), accountIds: options.map(a => a.id) }, db, saveDBCallback, mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, ask.trim());
+      return;
+    }
+  }
+  let msg = `📸 *Tu comprobante es por ${money(plan.amount)}.* Vamos a repartirlo entre tus boletas.\n\n`;
+  if (plan.availNote) msg += `ℹ️ ${plan.availNote}\n\n`;
+  msg += `Tus boletas con saldo:\n`;
+  candidates.forEach((t, i) => { msg += `${i + 1}️⃣ ${numbersOf(t)} — saldo ${money(balanceOf(t, ticketPrice))}\n`; });
+  msg += `\n✍️ Escríbeme el *número de la lista y el valor* de cada abono, separados por comas. Ejemplo: *1 50000, 2 30000*\n`;
+  msg += `O escribe *AUTO* y lo reparto en orden pagando cada saldo.\n`;
+  msg += `\nEl total no puede pasar de ${money(plan.amount)} ni del saldo de cada boleta.`;
+  if (plan.account) msg += `\n🏦 *Cuenta destino:* ${accountLabelOf(plan.account)}`;
+  setPending(senderPhone, {
+    type: 'RECEIPT_SPLIT', amount: plan.amount, availNote: plan.availNote || '', ...planCarry(plan), candidateIds: candidates.map(t => t.id),
+    accountId: plan.account ? plan.account.id : null, accountLabel: plan.account ? accountLabelOf(plan.account) : ''
+  }, db, saveDBCallback, mainRaffle.id);
   await sendTextMessage(instance, senderPhone, msg.trim());
 }
 
@@ -1686,8 +1798,15 @@ async function receiptConfirm(ctx, ticket, plan) {
   const paid = Number(ticket.totalPaid) || 0;
   const balance = balanceOf(ticket, ticketPrice);
   const amount = plan.amount;
+  const confirmKey = approvalKeyOf(plan.approval);
+  if (confirmKey && (ticket.abonos || []).some(a => approvalKeyOf(a.approvalNumber) === confirmKey && Number(a.amount) > 0)) {
+    setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, `🚫 Este comprobante (No. ${plan.approval}) ya está registrado en la boleta ${numbersOf(ticket)}: no se puede usar dos veces en la misma boleta. Si es otro pago, envíame la foto del nuevo comprobante.`);
+    return;
+  }
 
   let msg = `📸 *Revisemos tu comprobante antes de registrarlo*\n\n`;
+  if (plan.availNote) msg += `ℹ️ ${plan.availNote}\n\n`;
   msg += `🎟️ *Boleta:* ${numbersOf(ticket)}\n`;
   msg += `💵 *Valor de la boleta:* ${money(price)}\n`;
   msg += `✅ *Pagado hasta hoy:* ${money(paid)}\n`;
@@ -1723,7 +1842,7 @@ async function receiptConfirm(ctx, ticket, plan) {
   await sendTextMessage(instance, senderPhone, msg);
 }
 
-async function receiptRegister(ctx, pending) {
+async function receiptRegister(ctx, pending, opts = {}) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, advisor, cfg, session } = ctx;
   const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
   if (!ticket || ticket.buyerPhone !== senderPhone) {
@@ -1739,9 +1858,15 @@ async function receiptRegister(ctx, pending) {
   const sameApproval = [];
   if (key) {
     for (const t of db.tickets || []) {
-      for (const a of [...(t.abonos || []), ...(t.voidedAbonos || [])]) if (approvalKeyOf(a.approvalNumber) === key) sameApproval.push(a);
+      for (const a of [...(t.abonos || []), ...(t.voidedAbonos || [])]) {
+        // Los pagos hermanos del mismo reparto no cuentan como repetición
+        if (approvalKeyOf(a.approvalNumber) === key && !(pending.splitId && a.splitId === pending.splitId)) sameApproval.push(a);
+      }
     }
-    if (sameApproval.length) flags.push({ code: 'APROBACION_REPETIDA', level: 'MEDIA', detail: `El número de aprobación ya estaba en ${sameApproval.length} pago(s).` });
+    // Una transferencia que se reparte en varias boletas es legítima mientras la suma no pase de su valor total
+    const av = approvalAvailability(db, pending.approval, pending.proofTotal);
+    const withinCapacity = av.known && av.remaining >= amount;
+    if (sameApproval.length && !withinCapacity) flags.push({ code: 'APROBACION_REPETIDA', level: 'MEDIA', detail: `El número de aprobación ya estaba en ${sameApproval.length} pago(s).` });
   }
   if (soporte && soporte.hash) {
     const same = [];
@@ -1774,6 +1899,7 @@ async function receiptRegister(ctx, pending) {
     ...(pending.accountId ? { transferAccountId: pending.accountId } : {}),
     // Valor total que muestra el comprobante: permite repartir una misma transferencia entre varias boletas
     ...(pending.proofTotal > 0 ? { proofTotal: pending.proofTotal } : {}),
+    ...(pending.splitId ? { splitId: pending.splitId } : {}),
     transferDate: now,
     duplicateApprovalConfirmed: sameApproval.length > 0,
     soporteUrl: soporte ? soporte.url : null,
@@ -1797,6 +1923,7 @@ async function receiptRegister(ctx, pending) {
     description: `Comprobante de ${money(amount)} reportado y confirmado por el cliente en WhatsApp (pendiente de validar en Caja)`
   });
   if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+  if (opts.silent) return { ticket, amount };
 
   const profile = knownProfile(db, senderPhone, session);
   const missing = missingProfileFields(profile);
@@ -1870,6 +1997,11 @@ async function handlePendingFlow(ctx) {
     const options = (pending.accountIds || []).map(id => accounts.find(a => a.id === id)).filter(Boolean);
     const chosenAccount = /^\d{1,2}$/.test(norm) ? (options[parseInt(norm, 10) - 1] || null) : null;
     if (!chosenAccount) return remind(`Responde con el número de la lista (1${options.length > 1 ? ` a ${options.length}` : ''}) para saber a qué cuenta transferiste, o *NO* para cancelar.`);
+    if (pending.split) {
+      const splitCands = (pending.candidateIds || []).map(id => (db.tickets || []).find(t => t.id === id)).filter(Boolean);
+      await receiptStartSplit(ctx, { ...planCarry(pending), amount: pending.amount, availNote: pending.availNote, account: chosenAccount }, splitCands);
+      return true;
+    }
     const accTicket = (db.tickets || []).find(t => t.id === pending.ticketId);
     if (!accTicket) { clear(); return false; }
     await receiptConfirm(ctx, accTicket, { ...planCarry(pending), amount: pending.amount, account: chosenAccount });
@@ -1880,11 +2012,78 @@ async function handlePendingFlow(ctx) {
     if (wantsHuman) { clear(); return false; }
     if (isNo(userText)) return cancelled();
     const candidates = (pending.candidateIds || []).map(id => (db.tickets || []).find(t => t.id === id)).filter(Boolean);
+    if (norm === '0' || /\b(repart|dividi|varias|varios|todas)\b/.test(norm)) {
+      await receiptStartSplit(ctx, { ...planCarry(pending), amount: pending.amount, availNote: pending.availNote }, candidates);
+      return true;
+    }
     let chosen = null;
     if (/^\d{1,2}$/.test(norm)) chosen = candidates[parseInt(norm, 10) - 1] || null;
     if (!chosen && /^\d{3,}$/.test(norm)) chosen = candidates.find(t => (t.numbers || []).includes(norm) || (t.numbers || []).includes(norm.padStart(digits, '0'))) || null;
     if (!chosen) return remind(`Responde con el número de la lista (1${candidates.length > 1 ? ` a ${candidates.length}` : ''}) o escribe *NO* para cancelar.`);
-    await receiptConfirm(ctx, chosen, { ...planCarry(pending), amount: pending.amount });
+    await receiptConfirm(ctx, chosen, { ...planCarry(pending), amount: pending.amount, availNote: pending.availNote });
+    return true;
+  }
+
+  if (pending.type === 'RECEIPT_SPLIT') {
+    if (wantsHuman) { clear(); return false; }
+    if (isNo(userText)) return cancelled();
+    const cands = (pending.candidateIds || []).map(id => (db.tickets || []).find(t => t.id === id)).filter(Boolean);
+    let allocs = [];
+    let problem = '';
+    if (/^(auto|automatico|automatica)$/.test(norm)) {
+      let left = pending.amount;
+      for (const t of cands) {
+        const give = Math.min(balanceOf(t, ticketPrice), left);
+        if (give > 0) { allocs.push({ ticketId: t.id, amount: give }); left -= give; }
+        if (left <= 0) break;
+      }
+    } else {
+      const parsed = parseSplitReply(userText, cands, ticketPrice);
+      if (parsed.error) problem = parsed.error;
+      else allocs = parsed.allocs;
+    }
+    if (!problem) {
+      const total = allocs.reduce((sum, a) => sum + a.amount, 0);
+      const over = allocs.find(a => a.amount > balanceOf(cands.find(t => t.id === a.ticketId), ticketPrice) + 0.5);
+      if (over) problem = `El abono a la boleta ${numbersOf(cands.find(t => t.id === over.ticketId))} (${money(over.amount)}) pasa de su saldo (${money(balanceOf(cands.find(t => t.id === over.ticketId), ticketPrice))}).`;
+      else if (total > pending.amount + 0.5) problem = `La suma (${money(total)}) pasa del valor disponible del comprobante (${money(pending.amount)}). Quedan por repartir como máximo ${money(pending.amount)}.`;
+      else if (!allocs.length) problem = 'No encontré valores para repartir.';
+    }
+    if (problem) return remind(`${problem}\n\nEscribe por ejemplo *1 50000, 2 30000* o *AUTO*, o *NO* para cancelar.`);
+    const total = allocs.reduce((sum, a) => sum + a.amount, 0);
+    let msg = `📸 *Revisemos el reparto de tu comprobante (${money(pending.amount)})*\n\n`;
+    for (const a of allocs) {
+      const t = cands.find(x => x.id === a.ticketId);
+      const left = balanceOf(t, ticketPrice) - a.amount;
+      msg += `🎟️ ${numbersOf(t)} → *${money(a.amount)}* ${left > 0 ? `(quedaría con saldo ${money(left)})` : '(quedaría *pagada*)'}\n`;
+    }
+    msg += `\n💸 *Aplicado:* ${money(total)}${total < pending.amount ? ` • *Sin aplicar:* ${money(pending.amount - total)} (lo podrás usar en otra boleta enviándome de nuevo este comprobante)` : ''}\n`;
+    msg += `\n👉 ¿Registro estos ${allocs.length} pago${allocs.length === 1 ? '' : 's'}? Responde *SÍ* o *NO*.`;
+    setPending(senderPhone, { type: 'RECEIPT_SPLIT_CONFIRM', allocations: allocs, amount: pending.amount, ...planCarry(pending), accountId: pending.accountId || null, accountLabel: pending.accountLabel || '' }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, msg);
+    return true;
+  }
+
+  if (pending.type === 'RECEIPT_SPLIT_CONFIRM') {
+    if (isNo(userText)) { clear(); await sendTextMessage(instance, senderPhone, `👍 No registré nada. Si quieres repartirlo de otra forma, envíame de nuevo la foto del comprobante.`); return true; }
+    if (wantsHuman) { clear(); return false; }
+    if (!isYes(userText)) return remind(`Responde *SÍ* para registrar el reparto o *NO* para cancelar.`);
+    const splitId = `split-${Date.now()}`;
+    const done = [];
+    for (const a of pending.allocations || []) {
+      const res = await receiptRegister(ctx, { ...pending, type: 'RECEIPT_CONFIRM', ticketId: a.ticketId, amount: a.amount, splitId }, { silent: true });
+      if (res && res.ticket) done.push({ ticket: res.ticket, amount: a.amount });
+    }
+    const applied = done.reduce((sum, d) => sum + d.amount, 0);
+    let msg = `✅ *¡Pagos registrados!* 📸\n\n`;
+    for (const d of done) {
+      const left = balanceOf(d.ticket, ticketPrice);
+      msg += `🎟️ ${numbersOf(d.ticket)} → ${money(d.amount)} ${left > 0 ? `(saldo pendiente ${money(left)})` : '🎉 *queda totalmente pagada* (sujeta a validación)'}\n`;
+    }
+    msg += `\n💸 *Comprobante:* ${money(pending.amount)} • *Aplicado:* ${money(applied)}${applied < pending.amount ? ` • *Sin aplicar:* ${money(pending.amount - applied)}` : ''}\n`;
+    msg += `\nNuestro equipo validará la transferencia en la cuenta bancaria y te avisaremos por este chat.\n\n🌐 *Consulta tus boletas aquí:*\n${PUBLIC_BASE_URL}/boleta?phone=${senderPhone}\n\n¡Muchas gracias y mucha suerte! 🍀`;
+    updateSession(senderPhone, { pending: null, lastRaffleId: mainRaffle.id, pendingAmount: null, pendingApproval: null, pendingBank: null }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, msg);
     return true;
   }
 
@@ -1961,7 +2160,135 @@ async function handlePendingFlow(ctx) {
   return false;
 }
 
+
+// ---------------------------------------------------------------------------
+// Registro permanente del bot + vigilante de conexión (para que funcione 24/7 y se pueda saber qué pasó)
+// ---------------------------------------------------------------------------
+const BOT_LOG_FILE = process.env.BOT_LOG_FILE || require('path').join(__dirname, 'assets', 'bot-log.jsonl');
+const BOT_LOG_MAX_BYTES = 1.5 * 1024 * 1024;
+const recentBotLog = [];
+
+/** Una línea por evento, en un archivo que sobrevive a los reinicios. No guarda el contenido de los mensajes. */
+function botLog(entry) {
+  const line = { at: new Date().toISOString(), ...entry };
+  recentBotLog.push(line);
+  if (recentBotLog.length > 300) recentBotLog.shift();
+  try {
+    const fs = require('fs');
+    fs.mkdirSync(require('path').dirname(BOT_LOG_FILE), { recursive: true });
+    fs.appendFileSync(BOT_LOG_FILE, JSON.stringify(line) + '\n');
+    if (fs.statSync(BOT_LOG_FILE).size > BOT_LOG_MAX_BYTES) {
+      const lines = fs.readFileSync(BOT_LOG_FILE, 'utf8').trim().split('\n');
+      fs.writeFileSync(BOT_LOG_FILE, lines.slice(-1200).join('\n') + '\n');
+    }
+  } catch (_) { /* el registro nunca debe tumbar al bot */ }
+}
+
+function getBotLog(instance, limit = 40) {
+  let lines = recentBotLog;
+  if (lines.length < 40) {
+    try {
+      lines = require('fs').readFileSync(BOT_LOG_FILE, 'utf8').trim().split('\n').slice(-400).map(l => JSON.parse(l));
+    } catch (_) { /* sin archivo todavía */ }
+  }
+  return lines.filter(l => !instance || l.instance === instance).slice(-limit).reverse();
+}
+
+const botHealth = new Map(); // instancia -> { state, since, lastOkAt, lastRestartAt, restarts: [ms] }
+
+function getHealth(instance) {
+  const h = botHealth.get(instance);
+  if (!h) return null;
+  const now = Date.now();
+  return {
+    instance,
+    state: h.state,
+    since: new Date(h.since).toISOString(),
+    lastOkAt: h.lastOkAt ? new Date(h.lastOkAt).toISOString() : null,
+    minutesInState: Math.round((now - h.since) / 60000),
+    needsQr: h.state === 'close',
+    restartsLast24h: (h.restarts || []).filter(t => now - t < 24 * 3600 * 1000).length
+  };
+}
+
+const WATCHDOG_EVERY_MS = 60 * 1000;
+const WATCHDOG_STUCK_MS = 3 * 60 * 1000;      // "connecting" o similar por más de esto: se reinicia la instancia
+const WATCHDOG_RESTART_GAP_MS = 10 * 60 * 1000; // y no más de una vez cada 10 minutos (cada reinicio abre un socket nuevo)
+
+async function watchInstances() {
+  const res = await evoRequest('/instance/fetchInstances');
+  if (!res.ok || !Array.isArray(res.data)) return;
+  const now = Date.now();
+  for (const i of res.data) {
+    const name = i.name || i.instanceName || (i.instance && i.instance.instanceName);
+    if (!name || name === 'rifaapp_bot') continue;
+    const state = i.connectionStatus || (i.instance && i.instance.status) || 'unknown';
+    let h = botHealth.get(name);
+    if (!h) { h = { state, since: now, lastOkAt: state === 'open' ? now : null, restarts: [] }; botHealth.set(name, h); botLog({ kind: 'conexion', instance: name, state, note: 'vigilancia iniciada' }); }
+    if (h.state !== state) {
+      botLog({ kind: 'conexion', instance: name, state, from: h.state, after: `${Math.round((now - h.since) / 1000)}s` });
+      h.state = state;
+      h.since = now;
+    }
+    if (state === 'open') { h.lastOkAt = now; continue; }
+    // 'close' = sesión cerrada desde el teléfono: solo se vuelve a conectar escaneando el QR (no se puede automatizar)
+    if (state === 'close') continue;
+    if (now - h.since >= WATCHDOG_STUCK_MS && now - (h.lastRestartAt || 0) >= WATCHDOG_RESTART_GAP_MS) {
+      h.lastRestartAt = now;
+      h.restarts.push(now);
+      h.restarts = h.restarts.filter(t => now - t < 24 * 3600 * 1000);
+      const r = await evoRequest(`/instance/restart/${name}`, { method: 'PUT' });
+      botLog({ kind: 'reinicio', instance: name, state, ok: r.ok, status: r.status, note: `atascada ${Math.round((now - h.since) / 60000)} min en "${state}"` });
+      console.warn(`🔁 [Vigilante] Instancia ${name} atascada en "${state}": reinicio ${r.ok ? 'solicitado' : 'falló (' + r.status + ')'}.`);
+    }
+  }
+}
+
+let watchdogTimer = null;
+function startWatchdog() {
+  if (watchdogTimer) return;
+  const tick = () => watchInstances().catch(err => console.warn('⚠️ [Vigilante] No se pudo revisar WhatsApp:', err.message));
+  setTimeout(tick, 15000);
+  watchdogTimer = setInterval(tick, WATCHDOG_EVERY_MS);
+}
+
+async function handleWebhookEvent(body, db, saveDBCallback) {
+  const event = body.event || body.type;
+  const instance = body.instance || body.instanceName || '';
+  if (event === 'connection.update' || event === 'CONNECTION_UPDATE') {
+    const st = body.data && (body.data.state || body.data.status);
+    if (st) botLog({ kind: 'conexion', instance, state: st, via: 'webhook' });
+    return { ignored: true };
+  }
+  const isMessage = event === 'messages.upsert' || event === 'MESSAGES_UPSERT';
+  if (!isMessage) return { ignored: true };
+  const key = (body.data && body.data.key) || {};
+  const m = (body.data && body.data.message) || {};
+  const from = String(key.remoteJid || '').split('@')[0];
+  const info = {
+    kind: 'mensaje',
+    instance,
+    from: from ? `***${from.slice(-3)}` : '',
+    tipo: m.imageMessage ? 'imagen' : (m.documentMessage || m.documentWithCaptionMessage ? 'documento' : (m.conversation || m.extendedTextMessage ? 'texto' : 'otro')),
+    propio: !!key.fromMe,
+    grupo: String(key.remoteJid || '').endsWith('@g.us')
+  };
+  const t0 = Date.now();
+  try {
+    const result = await handleWebhookEventInner(body, db, saveDBCallback);
+    // Los mensajes propios, de grupos o sin contenido no son de clientes: no llenan el registro
+    if (!info.propio && !info.grupo) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.ignored ? 'ignorado' : 'ok'), ms: Date.now() - t0 });
+    return result;
+  } catch (err) {
+    botLog({ ...info, result: 'error', error: String(err.message || err).slice(0, 160), ms: Date.now() - t0 });
+    throw err;
+  }
+}
+
 module.exports = {
+  getBotLog,
+  getHealth,
+  startWatchdog,
   formatPhoneNumber,
   getInstanceName,
   getStatus,

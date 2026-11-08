@@ -45,6 +45,7 @@ import 'ui/features/independent/views/independent_deliveries_view.dart';
 import 'ui/features/auth/views/admin_profile_dialog.dart';
 import 'ui/features/auth/views/change_password_dialog.dart';
 import 'ui/core/utils/cache_helper.dart';
+import 'ui/features/alerts/alerts_bell.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -479,6 +480,8 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                     ),
                   ),
                   const SizedBox(width: 2),
+                  // Avisos: sorteo cerca con boletas sin completar y efectivo sin legalizar (solo administradores y asesores)
+                  if (!authVM.isSuperAdmin) const AlertsBell(),
                   IconButton(
                     icon: const Icon(Icons.cleaning_services_rounded, size: 20, color: Colors.amber),
                     onPressed: () {
