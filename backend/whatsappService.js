@@ -1458,8 +1458,21 @@ async function sendReservedReply(ctx, ticket, number, changed) {
 }
 
 /** El cliente escribió un número libre: se le muestra y se le pide confirmar (nunca se aparta solo). */
+/** La rifa ya no vende boletas nuevas: cerrada, inactiva o con la fecha del sorteo final ya pasada (Colombia). */
+function salesClosedMessage(raffle) {
+  if (!raffle) return null;
+  const day = String(raffle.mainDrawDate || '').slice(0, 10);
+  const today = new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+  if (raffle.scheduledDeletionAt || raffle.status === 'INACTIVA' || (/^\d{4}-\d{2}-\d{2}$/.test(day) && day < today)) {
+    return `🚫 Las ventas de *${raffle.title}* ya están cerradas: no se pueden apartar más números.\n\nSi ya tienes una boleta, escribe tu número para consultarla o *ASESOR* para hablar con una persona.`;
+  }
+  return null;
+}
+
 async function offerReservation(ctx, ticket, number) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, lotteryName, drawDateFormatted } = ctx;
+  const closedMsg = salesClosedMessage(mainRaffle);
+  if (closedMsg) { await sendTextMessage(instance, senderPhone, closedMsg); return; }
   const mine = myTickets(db, mainRaffle.id, senderPhone);
   const others = ticket.numbers.filter(n => n !== number);
   const assignedAdv = getAssignedAdvisorForTicket(ticket, mainRaffle, db) || ctx.advisor;
@@ -1509,6 +1522,12 @@ async function confirmReservation(ctx, ticket, number, action, oldTicket) {
 
 async function executeReservation(ctx, pending) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle } = ctx;
+  const closedReservationMsg = salesClosedMessage(mainRaffle);
+  if (closedReservationMsg) {
+    setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, closedReservationMsg);
+    return;
+  }
   const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
   if (!ticket || ticket.status !== 'DISPONIBLE') {
     setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);

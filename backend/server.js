@@ -4432,8 +4432,22 @@ function hour12(hhmm) {
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'a. m.' : 'p. m.'}`;
 }
 
-/** Una rifa cerrada o inactiva no vende más boletas a nadie (ni asesores ni administrador). */
-const raffleSalesClosed = raffle => !!raffle && (raffle.status === 'INACTIVA' || !!raffle.scheduledDeletionAt);
+/**
+ * Por qué una rifa ya no vende boletas nuevas (a nadie: ni asesores ni administrador), o null si puede vender:
+ cerrada, inactiva o con la fecha del sorteo final ya pasada (calendario de Colombia).
+ */
+function salesBlockReason(raffle, now = Date.now()) {
+  if (!raffle) return null;
+  if (raffle.scheduledDeletionAt) return 'La rifa está CERRADA: ya no se pueden vender boletas.';
+  if (raffle.status === 'INACTIVA') return 'La rifa está INACTIVA: ya no se pueden vender boletas. El administrador debe reactivarla.';
+  const day = drawDayOf(raffle);
+  if (day && day < colombiaDay(now)) {
+    const [y, m, d] = day.split('-');
+    return `La fecha del sorteo final (${d}/${m}/${y}) ya pasó: ya no se pueden vender boletas.`;
+  }
+  return null;
+}
+const raffleSalesClosed = raffle => !!salesBlockReason(raffle);
 
 /** Cierra las ventas de TODOS los asesores de la rifa (se hace sola al cerrarla o inactivarla). */
 function lockAdvisorSales(raffle, by, reason) {
@@ -6219,8 +6233,9 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
     });
   }
   const ticketRaffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
-  if (ticket.status === 'DISPONIBLE' && raffleSalesClosed(ticketRaffle)) {
-    return res.status(400).json({ error: 'La rifa está cerrada o inactiva: ya no se pueden vender boletas.', code: 'RAFFLE_CLOSED' });
+  const saleBlockReason = ticket.status === 'DISPONIBLE' ? salesBlockReason(ticketRaffle) : null;
+  if (saleBlockReason) {
+    return res.status(400).json({ error: saleBlockReason, code: 'RAFFLE_CLOSED' });
   }
   // The admin may have stopped advisors from selling new tickets (payments of sold tickets are still allowed)
   if (req.auth.role === 'asesor' && ticket.status === 'DISPONIBLE') {

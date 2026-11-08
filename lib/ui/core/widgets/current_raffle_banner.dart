@@ -145,6 +145,19 @@ class CurrentRaffleBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(details, style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
+                // Aviso permanente: sin ventas para nadie (administrador ni asesores)
+                if (raffle.salesBlockedReason != null) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.red.shade300)),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.block, size: 14, color: Colors.red.shade700),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text('Ventas deshabilitadas: ${raffle.salesBlockedReason}', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.red.shade800))),
+                    ]),
+                  ),
+                ],
               ],
             ),
           ),

@@ -19,6 +19,7 @@ import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/core/utils/excel_csv_helper.dart';
 import 'package:rifaapp/ui/core/utils/whatsapp_helper.dart';
 import 'ticket_detail_dialog.dart';
+import 'package:rifaapp/ui/features/raffles/views/sales_blocked_dialog.dart';
 import 'ticket_print_dialog.dart';
 import 'import_sold_tickets_dialog.dart';
 import 'raffle_poster_2d_dialog.dart';
@@ -389,6 +390,12 @@ class _TicketGridViewState extends State<TicketGridView> {
           ),
           child: InkWell(
             onTap: () {
+              // Rifa cerrada, inactiva o con el sorteo final vencido: no se vende, ni el administrador ni el asesor
+              final blocked = ticket.status == 'DISPONIBLE' ? context.read<RaffleViewModel>().selectedRaffle?.salesBlockedReason : null;
+              if (blocked != null) {
+                showSalesBlockedDialog(context, blocked);
+                return;
+              }
               showDialog(
                 context: context,
                 builder: (_) => TicketDetailDialog(ticket: ticket, raffleTitle: raffleTitle),
@@ -683,6 +690,12 @@ class _TicketGridViewState extends State<TicketGridView> {
           margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             onTap: () {
+              // Rifa cerrada, inactiva o con el sorteo final vencido: no se vende, ni el administrador ni el asesor
+              final blocked = ticket.status == 'DISPONIBLE' ? context.read<RaffleViewModel>().selectedRaffle?.salesBlockedReason : null;
+              if (blocked != null) {
+                showSalesBlockedDialog(context, blocked);
+                return;
+              }
               showDialog(
                 context: context,
                 builder: (_) => TicketDetailDialog(ticket: ticket, raffleTitle: raffleTitle),

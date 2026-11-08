@@ -117,6 +117,18 @@ class Raffle {
     return DateTime(d.year, d.month, d.day).isBefore(today);
   }
 
+  /// Por qué la rifa ya no vende boletas nuevas (cerrada, inactiva o con la fecha del sorteo final vencida), o null si puede vender.
+  String? get salesBlockedReason {
+    if (isClosed) return 'La rifa está CERRADA: ya no se pueden vender boletas.';
+    if (status == 'INACTIVA') return 'La rifa está INACTIVA: ya no se pueden vender boletas. El administrador debe reactivarla.';
+    if (drawDatePassed) {
+      final d = DateTime.tryParse(mainDrawDate);
+      final txt = d == null ? '' : ' (${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year})';
+      return 'La fecha del sorteo final$txt ya pasó: ya no se pueden vender boletas.';
+    }
+    return null;
+  }
+
   /// Abono mínimo para participar en un sorteo semanal: el del propio sorteo (cada uno tiene el suyo) o, sin él, el de la rifa.
   double weeklyMinAbonoOf([WeeklyPrize? prize]) {
     final type = prize?.minAbonoType ?? weeklyMinAbonoType;
