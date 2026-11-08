@@ -2189,6 +2189,14 @@ async function loadDB() {
 
   const templatesMoved = await extractEmbeddedTemplates(db);
   const channelsSeeded = ensureSaleChannels(db);
+  // Las boletas del bot quedaban con el medio "Bot WhatsApp" (que no existe en la lista): ahora es "WhatsApp"
+  let botChannelFixed = false;
+  (db.tickets || []).forEach(t => { if (t.saleChannel === 'Bot WhatsApp') { t.saleChannel = 'WhatsApp'; t.soldByBot = true; botChannelFixed = true; } });
+  // Boletas disponibles con un saldo pendiente guardado distinto al precio (quedó de un precio anterior): el saldo es el precio completo
+  (db.tickets || []).forEach(t => {
+    if (t.status === 'DISPONIBLE' && !(t.totalPaid > 0) && t.price > 0 && t.balancePending !== t.price) { t.balancePending = t.price; botChannelFixed = true; }
+  });
+  if (botChannelFixed) saveDB();
   const plansMigrated = ensureCompanyPlans(db);
   const cashMigrated = ensureCashMigration(db);
   const banksSeeded = ensureBanks(db);

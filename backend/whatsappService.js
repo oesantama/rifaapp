@@ -999,7 +999,7 @@ _(Escribe el número de la opción o tu consulta)_`;
       if (profile.country) targetTicket.buyerCountry = profile.country;
       targetTicket.buyerPhone = senderPhone;
       targetTicket.soldByBot = true;
-      targetTicket.saleChannel = 'Bot WhatsApp';
+      targetTicket.saleChannel = botSaleChannel(db);
       targetTicket.assignedDate = targetTicket.assignedDate || new Date().toISOString();
       const assignedAdv = getAssignedAdvisorForTicket(targetTicket, mainRaffle, db) || advisor;
       if (assignedAdv) {
@@ -1392,7 +1392,7 @@ function reserveTicket(ctx, ticket, replacing) {
     buyerCountry: profile.country || ticket.buyerCountry || '',
     buyerPhone: senderPhone,
     soldByBot: true,
-    saleChannel: 'Bot WhatsApp',
+    saleChannel: botSaleChannel(db),
     assignedDate: new Date().toISOString(),
     status: 'RESERVADA'
   });
@@ -1467,6 +1467,13 @@ function salesClosedMessage(raffle) {
     return `🚫 Las ventas de *${raffle.title}* ya están cerradas: no se pueden apartar más números.\n\nSi ya tienes una boleta, escribe tu número para consultarla o *ASESOR* para hablar con una persona.`;
   }
   return null;
+}
+
+/** Medio de venta que el bot registra: el canal "WhatsApp" de la lista maestra (así aparece seleccionado en la boleta). */
+function botSaleChannel(db) {
+  const list = (db && db.saleChannels) || [];
+  const ch = list.find(c => c.active && /whatsapp/i.test(c.name));
+  return ch ? ch.name : 'WhatsApp';
 }
 
 async function offerReservation(ctx, ticket, number) {

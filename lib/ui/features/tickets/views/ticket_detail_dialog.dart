@@ -1461,7 +1461,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                 children: [
                   _infoTile('Precio Boleta', currency.format(widget.ticket.price), Colors.blueGrey),
                   _infoTile('Monto Pagado', currency.format(widget.ticket.totalPaid), AppTheme.secondaryEmerald),
-                  _infoTile('Saldo Pendiente', currency.format(widget.ticket.balancePending), AppTheme.dangerRose),
+                  _infoTile('Saldo Pendiente', currency.format((widget.ticket.price - widget.ticket.totalPaid).clamp(0, double.infinity)), AppTheme.dangerRose),
                 ],
               ),
               const SizedBox(height: 20),

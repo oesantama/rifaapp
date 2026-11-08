@@ -248,7 +248,7 @@ class Ticket {
   int get sortNumber => numbers.isNotEmpty ? (int.tryParse(numbers.first) ?? ticketNumber) : ticketNumber;
 
   /// True if sold or reserved automatically by the WhatsApp chatbot.
-  bool get isSoldByBot => saleChannel.toLowerCase().contains('bot') || (auditLogs.any((l) => l.action.contains('BOT') || l.user.toLowerCase().contains('bot')));
+  bool get isSoldByBot => soldByBot || saleChannel.toLowerCase().contains('bot') || (auditLogs.any((l) => l.action.contains('BOT') || l.user.toLowerCase().contains('bot')));
 
   final String id;
   final String raffleId;
@@ -275,6 +275,7 @@ class Ticket {
 
   /// How the buyer was reached: Facebook, WhatsApp, Familiar, Conocido, Voz a voz, Otro ('' = not recorded).
   final String saleChannel;
+  final bool soldByBot;
   /// OFICINA (venta de oficina o punto: no comisiona) o CALLE; vacío en ventas anteriores a esta función.
   final String saleZone;
 
@@ -309,6 +310,7 @@ class Ticket {
     this.buyerCity = '',
     this.buyerCountry = 'Colombia',
     this.saleChannel = '',
+    this.soldByBot = false,
     this.saleZone = '',
     this.annulments = const [],
     this.voidedAbonos = const [],
@@ -346,6 +348,7 @@ class Ticket {
       buyerCity: json['buyerCity'] ?? '',
       buyerCountry: json['buyerCountry'] ?? 'Colombia',
       saleChannel: json['saleChannel'] ?? '',
+      soldByBot: json['soldByBot'] == true,
       saleZone: json['saleZone'] ?? '',
       annulments: (json['annulments'] as List? ?? []).map((a) => TicketAnnulment.fromJson(Map<String, dynamic>.from(a))).toList(),
       verificationCode: json['verificationCode'],
