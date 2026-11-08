@@ -12,6 +12,11 @@ class Advisor {
   final String mode; // POOL_GENERAL or ASSIGNED
   /// PUNTO (oficina, no comisiona) • CALLE (comisiona) • INTEGRAL (cada venta es de oficina —sin comisión— o de calle)
   final String type;
+  /// Solo asesores de punto o integral: permisos de la oficina.
+  final bool canRegisterExpenses;
+  final bool canViewCash;
+  /// Ids de las rifas de su empresa en las que está autorizado a vender.
+  final List<String> raffleIds;
   final String status; // ACTIVO or INHABILITADO
   final String? deletionReason;
   final List<String> assignedTicketRanges;
@@ -34,6 +39,9 @@ class Advisor {
     required this.code,
     required this.mode,
     this.type = 'CALLE',
+    this.canRegisterExpenses = false,
+    this.canViewCash = false,
+    this.raffleIds = const [],
     this.status = 'ACTIVO',
     this.deletionReason,
     required this.assignedTicketRanges,
@@ -101,6 +109,9 @@ class Advisor {
       code: codeVal,
       mode: json['mode'] ?? 'POOL_GENERAL',
       type: ['PUNTO', 'CALLE', 'INTEGRAL'].contains(json['type']) ? json['type'] : 'CALLE',
+      canRegisterExpenses: json['canRegisterExpenses'] == true,
+      canViewCash: json['canViewCash'] == true,
+      raffleIds: (json['raffleIds'] as List? ?? []).map((e) => e.toString()).toList(),
       status: json['status'] ?? 'ACTIVO',
       deletionReason: json['deletionReason'],
       assignedTicketRanges: ranges,
@@ -125,6 +136,8 @@ class Advisor {
         'code': code,
         'mode': mode,
         'type': type,
+        'canRegisterExpenses': canRegisterExpenses,
+        'canViewCash': canViewCash,
         'status': status,
         'deletionReason': deletionReason,
         'assignedTicketRanges': assignedTicketRanges,

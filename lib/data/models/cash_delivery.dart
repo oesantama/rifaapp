@@ -16,6 +16,9 @@ class CashDelivery {
   final String? soporteWebViewUrl;
   final String? soporteDriveId;
   final String note;
+  /// Gastos en efectivo del asesor descontados de esta entrega y lo que entrega en mano.
+  final double expensesTotal;
+  final double? netToHand;
   final String status; // PENDIENTE | CONFIRMADA | RECHAZADA
   final String reportedAt;
   final String? reviewedBy;
@@ -38,6 +41,8 @@ class CashDelivery {
     this.soporteWebViewUrl,
     this.soporteDriveId,
     this.note = '',
+    this.expensesTotal = 0,
+    this.netToHand,
     required this.status,
     required this.reportedAt,
     this.reviewedBy,
@@ -64,6 +69,8 @@ class CashDelivery {
         soporteWebViewUrl: json['soporteWebViewUrl'],
         soporteDriveId: json['soporteDriveId'],
         note: json['note'] ?? '',
+        expensesTotal: (json['expensesTotal'] as num?)?.toDouble() ?? 0,
+        netToHand: (json['netToHand'] as num?)?.toDouble(),
         status: json['status'] ?? 'PENDIENTE',
         reportedAt: json['reportedAt'] ?? '',
         reviewedBy: json['reviewedBy'],

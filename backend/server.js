@@ -3682,6 +3682,46 @@ app.get('/api/raffles', (req, res) => {
 });
 
 // PUT Update Raffle
+/** Un asesor solo puede vender y estar autorizado en rifas de SU empresa: cada asesor pertenece a una única empresa. */
+function advisorBelongsToCompany(advisorId, companyId) {
+  const advisor = (db.advisors || []).find(a => a.id === advisorId);
+  return !!advisor && !!companyId && advisor.companyId === companyId;
+}
+
+// Rifas en las que está autorizado un asesor. raffle.assignedAdvisorIds vacío = todos los asesores de la empresa;
+// NO_ADVISORS marca "ninguno" (una lista vacía no puede significar las dos cosas).
+const NO_ADVISORS = '__ninguno__';
+
+function advisorAuthorizedInRaffle(raffle, advisorId) {
+  const list = raffle.assignedAdvisorIds;
+  return !Array.isArray(list) || list.length === 0 || list.includes(advisorId);
+}
+
+/** Lista de autorizados de una rifa a partir de los ids elegidos (solo asesores de su empresa; vacío = ninguno). */
+function normalizeRaffleAdvisorIds(raffle, ids) {
+  const valid = (Array.isArray(ids) ? ids : []).filter(id => id !== NO_ADVISORS && (!raffle.companyId || advisorBelongsToCompany(id, raffle.companyId)));
+  if (valid.length > 0) return [...new Set(valid)];
+  const companyHasAdvisors = (db.advisors || []).some(a => a.companyId === raffle.companyId);
+  return companyHasAdvisors ? [NO_ADVISORS] : [];
+}
+
+/** Deja al asesor autorizado exactamente en las rifas indicadas (de su empresa); no toca a los demás asesores. */
+function setAdvisorRaffles(advisor, raffleIds) {
+  const wanted = new Set(Array.isArray(raffleIds) ? raffleIds : []);
+  const companyAdvisorIds = (db.advisors || []).filter(a => a.companyId === advisor.companyId).map(a => a.id);
+  for (const raffle of db.raffles || []) {
+    if (raffle.companyId !== advisor.companyId) continue;
+    const authorized = advisorAuthorizedInRaffle(raffle, advisor.id);
+    const current = Array.isArray(raffle.assignedAdvisorIds) && raffle.assignedAdvisorIds.length > 0 ? raffle.assignedAdvisorIds : null;
+    if (wanted.has(raffle.id) && !authorized) {
+      raffle.assignedAdvisorIds = [...(current || []).filter(id => id !== NO_ADVISORS), advisor.id];
+    } else if (!wanted.has(raffle.id) && authorized) {
+      const rest = (current || companyAdvisorIds).filter(id => id !== advisor.id && id !== NO_ADVISORS);
+      raffle.assignedAdvisorIds = rest.length > 0 ? rest : [NO_ADVISORS];
+    }
+  }
+}
+
 function canAccessRaffle(req, raffle) {
   if (req.auth.role === 'superadmin') return true;
   const companyId = req.auth.role === 'admin' ? req.auth.record.id : req.auth.record.companyId;
@@ -4195,7 +4235,10 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
   if (Array.isArray(req.body.prizeImages)) raffle.prizeImages = req.body.prizeImages;
   if (req.body.mainDrawDate !== undefined) raffle.mainDrawDate = req.body.mainDrawDate;
   if (req.body.weeklyPrizesStartDate !== undefined) raffle.weeklyPrizesStartDate = req.body.weeklyPrizesStartDate;
-  if (req.body.assignedAdvisorIds !== undefined) raffle.assignedAdvisorIds = req.body.assignedAdvisorIds;
+  if (req.body.assignedAdvisorIds !== undefined) {
+    // Solo asesores de la empresa dueña de la rifa (los de otra empresa se descartan); sin ninguno = nadie autorizado
+    raffle.assignedAdvisorIds = raffle.companyId ? normalizeRaffleAdvisorIds(raffle, req.body.assignedAdvisorIds) : (Array.isArray(req.body.assignedAdvisorIds) ? req.body.assignedAdvisorIds : []);
+  }
   if (req.body.commissionType !== undefined) raffle.commissionType = req.body.commissionType;
   if (req.body.commissionValue !== undefined) raffle.commissionValue = parseFloat(req.body.commissionValue) || 0;
   if (req.body.commissionTiers !== undefined) raffle.commissionTiers = Array.isArray(req.body.commissionTiers) ? req.body.commissionTiers : [];
@@ -5004,9 +5047,8 @@ app.post('/api/raffles', adminOnly, (req, res) => {
   }
 
   const companyAdvisors = (db.advisors || []).filter(a => (!a.companyId || a.companyId === targetCompanyId) && a.status === 'ACTIVO').map(a => a.id);
-  const selectedAdvisors = Array.isArray(req.body.assignedAdvisorIds) && req.body.assignedAdvisorIds.length > 0
-    ? req.body.assignedAdvisorIds
-    : companyAdvisors;
+  const requestedAdvisors = Array.isArray(req.body.assignedAdvisorIds) ? req.body.assignedAdvisorIds.filter(advisorId => advisorBelongsToCompany(advisorId, targetCompanyId)) : [];
+  const selectedAdvisors = requestedAdvisors.length > 0 ? requestedAdvisors : companyAdvisors;
 
   const newRaffle = {
     id: `raf-${Date.now()}`,
@@ -5185,6 +5227,9 @@ app.post('/api/tickets/import', adminOnly, (req, res) => {
     return res.status(400).json({ error: 'Datos de importación inválidos' });
   }
 
+  const importRaffle = (db.raffles || []).find(r => r.id === raffleId);
+  if (!importRaffle || !canAccessRaffle(req, importRaffle)) return res.status(404).json({ error: 'Rifa no encontrada' });
+
   let importedCount = 0;
   records.forEach(rec => {
     const ticket = db.tickets.find(t => t.raffleId === raffleId && t.ticketNumber === parseInt(rec.ticketNumber));
@@ -5192,8 +5237,12 @@ app.post('/api/tickets/import', adminOnly, (req, res) => {
       ticket.buyerName = rec.buyerName || ticket.buyerName;
       ticket.buyerPhone = rec.buyerPhone || ticket.buyerPhone;
       ticket.status = rec.status || ticket.status || 'RESERVADA';
-      ticket.advisorName = rec.sellerName || ticket.advisorName;
-      ticket.advisorId = rec.sellerCode || ticket.advisorId;
+      // El vendedor solo se asigna si es un asesor de la misma empresa de la rifa
+      const importSeller = rec.sellerCode ? (db.advisors || []).find(a => a.id === rec.sellerCode || a.code === rec.sellerCode) : null;
+      if (!importSeller || !importRaffle.companyId || importSeller.companyId === importRaffle.companyId) {
+        ticket.advisorName = rec.sellerName || ticket.advisorName;
+        ticket.advisorId = (importSeller ? importSeller.id : rec.sellerCode) || ticket.advisorId;
+      }
       
       const amt = parseFloat(rec.amountPaid) || 0;
       if (amt > 0) {
@@ -5309,24 +5358,22 @@ app.get('/api/tickets', (req, res) => {
     );
   }
 
-  // Resolver asesor asignado dinámicamente si el número cae en el rango de un asesor
-  const compAdvisors = (db.advisors || []).filter(a => 
-    (!targetCompanyId || a.companyId === targetCompanyId) &&
-    a.status === 'ACTIVO' &&
-    a.mode === 'ASSIGNED' &&
-    Array.isArray(a.assignedTicketRanges) &&
-    a.assignedTicketRanges.length > 0
-  );
-
-  if (compAdvisors.length > 0) {
-    result.forEach(t => {
-      if (!t.advisorId || !t.advisorName) {
-        const matchingAdv = compAdvisors.find(a => ticketInAdvisorRanges(t, a));
-        if (matchingAdv) {
-          t.advisorId = matchingAdv.id;
-          t.advisorName = matchingAdv.name;
-        }
-      }
+  // Asesor asignado por rango de números: solo se MUESTRA en la respuesta (nunca se guarda en la boleta) y solo con
+  // asesores de la MISMA empresa que la rifa. Antes se guardaba en la boleta y, sin empresa en la consulta
+  // (SuperAdmin), usaba asesores de todas las empresas: los números de un asesor quedaban marcados en otra empresa.
+  const rangeAdvisorsByCompany = new Map();
+  for (const a of db.advisors || []) {
+    if (a.status !== 'ACTIVO' || a.mode !== 'ASSIGNED' || !a.companyId || !Array.isArray(a.assignedTicketRanges) || a.assignedTicketRanges.length === 0) continue;
+    if (!rangeAdvisorsByCompany.has(a.companyId)) rangeAdvisorsByCompany.set(a.companyId, []);
+    rangeAdvisorsByCompany.get(a.companyId).push(a);
+  }
+  if (rangeAdvisorsByCompany.size > 0) {
+    const raffleCompany = new Map((db.raffles || []).map(r => [r.id, r.companyId]));
+    result = result.map(t => {
+      if (t.advisorId && t.advisorName) return t;
+      const candidates = rangeAdvisorsByCompany.get(raffleCompany.get(t.raffleId));
+      const matchingAdv = candidates && candidates.find(a => ticketInAdvisorRanges(t, a));
+      return matchingAdv ? { ...t, advisorId: matchingAdv.id, advisorName: matchingAdv.name } : t;
     });
   }
 
@@ -5883,6 +5930,16 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   const found = db.tickets.find(t => t.id === id);
   if (!found) {
     return res.status(404).json({ error: 'Boleta no encontrada' });
+  }
+  // La boleta debe ser de la empresa de quien opera (antes cualquier usuario autenticado podía registrar pagos en boletas de otra empresa)
+  const saleRaffle = (db.raffles || []).find(r => r.id === found.raffleId);
+  if (!saleRaffle || !canAccessRaffle(req, saleRaffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  if (sellerId && sellerId !== 'admin' && !String(sellerId).startsWith('ind_')) {
+    if (req.auth.role === 'asesor') {
+      if (sellerId !== req.auth.record.id) return res.status(403).json({ error: 'Un asesor solo puede registrar ventas a su nombre.' });
+    } else if (saleRaffle.companyId && !advisorBelongsToCompany(sellerId, saleRaffle.companyId)) {
+      return res.status(400).json({ error: 'Ese asesor no pertenece a la empresa de esta rifa.', code: 'ADVISOR_OTHER_COMPANY' });
+    }
   }
   if (wasRequestApplied(requestId)) return res.json(withVerification(found));
 
@@ -6896,6 +6953,13 @@ app.post('/api/cash/deliveries', requireRole('asesor'), async (req, res) => {
     status: 'PENDIENTE',
     reportedAt: new Date().toISOString()
   };
+  // Gastos en efectivo del asesor aún sin justificar: se descuentan de lo que entrega en mano
+  if (method === 'efectivo') {
+    const spent = agilService.unappliedCashExpenses(me.id);
+    delivery.expensesTotal = spent.reduce((sum, e) => sum + e.amount, 0);
+    delivery.expenseIds = spent.map(e => e.id);
+    delivery.netToHand = delivery.total - delivery.expensesTotal;
+  }
   for (const item of items) findTicketAbono(item.ticketId, item.abonoId).abono.deliveryId = delivery.id;
   db.cashDeliveries.unshift(delivery);
   saveDB();
@@ -6921,6 +6985,9 @@ app.post('/api/cash/deliveries/:id/:action', adminOnly, (req, res) => {
     }
     delete abono.deliveryId;
     recalcCashConfirmation(ticket);
+  }
+  if (action === 'confirmar' && delivery.method === 'efectivo' && (delivery.expenseIds || []).length) {
+    agilService.applyExpenses(delivery.expenseIds, { deliveryId: delivery.id, by, at });
   }
   delivery.status = action === 'confirmar' ? 'CONFIRMADA' : 'RECHAZADA';
   delivery.reviewedBy = by;
@@ -7030,6 +7097,8 @@ app.get('/api/advisors', (req, res) => {
 
     return {
       ...adv,
+      // Rifas de su empresa en las que está autorizado
+      raffleIds: (db.raffles || []).filter(r => r.companyId === adv.companyId && advisorAuthorizedInRaffle(r, adv.id)).map(r => r.id),
       hasPassword: !!adv.password,
       totalTicketsCount: advTickets.length,
       totalSold,
@@ -7090,6 +7159,8 @@ app.post('/api/advisors', adminOnly, (req, res) => {
     code: code || `ADV${Math.floor(10 + Math.random()*90)}`,
     mode: mode || 'POOL_GENERAL',
     type: advisorType,
+    canRegisterExpenses: isOfficeAdvisorType(advisorType) && req.body.canRegisterExpenses === true,
+    canViewCash: isOfficeAdvisorType(advisorType) && req.body.canViewCash === true,
     assignedTicketRanges: [],
     createdAt: new Date().toISOString()
   };
@@ -7099,15 +7170,18 @@ app.post('/api/advisors', adminOnly, (req, res) => {
 
   db.advisors.push(newAdvisor);
 
-  // Auto-autorizar al nuevo asesor en todas las rifas activas de la empresa
-  (db.raffles || []).forEach(r => {
-    if ((!r.companyId || r.companyId === targetCompanyId) && r.status === 'ACTIVA') {
-      r.assignedAdvisorIds = r.assignedAdvisorIds || [];
-      if (!r.assignedAdvisorIds.includes(newAdvisor.id)) {
-        r.assignedAdvisorIds.push(newAdvisor.id);
+  if (Array.isArray(req.body.raffleIds)) {
+    // El administrador eligió en qué rifas queda autorizado
+    setAdvisorRaffles(newAdvisor, req.body.raffleIds);
+  } else {
+    // Sin elección: se autoriza en todas las rifas activas de la empresa (comportamiento anterior)
+    (db.raffles || []).forEach(r => {
+      if ((!r.companyId || r.companyId === targetCompanyId) && r.status === 'ACTIVA') {
+        r.assignedAdvisorIds = (r.assignedAdvisorIds || []).filter(id => id !== NO_ADVISORS);
+        if (!r.assignedAdvisorIds.includes(newAdvisor.id)) r.assignedAdvisorIds.push(newAdvisor.id);
       }
-    }
-  });
+    });
+  }
 
   saveDB();
   res.status(201).json(newAdvisor);
@@ -7161,6 +7235,11 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
       detail: `Tipo de asesor ${previousType} → ${advisor.type} (las ventas anteriores conservan su zona)`, by: actorName(req), date: new Date().toISOString()
     });
   }
+  if (Array.isArray(req.body.raffleIds)) setAdvisorRaffles(advisor, req.body.raffleIds);
+  if (req.body.canRegisterExpenses !== undefined) advisor.canRegisterExpenses = req.body.canRegisterExpenses === true;
+  if (req.body.canViewCash !== undefined) advisor.canViewCash = req.body.canViewCash === true;
+  // El asesor de calle no maneja la caja de la oficina
+  if (!isOfficeAdvisorType(advisorTypeOf(advisor))) { advisor.canRegisterExpenses = false; advisor.canViewCash = false; }
   if (newRanges) {
     const size = list => list.map(parseRange).filter(Boolean).reduce((sum, r) => sum + r.end - r.start + 1, 0);
     // Assigning more numbers answers the advisor's pending request
@@ -7176,7 +7255,7 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
 app.delete('/api/advisors/:id', adminOnly, (req, res) => {
   const { id } = req.params;
   const { reason } = req.body || {};
-  const advisor = db.advisors.find(a => a.id === id);
+  const advisor = db.advisors.find(a => a.id === id && (req.auth.role === 'superadmin' || a.companyId === req.auth.record.id));
   if (!advisor) {
     return res.status(404).json({ error: 'Asesor no encontrado' });
   }
@@ -7605,6 +7684,8 @@ app.get('/api/dashboard', (req, res) => {
 // ---------------------------------------------------------------------------
 const ADVISOR_TYPES = ['PUNTO', 'CALLE', 'INTEGRAL'];
 const advisorTypeOf = adv => (adv && ADVISOR_TYPES.includes(adv.type) ? adv.type : 'CALLE');
+// Solo el asesor de punto o integral (de oficina) puede tener permiso para registrar gastos y ver la caja
+const isOfficeAdvisorType = type => type === 'PUNTO' || type === 'INTEGRAL';
 const SALE_ZONES = ['OFICINA', 'CALLE'];
 
 function ticketZoneOf(ticket, advisor) {
@@ -7855,8 +7936,59 @@ app.post('/api/commissions/payout', adminOnly, async (req, res) => {
   res.status(201).json(payout);
 });
 
+/**
+ * Boletas cuyo asesor pertenece a OTRA empresa (efecto del error anterior de asignación por rango):
+ *  • disponibles: se les quita el asesor;
+ *  • vendidas o apartadas: pasan al vendedor que registró su primer pago si es de la empresa (o la venta directa del
+ *    administrador); si no hay pagos, se quita el asesor.
+ * Nunca se tocan el dinero, el comprador ni el estado. Devuelve cuántas boletas se corrigieron.
+ */
+function repairCrossCompanyAdvisors(database = db) {
+  const advisorById = new Map((database.advisors || []).map(a => [a.id, a]));
+  const raffleCompany = new Map((database.raffles || []).map(r => [r.id, r.companyId]));
+  let cleared = 0;
+  let reassigned = 0;
+  for (const t of database.tickets || []) {
+    const adv = advisorById.get(t.advisorId);
+    const companyId = raffleCompany.get(t.raffleId);
+    if (!adv || !companyId || adv.companyId === companyId) continue;
+    const wrongName = t.advisorName;
+    const first = (t.abonos || []).find(ab => ab.sellerId);
+    const firstAdvisor = first && advisorById.get(first.sellerId);
+    if (t.status !== 'DISPONIBLE' && first && (first.sellerId === 'admin' || (firstAdvisor && firstAdvisor.companyId === companyId))) {
+      t.advisorId = first.sellerId;
+      t.advisorName = first.sellerName || (first.sellerId === 'admin' ? 'Administrador' : (firstAdvisor ? firstAdvisor.name : ''));
+      reassigned++;
+    } else {
+      t.advisorId = '';
+      t.advisorName = '';
+      cleared++;
+    }
+    if (t.status !== 'DISPONIBLE') {
+      t.auditLogs = t.auditLogs || [];
+      t.auditLogs.push({
+        id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+        date: new Date().toISOString(),
+        user: 'Sistema',
+        action: 'REPARACION_ASESOR',
+        description: `Se quitó el asesor "${wrongName}" (de otra empresa) asignado por error; vendedor actual: ${t.advisorName || 'ninguno'}`
+      });
+    }
+  }
+  return { cleared, reassigned, total: cleared + reassigned };
+}
+
 async function startServer() {
-  await loadDB(); // the first save after loading also takes the daily safety copy
+  await loadDB();
+  try {
+    const repair = repairCrossCompanyAdvisors();
+    if (repair.total > 0) {
+      console.log(`🛠️ Reparadas ${repair.total} boletas con asesor de otra empresa (${repair.cleared} liberadas, ${repair.reassigned} reasignadas al vendedor real).`);
+      saveDB();
+    }
+  } catch (err) {
+    console.error('⚠️ No se pudo revisar la asignación de asesores:', err.message);
+  } // the first save after loading also takes the daily safety copy
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
 

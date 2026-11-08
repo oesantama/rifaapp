@@ -31,20 +31,34 @@ class TicketViewModel extends ChangeNotifier {
   /// Loads every ticket of the raffle. Search, status and advisor filters are applied
   /// locally, so [tickets] always holds the full raffle (dashboard, cash, winners, poster)
   /// and the grid can show how many tickets each status has.
+  int _loadSeq = 0;
+  bool _loadFailed = false;
+  /// true si la última carga falló (se conserva la lista anterior en pantalla).
+  bool get loadFailed => _loadFailed;
+
   Future<void> loadTickets({String? raffleId}) async {
+    // Varias pantallas piden la carga a la vez (rifa distinta, refresco tras un abono…): solo cuenta la última pedida,
+    // para que una respuesta lenta y vieja no pise a la nueva.
+    final seq = ++_loadSeq;
     _isLoading = true;
     notifyListeners();
 
     try {
-      _tickets = await _repository.fetchTickets(raffleId: raffleId);
+      final fresh = await _repository.fetchTickets(raffleId: raffleId);
+      if (seq != _loadSeq) return;
+      _tickets = fresh;
+      _loadFailed = false;
       if (raffleId != null && raffleId.isNotEmpty) {
         _currentRevision = await _repository.getRaffleRevision(raffleId);
       }
     } catch (e) {
       debugPrint('Error al cargar boletas: $e');
+      if (seq == _loadSeq) _loadFailed = true; // se conservan las boletas que ya estaban en pantalla
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (seq == _loadSeq) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -61,7 +75,12 @@ class TicketViewModel extends ChangeNotifier {
       }
       if (remoteRev > _currentRevision) {
         _isBackgroundSyncing = true;
+        final seq = _loadSeq;
         final freshTickets = await _repository.fetchTickets(raffleId: raffleId);
+        if (seq != _loadSeq || _isLoading) {
+          _isBackgroundSyncing = false;
+          return;
+        }
         _tickets = freshTickets;
         _currentRevision = remoteRev;
         _isBackgroundSyncing = false;

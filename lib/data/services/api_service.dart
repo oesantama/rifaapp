@@ -458,13 +458,24 @@ class ApiService {
           if (status != null && status.isNotEmpty) 'status': status,
           if (advisorId != null && advisorId.isNotEmpty) 'advisorId': advisorId,
         });
-        final response = await authGet(uri).timeout(const Duration(seconds: 25));
-        if (response.statusCode == 200) {
-          List data = jsonDecode(response.body);
-          return data.map((json) => Ticket.fromJson(json)).toList();
+        // Un reintento ante fallos transitorios. Si aun así falla se LANZA el error: antes se devolvía la lista local
+        // (casi vacía: solo la última boleta consultada) y la pantalla perdía todos los números hasta recargar (F5).
+        for (var attempt = 0;; attempt++) {
+          try {
+            final response = await authGet(uri).timeout(const Duration(seconds: 25));
+            if (response.statusCode == 200) {
+              List data = jsonDecode(response.body);
+              return data.map((json) => Ticket.fromJson(json)).toList();
+            }
+            throw Exception('Error ${response.statusCode} obteniendo boletas');
+          } catch (e) {
+            debugPrint('⚠️ Error/Timeout obteniendo boletas de API (intento ${attempt + 1}): $e');
+            if (attempt >= 1) rethrow;
+            await Future.delayed(const Duration(milliseconds: 600));
+          }
         }
       } catch (e) {
-        debugPrint('⚠️ Error/Timeout obteniendo boletas de API: $e');
+        rethrow;
       }
     }
 

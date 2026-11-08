@@ -1,3 +1,4 @@
+import 'package:rifaapp/data/models/advisor.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/data/services/api_service.dart';
@@ -59,6 +60,11 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
   String? _importedFileName;
   bool _uploadingMedia = false;
   bool _advisorsInitialized = false;
+  String _advisorSearch = '';
+
+  List<Advisor> _filteredAdvisors(List<Advisor> all) => _advisorSearch.isEmpty
+      ? all
+      : all.where((a) => a.name.toLowerCase().contains(_advisorSearch) || a.code.toLowerCase().contains(_advisorSearch) || a.username.toLowerCase().contains(_advisorSearch)).toList();
 
   @override
   void didChangeDependencies() {
@@ -1114,12 +1120,20 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                     TextButton.icon(
                       icon: const Icon(Icons.select_all, size: 16),
                       label: const Text('Todos', style: TextStyle(fontSize: 12)),
-                      onPressed: () => setState(() => _selectedAdvisorIds = advisorVM.advisors.map((a) => a.id).toList()),
+                      onPressed: () => setState(() {
+                        for (final a in _filteredAdvisors(advisorVM.advisors)) {
+                          if (!_selectedAdvisorIds.contains(a.id)) _selectedAdvisorIds.add(a.id);
+                        }
+                      }),
                     ),
                     TextButton.icon(
                       icon: const Icon(Icons.deselect, size: 16),
                       label: const Text('Ninguno', style: TextStyle(fontSize: 12)),
-                      onPressed: () => setState(() => _selectedAdvisorIds.clear()),
+                      onPressed: () => setState(() {
+                        final hidden = _filteredAdvisors(advisorVM.advisors).map((a) => a.id).toSet();
+                        _selectedAdvisorIds.removeWhere(hidden.contains);
+                        if (_advisorSearch.isEmpty) _selectedAdvisorIds.clear();
+                      }),
                     ),
                   ],
                 ),
@@ -1129,6 +1143,18 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                   style: TextStyle(fontSize: 11, color: Colors.grey),
                 ),
                 const SizedBox(height: 8),
+                if (advisorVM.advisors.length > 1) ...[
+                  TextField(
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      prefixIcon: Icon(Icons.search, size: 20),
+                      hintText: 'Buscar asesor por nombre o cédula',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (v) => setState(() => _advisorSearch = v.trim().toLowerCase()),
+                  ),
+                  const SizedBox(height: 8),
+                ],
 
                 advisorVM.advisors.isEmpty
                     ? const Padding(
@@ -1143,9 +1169,9 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                         ),
                         child: ListView.builder(
                           shrinkWrap: true,
-                          itemCount: advisorVM.advisors.length,
+                          itemCount: _filteredAdvisors(advisorVM.advisors).length,
                           itemBuilder: (context, i) {
-                            final adv = advisorVM.advisors[i];
+                            final adv = _filteredAdvisors(advisorVM.advisors)[i];
                             bool isSelected = _selectedAdvisorIds.contains(adv.id);
                             return CheckboxListTile(
                               title: Text('${adv.name} (${adv.code})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),

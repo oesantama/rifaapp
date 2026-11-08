@@ -6,3 +6,4 @@
 - Un `git push` a `master` redespliega producción automáticamente. No hagas push/commit sin que el usuario lo pida.
 - Stack: Flutter (web/android) en `lib/`, backend Node/Express en `backend/server.js`, WhatsApp vía Evolution API.
 - Flutter está en `~/development/flutter/bin` (no está en el PATH): `export PATH=$HOME/development/flutter/bin:$PATH` antes de `flutter analyze` / `flutter build web --release`.
+- **Multi-empresa: cada asesor pertenece a UNA sola empresa.** Nunca asignes, muestres ni autorices a un asesor en una rifa o boleta de otra empresa (ver `advisorBelongsToCompany` y `repairCrossCompanyAdvisors` en `backend/server.js`). Toda consulta o cambio debe filtrarse por la empresa del usuario.

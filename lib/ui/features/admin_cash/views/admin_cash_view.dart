@@ -547,6 +547,10 @@ class DeliveryCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             CashInfoLine('Reportada', cashDate(d.reportedAt)),
+            if (d.expensesTotal > 0) ...[
+              CashInfoLine('Gastos del asesor (descontados)', '−${cashCurrency.format(d.expensesTotal)}'),
+              CashInfoLine('Entrega en mano', cashCurrency.format(d.netToHand ?? (d.total - d.expensesTotal))),
+            ],
             if (d.isTransfer) ...[
               CashInfoLine('Fecha transferencia', cashDate(d.transferDate)),
               CashInfoLine('Banco origen', d.originBank ?? ''),

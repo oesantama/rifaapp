@@ -288,11 +288,12 @@ function ticketInAdvisorRanges(ticket, advisor) {
 
 function getAssignedAdvisorForTicket(ticket, raffle, db) {
   if (!ticket) return null;
+  const companyId = raffle?.companyId || ticket.companyId;
   if (ticket.advisorId) {
     const direct = (db.advisors || []).find(a => a.id === ticket.advisorId);
-    if (direct) return direct;
+    // Cada asesor pertenece a una sola empresa: uno de otra empresa nunca se asigna
+    if (direct && (!companyId || direct.companyId === companyId)) return direct;
   }
-  const companyId = raffle?.companyId || ticket.companyId;
   const advisors = (db.advisors || []).filter(a => 
     (!companyId || a.companyId === companyId) && 
     a.status === 'ACTIVO' && 

@@ -44,7 +44,7 @@ Future<List<int>?> pickFileBytes({List<String> allowedExtensions = const ['xlsx'
   return null;
 }
 
-Future<String?> pickImageBase64() async {
+Future<String?> pickImageBase64({int maxSide = 2400}) async {
   final files = await FilePicker.pickFiles(
     type: FileType.image,
   );

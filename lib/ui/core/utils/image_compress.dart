@@ -8,6 +8,8 @@ import 'package:image/image.dart' as img;
 String compressImageDataUri(String dataUri, {int maxSide = 2400, int quality = 85}) {
   final comma = dataUri.indexOf(',');
   if (!dataUri.startsWith('data:image') || comma < 0) return dataUri;
+  // Ya viene reducida por el navegador y es liviana: no hace falta decodificarla otra vez en Dart
+  if (dataUri.startsWith('data:image/jpeg') && dataUri.length < 700000) return dataUri;
   try {
     final original = base64Decode(dataUri.substring(comma + 1));
     final decoded = img.decodeImage(original);

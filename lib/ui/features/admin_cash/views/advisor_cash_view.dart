@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
+import 'package:rifaapp/ui/features/agil/views/agil_payments_view.dart';
 import 'package:rifaapp/ui/features/admin_cash/view_models/cash_view_model.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/admin_cash_view.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart';
@@ -24,6 +26,8 @@ class AdvisorCashView extends StatefulWidget {
 
 class _AdvisorCashViewState extends State<AdvisorCashView> {
   final Set<String> _selected = {}; // abono ids
+  // Gastos en efectivo del asesor por justificar con el administrador (se descuentan de lo que entrega)
+  num _pendingExpenses = 0;
 
   String? get _raffleId => context.read<RaffleViewModel>().selectedRaffle?.id;
 
@@ -40,6 +44,16 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
       context.read<TicketViewModel>().loadTickets(raffleId: raffleId),
     ]);
     if (mounted) setState(() => _selected.clear());
+    await _loadExpenses();
+  }
+
+  Future<void> _loadExpenses() async {
+    final me = context.read<AuthViewModel>().activeAdvisor;
+    if (me == null || !me.canRegisterExpenses) return;
+    try {
+      final res = await ApiService().agilExpenses();
+      if (mounted) setState(() => _pendingExpenses = (res['pendingTotal'] as num?) ?? 0);
+    } catch (_) {}
   }
 
   Future<void> _report(List<CashPayment> chosen) async {
@@ -72,6 +86,17 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                 children: [
                   Text('${chosen.length} boleta(s): ${chosen.map((p) => p.ticket.displayNumber).join(', ')}',
                       style: TextStyle(fontSize: 12.5, color: Colors.grey[700])),
+                  if (method == 'efectivo' && _pendingExpenses > 0)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+                      child: Text(
+                        'Se descontarán ${cashCurrency.format(_pendingExpenses)} de gastos que usted registró. '
+                        'Entrega en mano: ${cashCurrency.format(total - _pendingExpenses)}.',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   SegmentedButton<String>(
                     showSelectedIcon: false,
@@ -131,7 +156,7 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        final picked = await pickImageBase64();
+                        final picked = await pickImageBase64(maxSide: 1600);
                         if (picked != null) setD(() => proof = compressImageDataUri(picked, maxSide: 1600));
                       },
                       icon: Icon(proof == null ? Icons.attach_file : Icons.check_circle,
@@ -230,6 +255,7 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
     final holding = mine.where((p) => p.abono.cashState == 'EN_PODER_ASESOR').toList();
     double sum(Iterable<CashPayment> l) => l.fold(0.0, (s, p) => s + p.abono.amount);
     final chosen = holding.where((p) => _selected.contains(p.abono.id)).toList();
+    final canExpenses = me.canRegisterExpenses;
 
     final kpis = [
       CashKpi(
@@ -239,6 +265,14 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
         color: Colors.orange.shade800,
         icon: Icons.account_balance_wallet,
       ),
+      if (canExpenses && _pendingExpenses > 0)
+        CashKpi(
+          title: 'A ENTREGAR (menos gastos)',
+          value: cashCurrency.format(sum(holding) - _pendingExpenses),
+          subtitle: 'En mi poder − ${cashCurrency.format(_pendingExpenses)} de gastos',
+          color: Colors.deepPurple,
+          icon: Icons.calculate_outlined,
+        ),
       CashKpi(
         title: 'ENTREGADO, POR CONFIRMAR',
         value: cashCurrency.format(sum(mine.where((p) => p.abono.cashState == 'EN_ENTREGA'))),
@@ -269,6 +303,42 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
               return Wrap(spacing: 10, runSpacing: 10, children: [for (final k in kpis) SizedBox(width: w, child: k)]);
             },
           ),
+          if (canExpenses) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  const Text('Mis gastos en efectivo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final saved = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => ExpenseDialog(api: ApiService(), account: 'efectivo', label: 'Efectivo en mi poder', balance: sum(holding) - _pendingExpenses),
+                      );
+                      if (saved == true) {
+                        await _loadExpenses();
+                        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gasto registrado. Se descontará de lo que entregue.')));
+                      }
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Registrar gasto'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      await showDialog<bool>(
+                        context: context,
+                        builder: (_) => ExpensesListDialog(api: ApiService(), account: 'efectivo', label: 'Efectivo (mis gastos)', allowVoid: false),
+                      );
+                      await _loadExpenses();
+                    },
+                    icon: const Icon(Icons.list_alt, size: 18),
+                    label: const Text('Ver mis gastos'),
+                  ),
+                ]),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [

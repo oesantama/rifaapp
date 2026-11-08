@@ -63,11 +63,16 @@ class _LoginViewState extends State<LoginView> {
 
     final authVM = Provider.of<AuthViewModel>(context, listen: false);
     bool success = false;
+    String? unexpected;
 
-    if (_selectedRole == UserRole.admin) {
-      success = await authVM.loginAsAdmin(_userController.text, _passwordController.text);
-    } else {
-      success = await authVM.loginAsAdvisor(_userController.text, _passwordController.text);
+    try {
+      // Tope de espera: si el servidor no responde (por ejemplo, mientras se reinicia) el formulario no se queda congelado
+      success = await (_selectedRole == UserRole.admin
+              ? authVM.loginAsAdmin(_userController.text, _passwordController.text)
+              : authVM.loginAsAdvisor(_userController.text, _passwordController.text))
+          .timeout(const Duration(seconds: 25));
+    } catch (_) {
+      unexpected = 'No hubo respuesta del servidor. Intente de nuevo en unos segundos.';
     }
 
     if (success) TextInput.finishAutofillContext();
@@ -76,15 +81,24 @@ class _LoginViewState extends State<LoginView> {
       setState(() {
         _isLoading = false;
         if (!success) {
-          _errorMessage = authVM.loginErrorMessage.isNotEmpty
-              ? authVM.loginErrorMessage
-              : 'Usuario o contraseña incorrectos. Verifique sus credenciales.';
+          _errorMessage = unexpected ??
+              (authVM.loginErrorMessage.isNotEmpty ? authVM.loginErrorMessage : 'Usuario o contraseña incorrectos. Verifique sus credenciales.');
           _passwordController.clear();
-          // Fields were disabled while waiting: put the cursor back so the user can retype
-          WidgetsBinding.instance.addPostFrameCallback((_) => _passwordFocus.requestFocus());
         }
       });
+      // Siempre se devuelve el cursor a la contraseña para poder escribirla de nuevo
+      if (!success) _focusPassword();
     }
+  }
+
+  /// Devuelve el teclado al campo de contraseña. En web, un clic fuera del campo (por ejemplo en el ojo) quita el foco
+  /// real del navegador aunque Flutter crea que sigue enfocado: se vuelve a pedir el teclado de forma explícita.
+  void _focusPassword() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _passwordFocus.requestFocus();
+      SystemChannels.textInput.invokeMethod('TextInput.show');
+    });
   }
 
   void _handleDemoLogin() async {
@@ -95,7 +109,12 @@ class _LoginViewState extends State<LoginView> {
     });
 
     final authVM = Provider.of<AuthViewModel>(context, listen: false);
-    final success = await authVM.loginDemo();
+    bool success = false;
+    try {
+      success = await authVM.loginDemo().timeout(const Duration(seconds: 25));
+    } catch (_) {
+      success = false;
+    }
 
     if (mounted) {
       setState(() {
@@ -433,7 +452,8 @@ class _LoginViewState extends State<LoginView> {
                         TextField(
                           controller: _userController,
                           focusNode: _userFocus,
-                          enabled: !_isLoading,
+                          // readOnly (y no enabled:false): deshabilitar un campo enfocado en web suelta la conexión del teclado
+                          readOnly: _isLoading,
                           autofillHints: const [AutofillHints.username],
                           textInputAction: TextInputAction.next,
                           keyboardType: TextInputType.emailAddress,
@@ -462,7 +482,7 @@ class _LoginViewState extends State<LoginView> {
                         TextField(
                           controller: _passwordController,
                           focusNode: _passwordFocus,
-                          enabled: !_isLoading,
+                          readOnly: _isLoading,
                           obscureText: _obscurePassword,
                           autofillHints: const [AutofillHints.password],
                           textInputAction: TextInputAction.done,
@@ -480,6 +500,8 @@ class _LoginViewState extends State<LoginView> {
                                   setState(() {
                                     _obscurePassword = !_obscurePassword;
                                   });
+                                  // Cambiar entre ocultar/mostrar recrea el campo en el navegador: se devuelve el teclado
+                                  _focusPassword();
                                 },
                               ),
                             ),

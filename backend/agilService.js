@@ -197,7 +197,7 @@ module.exports = function createAgilService(deps) {
         }
       }
     }
-    const cash = { total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), balance: 0, byAdvisor: new Map() };
+    const cash = { total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), balance: 0, advisorExpenses: 0, netPending: 0, byAdvisor: new Map() };
     const rows = collectRows(db, company, { from: f.from, to: f.to, raffleId: f.raffleId });
     for (const { abono, settled } of rows) {
       const amount = Number(abono.amount) || 0;
@@ -214,8 +214,9 @@ module.exports = function createAgilService(deps) {
         cash.total += amount; cash.count += 1;
         if (isUploaded) addTo(cash.uploaded, amount);
         const name = abono.sellerName || 'Administrador';
-        if (!cash.byAdvisor.has(name)) cash.byAdvisor.set(name, { name, total: 0, legalized: 0, pending: 0, pendingCount: 0 });
-        const adv = cash.byAdvisor.get(name);
+        const advKey = abono.sellerId || `n:${name}`;
+        if (!cash.byAdvisor.has(advKey)) cash.byAdvisor.set(advKey, { id: abono.sellerId || null, name, total: 0, legalized: 0, pending: 0, pendingCount: 0, expenses: 0, expensesCount: 0, toDeliver: 0 });
+        const adv = cash.byAdvisor.get(advKey);
         adv.total += amount;
         if (settled) adv.legalized += amount; else { adv.pending += amount; adv.pendingCount += 1; }
       }
@@ -226,10 +227,19 @@ module.exports = function createAgilService(deps) {
         if (e.companyId !== company.id || e.voided) continue;
         if (f.from && e.date < f.from) continue;
         if (f.to && e.date > f.to) continue;
-        if (e.account === CASH_KEY) addTo(cash.expenses, e.amount);
+        // Gasto en efectivo de un asesor que aún no se concilia con el administrador: reduce lo que ese asesor debe entregar
+        if (e.account === CASH_KEY && e.advisorId && !e.applied) {
+          const key = e.advisorId;
+          if (!cash.byAdvisor.has(key)) cash.byAdvisor.set(key, { id: e.advisorId, name: e.advisorName || 'Asesor', total: 0, legalized: 0, pending: 0, pendingCount: 0, expenses: 0, expensesCount: 0, toDeliver: 0 });
+          const adv = cash.byAdvisor.get(key);
+          adv.expenses += e.amount; adv.expensesCount += 1;
+          cash.advisorExpenses += e.amount;
+        } else if (e.account === CASH_KEY) addTo(cash.expenses, e.amount);
         else addTo(ensure(e.account, e.accountLabel || e.account).expenses, e.amount);
       }
     }
+    for (const adv of cash.byAdvisor.values()) adv.toDeliver = adv.pending - adv.expenses;
+    cash.netPending = cash.pending.amount - cash.advisorExpenses;
     // Saldo que debe haber = lo legalizado menos los gastos
     for (const a of accounts.values()) a.balance = a.legalized.amount - a.expenses.amount;
     cash.balance = cash.legalized.amount - cash.expenses.amount;
@@ -241,7 +251,7 @@ module.exports = function createAgilService(deps) {
     grand.balance = grand.legalized - grand.expenses;
     return {
       accounts: list,
-      cash: { ...cash, byAdvisor: [...cash.byAdvisor.values()].sort((a, b) => b.pending - a.pending || b.total - a.total) },
+      cash: { ...cash, byAdvisor: [...cash.byAdvisor.values()].sort((a, b) => b.toDeliver - a.toDeliver || b.pending - a.pending || b.total - a.total) },
       grand
     };
   }
@@ -539,10 +549,26 @@ module.exports = function createAgilService(deps) {
   // ------------------------------------------------------------------ rutas del administrador
   function registerRoutes(app, { adminOnly, targetCompanyOf }) {
     const need = (req, res) => {
-      const company = targetCompanyOf(req);
+      // Un asesor (con permiso) trabaja siempre con la empresa a la que pertenece
+      const company = req.auth && req.auth.role === 'asesor'
+        ? (getDb().companies || []).find(c => c.id === req.auth.record.companyId)
+        : targetCompanyOf(req);
       if (!company) res.status(400).json({ error: 'Seleccione la empresa.' });
       return company;
     };
+    // kind: 'view' (ver la caja) | 'register' (registrar gastos) | 'list' (cualquiera de las dos)
+    const cashAccess = kind => (req, res, next) => {
+      const role = req.auth && req.auth.role;
+      if (role === 'admin' || role === 'superadmin') return next();
+      if (role === 'asesor') {
+        const adv = (getDb().advisors || []).find(a => a.id === req.auth.record.id);
+        const ok = adv && adv.status !== 'INHABILITADO' &&
+          ((kind === 'view' && adv.canViewCash) || (kind === 'register' && adv.canRegisterExpenses) || (kind === 'list' && (adv.canViewCash || adv.canRegisterExpenses)));
+        if (ok) return next();
+      }
+      return res.status(403).json({ error: 'No tiene permiso para esta acción.' });
+    };
+    const myAdvisor = req => (req.auth && req.auth.role === 'asesor' ? (getDb().advisors || []).find(a => a.id === req.auth.record.id) : null);
     const filtersOf = q => ({
       from: /^\d{4}-\d{2}-\d{2}$/.test(q.from || '') ? q.from : '',
       to: /^\d{4}-\d{2}-\d{2}$/.test(q.to || '') ? q.to : '',
@@ -580,22 +606,32 @@ module.exports = function createAgilService(deps) {
     });
 
     // ---- Gastos: lo que se gastó de una cuenta o del efectivo (para que el saldo cuadre) ----
-    const expenseView = e => ({ id: e.id, account: e.account, accountLabel: e.accountLabel, amount: e.amount, date: e.date, reason: e.reason, hasSupport: !!(e.soporteDriveId || e.soporteWebViewUrl), soporteDriveId: e.soporteDriveId || null, soporteWebViewUrl: e.soporteWebViewUrl || null, createdBy: e.createdBy, createdAt: e.createdAt, voided: e.voided || null });
+    const expenseView = e => ({ id: e.id, account: e.account, accountLabel: e.accountLabel, amount: e.amount, date: e.date, reason: e.reason, advisorName: e.advisorName || null, applied: e.applied || null, hasSupport: !!(e.soporteDriveId || e.soporteWebViewUrl), soporteDriveId: e.soporteDriveId || null, soporteWebViewUrl: e.soporteWebViewUrl || null, createdBy: e.createdBy, createdAt: e.createdAt, voided: e.voided || null });
 
-    app.get('/api/agil/expenses', adminOnly, (req, res) => {
+    app.get('/api/agil/expenses', cashAccess('list'), (req, res) => {
       const company = need(req, res);
       if (!company) return;
       const f = filtersOf(req.query);
       const account = String(req.query.account || '').slice(0, 120);
+      const me = myAdvisor(req);
+      // Un asesor que solo registra gastos ve únicamente los suyos; con permiso de ver la caja ve todos
+      const onlyMine = me && !me.canViewCash;
       const list = (getDb().expenses || [])
-        .filter(e => e.companyId === company.id && (!account || e.account === account) && (!f.from || e.date >= f.from) && (!f.to || e.date <= f.to))
+        .filter(e => e.companyId === company.id && (!onlyMine || e.advisorId === me.id) && (!account || e.account === account) && (!f.from || e.date >= f.from) && (!f.to || e.date <= f.to))
         .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
-      res.json({ expenses: list.slice(0, 500).map(expenseView), total: list.filter(e => !e.voided).reduce((s, e) => s + e.amount, 0) });
+      const pendingMine = me ? unappliedCashExpenses(me.id) : [];
+      res.json({
+        expenses: list.slice(0, 500).map(expenseView),
+        total: list.filter(e => !e.voided).reduce((s, e) => s + e.amount, 0),
+        // Gastos en efectivo del asesor por justificar con el administrador (se descuentan de lo que entrega)
+        pendingTotal: pendingMine.reduce((s, e) => s + e.amount, 0)
+      });
     });
 
-    app.post('/api/agil/expenses', adminOnly, async (req, res) => {
+    app.post('/api/agil/expenses', cashAccess('register'), async (req, res) => {
       const company = need(req, res);
       if (!company) return;
+      const me = myAdvisor(req);
       const body = req.body || {};
       const db = getDb();
       const account = String(body.account || '').slice(0, 120);
@@ -630,6 +666,7 @@ module.exports = function createAgilService(deps) {
         accountLabel: account === CASH_KEY ? 'Efectivo' : accountLabel,
         amount, date, reason, ...soporte,
         createdBy: actorName(req),
+        ...(me ? { advisorId: me.id, advisorName: me.name } : {}),
         createdAt: new Date().toISOString()
       };
       db.expenses.unshift(expense);
@@ -654,7 +691,7 @@ module.exports = function createAgilService(deps) {
     });
 
     // Resumen por cuenta (transferencias) y efectivo: total, legalizado y por legalizar
-    app.get('/api/agil/summary', adminOnly, (req, res) => {
+    app.get('/api/agil/summary', cashAccess('view'), (req, res) => {
       const company = need(req, res);
       if (!company) return;
       const f = filtersOf(req.query);
@@ -782,5 +819,20 @@ module.exports = function createAgilService(deps) {
     });
   }
 
-  return { summarize, registerRoutes, start, handleIncomingDocument, tick, runBatch, isDue, getConfig, buildWorkbook, collectRows, applyReturnedWorkbook, createBatch, pendingRows, sanitizeConfig };
+  /** Gastos en efectivo de un asesor que aún no se han conciliado con el administrador. */
+  function unappliedCashExpenses(advisorId) {
+    return (getDb().expenses || []).filter(e => e.advisorId === advisorId && e.account === CASH_KEY && !e.voided && !e.applied);
+  }
+
+  /** Al confirmar la entrega, esos gastos quedan conciliados (ya salieron del efectivo que entregó el asesor). */
+  function applyExpenses(ids, info) {
+    const wanted = new Set(ids || []);
+    let applied = 0;
+    for (const e of getDb().expenses || []) {
+      if (wanted.has(e.id) && !e.voided && !e.applied) { e.applied = { ...info }; applied++; }
+    }
+    return applied;
+  }
+
+  return { unappliedCashExpenses, applyExpenses, summarize, registerRoutes, start, handleIncomingDocument, tick, runBatch, isDue, getConfig, buildWorkbook, collectRows, applyReturnedWorkbook, createBatch, pendingRows, sanitizeConfig };
 };

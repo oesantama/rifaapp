@@ -310,6 +310,9 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                 const TicketGridView(),
                 const AdvisorCashView(),
                 const WinnerRegistrationView(),
+                // Asesor de punto/integral con permiso de ver la caja (se agrega al final: no mueve las demás opciones)
+                if (authVM.activeAdvisor?.canViewCash == true)
+                  AgilPaymentsView(advisorMode: true, canRegisterExpenses: authVM.activeAdvisor?.canRegisterExpenses == true),
               ];
 
     // Ensure selected index is valid
@@ -751,27 +754,33 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                                 label: Text('Pagos'),
                               ),
                             ])
-                      : const [
-                          NavigationRailDestination(
+                      : [
+                          const NavigationRailDestination(
                             icon: Icon(Icons.dashboard_outlined),
                             selectedIcon: Icon(Icons.dashboard),
                             label: Text('Dashboard'),
                           ),
-                          NavigationRailDestination(
+                          const NavigationRailDestination(
                             icon: Icon(Icons.grid_on_outlined),
                             selectedIcon: Icon(Icons.grid_on),
                             label: Text('Mis Boletas'),
                           ),
-                          NavigationRailDestination(
+                          const NavigationRailDestination(
                             icon: Icon(Icons.account_balance_wallet_outlined),
                             selectedIcon: Icon(Icons.account_balance_wallet),
                             label: Text('Mi Caja'),
                           ),
-                          NavigationRailDestination(
+                          const NavigationRailDestination(
                             icon: Icon(Icons.emoji_events_outlined),
                             selectedIcon: Icon(Icons.emoji_events),
                             label: Text('Premios'),
                           ),
+                          if (authVM.activeAdvisor?.canViewCash == true)
+                            const NavigationRailDestination(
+                              icon: Icon(Icons.savings_outlined),
+                              selectedIcon: Icon(Icons.savings),
+                              label: Text('Caja'),
+                            ),
                         ],
             ),
           const VerticalDivider(thickness: 1, width: 1),
@@ -820,11 +829,12 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                               BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
                               BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
                             ])
-                      : const [
-                          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                          BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Mi Caja'),
-                          BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                      : [
+                          const BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
+                          const BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
+                          const BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Mi Caja'),
+                          const BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
+                          if (authVM.activeAdvisor?.canViewCash == true) const BottomNavigationBarItem(icon: Icon(Icons.savings), label: 'Caja'),
                         ],
             )
           : null,

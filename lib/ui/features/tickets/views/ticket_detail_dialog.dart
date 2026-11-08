@@ -4,6 +4,7 @@ import 'package:rifaapp/ui/core/widgets/responsive_flex_child.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:rifaapp/data/models/advisor.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/data/models/raffle.dart';
 import 'package:rifaapp/ui/core/sale_channels.dart';
@@ -140,6 +141,35 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       return 'No puede tener más de ${ColombiaTime.maxTransferAgeDays} días de antigüedad';
     }
     return null;
+  }
+
+  /// Campo "Asesor / Vendedor" del administrador: abre una lista con buscador (por nombre, cédula, usuario o teléfono).
+  Widget _sellerField(List<Advisor> advisors) {
+    final id = _selectedSellerId;
+    final selected = id == null || id == 'admin' ? null : advisors.where((a) => a.id == id).firstOrNull;
+    final label = selected == null ? '🏢 Venta Directa (Administrador)' : '👤 ${selected.name} (${selected.code}) • ${selected.typeLabel}';
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () async {
+        final picked = await showDialog<String>(context: context, builder: (_) => _SellerPickerDialog(advisors: advisors, selectedId: id ?? 'admin'));
+        if (picked == null || !mounted) return;
+        setState(() {
+          _selectedSellerId = picked;
+          _selectedSellerName = picked == 'admin' ? 'Administrador' : (advisors.where((a) => a.id == picked).firstOrNull?.name ?? 'Asesor');
+          // Si cambia de asesor, el tipo de venta (oficina/calle) se vuelve a elegir
+          if (picked != id) _saleZone = null;
+        });
+      },
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Asesor / Vendedor',
+          prefixIcon: Icon(Icons.badge),
+          suffixIcon: Icon(Icons.search),
+          border: OutlineInputBorder(),
+        ),
+        child: Text(label, overflow: TextOverflow.ellipsis),
+      ),
+    );
   }
 
   /// Letras y números que el OCR confunde se comparan por igual (O/0, I/1, S/5, B/8…).
@@ -1530,45 +1560,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                         ),
                       )
                     else
-                      () {
-                        final List<DropdownMenuItem<String>> sellerDropdownItems = [
-                          const DropdownMenuItem<String>(
-                            value: 'admin',
-                            child: Text('🏢 Venta Directa (Administrador)'),
-                          ),
-                          ...advisorVM.advisors.map((adv) {
-                            return DropdownMenuItem<String>(
-                              value: adv.id,
-                              child: Text('👤 ${adv.name} (${adv.code})'),
-                            );
-                          }),
-                        ];
-                        final validSellerIds = sellerDropdownItems.map((e) => e.value).toSet();
-                        final currentSellerValue = validSellerIds.contains(_selectedSellerId) ? _selectedSellerId : 'admin';
-
-                        return DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: currentSellerValue,
-                          decoration: const InputDecoration(
-                            labelText: 'Asesor / Vendedor',
-                            prefixIcon: Icon(Icons.badge),
-                            border: OutlineInputBorder(),
-                          ),
-                          items: sellerDropdownItems,
-                          onChanged: (val) {
-                            if (val == null) return;
-                            setState(() {
-                              _selectedSellerId = val;
-                              if (val == 'admin') {
-                                _selectedSellerName = 'Administrador';
-                              } else {
-                                final found = advisorVM.advisors.where((a) => a.id == val).firstOrNull;
-                                _selectedSellerName = found?.name ?? 'Asesor';
-                              }
-                            });
-                          },
-                        );
-                      }(),
+                      _sellerField(advisorVM.advisors),
                     // Tipo de venta: solo para el asesor integral (punto = oficina y calle = calle se fijan solos)
                     Builder(builder: (context) {
                       final sellerAdv = authVM.isAsesor
@@ -1785,10 +1777,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                 onPressed: _uploadingSoporte
                                     ? null
                                     : () async {
-                                        setState(() => _uploadingSoporte = true);
                                         try {
-                                          final picked = await pickImageBase64();
+                                          // El botón sigue activo mientras el selector está abierto (en iPhone puede no avisar al cancelar)
+                                          final picked = await pickImageBase64(maxSide: 1600);
                                           if (picked != null) {
+                                            if (mounted) setState(() => _uploadingSoporte = true);
                                             final compressed = compressImageDataUri(picked, maxSide: 1600);
                                             setState(() {
                                               _soporteBase64 = compressed;
@@ -2203,6 +2196,89 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Lista de asesores con buscador para elegir quién vende o reserva la boleta.
+class _SellerPickerDialog extends StatefulWidget {
+  final List<Advisor> advisors;
+  final String selectedId;
+
+  const _SellerPickerDialog({required this.advisors, required this.selectedId});
+
+  @override
+  State<_SellerPickerDialog> createState() => _SellerPickerDialogState();
+}
+
+class _SellerPickerDialogState extends State<_SellerPickerDialog> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  static String _norm(String s) => s
+      .toLowerCase()
+      .replaceAll(RegExp(r'[áàä]'), 'a')
+      .replaceAll(RegExp(r'[éèë]'), 'e')
+      .replaceAll(RegExp(r'[íìï]'), 'i')
+      .replaceAll(RegExp(r'[óòö]'), 'o')
+      .replaceAll(RegExp(r'[úùü]'), 'u');
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _norm(_search.text.trim());
+    final list = widget.advisors.where((a) => q.isEmpty || _norm('${a.name} ${a.code} ${a.username} ${a.phone} ${a.email}').contains(q)).toList()
+      ..sort((a, b) => _norm(a.name).compareTo(_norm(b.name)));
+    return AlertDialog(
+      title: const Text('Elegir asesor / vendedor', style: TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 440,
+        height: 420,
+        child: Column(children: [
+          TextField(
+            controller: _search,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre, cédula, usuario o teléfono',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _search.text.isEmpty ? null : IconButton(icon: const Icon(Icons.close), onPressed: () => setState(_search.clear)),
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView(children: [
+              if (q.isEmpty || _norm('venta directa administrador').contains(q))
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.business),
+                  title: const Text('Venta Directa (Administrador)'),
+                  selected: widget.selectedId == 'admin',
+                  onTap: () => Navigator.pop(context, 'admin'),
+                ),
+              for (final a in list)
+                ListTile(
+                  dense: true,
+                  leading: CircleAvatar(radius: 16, child: Text(a.name.isNotEmpty ? a.name[0].toUpperCase() : 'A')),
+                  title: Text(a.name, style: TextStyle(decoration: a.isActive ? null : TextDecoration.lineThrough)),
+                  subtitle: Text('${a.typeLabel} • ${a.code}${a.phone.isNotEmpty ? ' • ${a.phone}' : ''}${a.isActive ? '' : ' • INHABILITADO'}'),
+                  selected: widget.selectedId == a.id,
+                  onTap: () => Navigator.pop(context, a.id),
+                ),
+              if (list.isEmpty && q.isNotEmpty)
+                Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Ningún asesor coincide con "${_search.text}".', style: TextStyle(color: Colors.grey[600])))),
+            ]),
+          ),
+        ]),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar'))],
     );
   }
 }

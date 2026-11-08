@@ -16,7 +16,11 @@ const _xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 ///  • Resumen por cuenta: cuánto hay en cada cuenta, cuánto está legalizado y cuánto falta, y el efectivo.
 ///  • Detalle: pagos y abonos con filtros, estado AGIL, Excel, lotes y carga del Excel devuelto (SUBIDO).
 class AgilPaymentsView extends StatefulWidget {
-  const AgilPaymentsView({super.key});
+  /// true = la ve un asesor de punto/integral con permiso: solo el resumen de la caja (sin AGIL ni Excel).
+  final bool advisorMode;
+  final bool canRegisterExpenses;
+
+  const AgilPaymentsView({super.key, this.advisorMode = false, this.canRegisterExpenses = false});
 
   @override
   State<AgilPaymentsView> createState() => _AgilPaymentsViewState();
@@ -81,7 +85,10 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       _error = null;
     });
     try {
-      final results = await Future.wait([_api.agilPayments(_filters), _api.agilSummary(_dateFilters)]);
+      final results = await Future.wait([
+        widget.advisorMode ? Future.value(<String, dynamic>{}) : _api.agilPayments(_filters),
+        _api.agilSummary(_dateFilters),
+      ]);
       if (!mounted) return;
       final res = results[0];
       setState(() {
@@ -231,7 +238,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
           Row(children: [
             const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
             const SizedBox(width: 8),
-            const Expanded(child: Text('Pagos y abonos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+            Expanded(child: Text(widget.advisorMode ? 'Caja' : 'Pagos y abonos', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
             IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh), tooltip: 'Actualizar'),
           ]),
           const SizedBox(height: 6),
@@ -261,10 +268,11 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
               ),
           ]),
           const SizedBox(height: 4),
-          TabBar(
-            controller: _tabs,
-            tabs: const [Tab(icon: Icon(Icons.account_balance_outlined, size: 18), text: 'Resumen por cuenta'), Tab(icon: Icon(Icons.table_rows_outlined, size: 18), text: 'Detalle de pagos')],
-          ),
+          if (!widget.advisorMode)
+            TabBar(
+              controller: _tabs,
+              tabs: const [Tab(icon: Icon(Icons.account_balance_outlined, size: 18), text: 'Resumen por cuenta'), Tab(icon: Icon(Icons.table_rows_outlined, size: 18), text: 'Detalle de pagos')],
+            ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -276,7 +284,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
                           OutlinedButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
                         ]),
                       )
-                    : TabBarView(controller: _tabs, children: [_summaryTab(), _detailTab(isMobile)]),
+                    : (widget.advisorMode ? _summaryTab() : TabBarView(controller: _tabs, children: [_summaryTab(), _detailTab(isMobile)])),
           ),
         ],
       ),
@@ -311,11 +319,12 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(spacing: 8, runSpacing: 4, children: [
-          OutlinedButton.icon(
-            onPressed: () => _openExpenseDialog(account: account, label: label, balance: balance),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Registrar gasto'),
-          ),
+          if (!widget.advisorMode || widget.canRegisterExpenses)
+            OutlinedButton.icon(
+              onPressed: () => _openExpenseDialog(account: account, label: label, balance: balance),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Registrar gasto'),
+            ),
           if (count > 0)
             TextButton.icon(
               onPressed: () => _openExpensesList(account: account, label: label),
@@ -330,7 +339,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   Future<void> _openExpenseDialog({required String account, required String label, required num balance}) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => _ExpenseDialog(api: _api, account: account, label: label, balance: balance),
+      builder: (_) => ExpenseDialog(api: _api, account: account, label: label, balance: balance),
     );
     if (saved == true) {
       _toast('Gasto registrado.');
@@ -339,7 +348,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   }
 
   Future<void> _openExpensesList({required String account, required String label}) async {
-    final changed = await showDialog<bool>(context: context, builder: (_) => _ExpensesListDialog(api: _api, account: account, label: label));
+    final changed = await showDialog<bool>(context: context, builder: (_) => ExpensesListDialog(api: _api, account: account, label: label, allowVoid: !widget.advisorMode));
     if (changed == true) await _load();
   }
 
@@ -423,7 +432,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _openDetail(account: '${a['key']}', accountLabel: '${a['label']}', method: 'TRANSFERENCIA'),
+        onTap: widget.advisorMode ? null : () => _openDetail(account: '${a['key']}', accountLabel: '${a['label']}', method: 'TRANSFERENCIA'),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -463,7 +472,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _openDetail(method: 'EFECTIVO'),
+        onTap: widget.advisorMode ? null : () => _openDetail(method: 'EFECTIVO'),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -484,12 +493,20 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
             _line('Legalizado (recibido por el administrador)', _n(legalized['amount']), _n(legalized['count']).toInt(), AppTheme.secondaryEmerald),
             _line('Por legalizar (en poder de asesores)', _n(pending['amount']), _n(pending['count']).toInt(), Colors.orange.shade800),
             if (_n(uploaded['count']) > 0) _line('Ya subido a AGIL', _n(uploaded['amount']), _n(uploaded['count']).toInt(), Colors.blueGrey, small: true),
+            if (_n(cash['advisorExpenses']) > 0)
+              _line('Gastos de asesores por justificar', _n(cash['advisorExpenses']), advisors.fold<int>(0, (sum, a) => sum + _n(a['expensesCount']).toInt()), Colors.orange.shade800, small: true),
             ..._expenseBlock(cash, account: 'efectivo', label: 'Efectivo'),
-            if (advisors.any((a) => _n(a['pending']) > 0)) ...[
+            if (advisors.any((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0)) ...[
               const Divider(height: 22),
-              const Text('Pendiente por asesor', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
-              for (final adv in advisors.where((a) => _n(a['pending']) > 0).take(8))
-                _line('${adv['name']}', _n(adv['pending']), _n(adv['pendingCount']).toInt(), Colors.orange.shade800, small: true),
+              const Text('Debe entregar cada asesor (en poder − gastos por justificar)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+              for (final adv in advisors.where((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0).take(8)) ...[
+                _line('${adv['name']}', _n(adv['toDeliver']), _n(adv['pendingCount']).toInt(), Colors.orange.shade800, small: true),
+                if (_n(adv['expenses']) > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 17, top: 2),
+                    child: Text('en poder ${cashCurrency.format(_n(adv['pending']))} − gastos ${cashCurrency.format(_n(adv['expenses']))}', style: TextStyle(fontSize: 10.5, color: Colors.grey[700])),
+                  ),
+              ],
             ],
           ]),
         ),
@@ -827,19 +844,19 @@ class _PaymentsListState extends State<_PaymentsList> {
 
 
 /// Registrar un gasto de una cuenta o del efectivo: valor, fecha, motivo y foto opcional.
-class _ExpenseDialog extends StatefulWidget {
+class ExpenseDialog extends StatefulWidget {
   final ApiService api;
   final String account;
   final String label;
   final num balance;
 
-  const _ExpenseDialog({required this.api, required this.account, required this.label, required this.balance});
+  const ExpenseDialog({required this.api, required this.account, required this.label, required this.balance});
 
   @override
-  State<_ExpenseDialog> createState() => _ExpenseDialogState();
+  State<ExpenseDialog> createState() => _ExpenseDialogState();
 }
 
-class _ExpenseDialogState extends State<_ExpenseDialog> {
+class _ExpenseDialogState extends State<ExpenseDialog> {
   final _amount = TextEditingController();
   final _reason = TextEditingController();
   DateTime _date = DateTime.now();
@@ -858,7 +875,7 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
 
   Future<void> _pickPhoto() async {
     try {
-      final picked = await pickImageBase64();
+      final picked = await pickImageBase64(maxSide: 1600);
       if (picked != null && mounted) setState(() => _image = compressImageDataUri(picked, maxSide: 1600));
     } catch (e) {
       if (mounted) setState(() => _error = 'No se pudo cargar la foto: $e');
@@ -956,18 +973,21 @@ class _ExpenseDialogState extends State<_ExpenseDialog> {
 }
 
 /// Gastos de una cuenta o del efectivo, con su foto y la opción de anularlos (con motivo).
-class _ExpensesListDialog extends StatefulWidget {
+class ExpensesListDialog extends StatefulWidget {
   final ApiService api;
   final String account;
   final String label;
 
-  const _ExpensesListDialog({required this.api, required this.account, required this.label});
+  /// allowVoid: solo el administrador anula gastos.
+  final bool allowVoid;
+
+  const ExpensesListDialog({required this.api, required this.account, required this.label, this.allowVoid = true});
 
   @override
-  State<_ExpensesListDialog> createState() => _ExpensesListDialogState();
+  State<ExpensesListDialog> createState() => _ExpensesListDialogState();
 }
 
-class _ExpensesListDialogState extends State<_ExpensesListDialog> {
+class _ExpensesListDialogState extends State<ExpensesListDialog> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _expenses = [];
@@ -1038,7 +1058,7 @@ class _ExpensesListDialogState extends State<_ExpensesListDialog> {
                             ]),
                             const SizedBox(height: 2),
                             Text('${e['reason']}', style: TextStyle(fontSize: 13, decoration: e['voided'] != null ? TextDecoration.lineThrough : null)),
-                            Text('Registró ${e['createdBy']}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            Text('Registró ${e['createdBy']}${e['applied'] != null ? ' • conciliado con el administrador' : ''}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                             if (e['voided'] != null)
                               Text('ANULADO por ${(e['voided'] as Map)['by']}: ${(e['voided'] as Map)['reason']}', style: TextStyle(fontSize: 11.5, color: Colors.red.shade700, fontWeight: FontWeight.w600)),
                             Row(children: [
@@ -1049,7 +1069,7 @@ class _ExpensesListDialogState extends State<_ExpensesListDialog> {
                                   label: const Text('Ver foto'),
                                 ),
                               const Spacer(),
-                              if (e['voided'] == null)
+                              if (e['voided'] == null && widget.allowVoid)
                                 TextButton(onPressed: () => _void(e), child: const Text('Anular', style: TextStyle(color: AppTheme.dangerRose))),
                             ]),
                           ]),

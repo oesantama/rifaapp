@@ -60,6 +60,13 @@ class AdvisorManagementView extends StatelessWidget {
     String status = advisor?.status ?? 'ACTIVO';
     // Obligatorio al crear: define si el asesor comisiona (calle), no comisiona (punto) o depende de cada venta (integral)
     String? advisorType = advisor?.type;
+    bool canExpenses = advisor?.canRegisterExpenses ?? false;
+    bool canCash = advisor?.canViewCash ?? false;
+    // Rifas en las que queda autorizado: al editar, las que ya tiene; al crear, las activas (puede cambiarlas)
+    final allRaffles = Provider.of<RaffleViewModel>(context, listen: false).raffles;
+    final Set<String> selectedRaffles = isEditing
+        ? {...advisor.raffleIds}
+        : {for (final r in allRaffles) if (r.status == 'ACTIVA' && !r.isClosed) r.id};
 
     bool obscurePassword = true;
     final formKey = GlobalKey<FormState>();
@@ -214,6 +221,30 @@ class AdvisorManagementView extends StatelessWidget {
                         child: Text('Las ventas que ya hizo conservan su tipo; el cambio aplica a las ventas nuevas.',
                             style: TextStyle(fontSize: 11.5, color: Colors.orange)),
                       ),
+                    // Permisos de la oficina: solo para el asesor de punto o el integral
+                    if (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                        child: Column(children: [
+                          SwitchListTile(
+                            dense: true,
+                            title: const Text('Puede registrar gastos'),
+                            subtitle: const Text('Registra gastos en efectivo o de una cuenta. Los de efectivo se descuentan de lo que entrega al administrador.', style: TextStyle(fontSize: 11.5)),
+                            value: canExpenses,
+                            onChanged: (v) => setState(() => canExpenses = v),
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            dense: true,
+                            title: const Text('Puede ver la caja'),
+                            subtitle: const Text('Ve el resumen de las cuentas y del efectivo (solo lectura).', style: TextStyle(fontSize: 11.5)),
+                            value: canCash,
+                            onChanged: (v) => setState(() => canCash = v),
+                          ),
+                        ]),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
@@ -255,6 +286,29 @@ class AdvisorManagementView extends StatelessWidget {
                       ],
                       onChanged: (v) => setState(() => mode = v!),
                     ),
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      const Icon(Icons.confirmation_number_outlined, size: 18),
+                      const SizedBox(width: 6),
+                      const Expanded(child: Text('Rifas en las que puede vender', style: TextStyle(fontWeight: FontWeight.bold))),
+                      if (allRaffles.isNotEmpty) ...[
+                        TextButton(onPressed: () => setState(() => selectedRaffles.addAll(allRaffles.map((r) => r.id))), child: const Text('Todas')),
+                        TextButton(onPressed: () => setState(selectedRaffles.clear), child: const Text('Ninguna')),
+                      ],
+                    ]),
+                    if (allRaffles.isEmpty)
+                      const Text('Aún no hay rifas creadas.', style: TextStyle(color: Colors.grey))
+                    else
+                      for (final r in allRaffles)
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: selectedRaffles.contains(r.id),
+                          title: Text(r.title),
+                          subtitle: r.status == 'ACTIVA' && !r.isClosed ? null : Text(r.isClosed ? 'Cerrada' : r.status),
+                          onChanged: (v) => setState(() => v == true ? selectedRaffles.add(r.id) : selectedRaffles.remove(r.id)),
+                        ),
                     if (mode == 'ASSIGNED') ...[
                       const SizedBox(height: 10),
                       TextField(
@@ -325,11 +379,30 @@ class AdvisorManagementView extends StatelessWidget {
                         'code': codeCtrl.text.trim(),
                         'mode': mode,
                         'type': advisorType,
+                        'canRegisterExpenses': (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') && canExpenses,
+                        'canViewCash': (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') && canCash,
                         'status': status,
                         'assignedTicketRanges': ranges,
                       };
                       if (passwordCtrl.text.trim().isNotEmpty) {
                         data['password'] = passwordCtrl.text.trim();
+                      }
+                      if (allRaffles.isNotEmpty) {
+                        if (selectedRaffles.isEmpty) {
+                          final goOn = await showDialog<bool>(
+                            context: ctx,
+                            builder: (c) => AlertDialog(
+                              title: const Text('Sin rifas'),
+                              content: const Text('No marcó ninguna rifa: el asesor no podrá vender en ninguna hasta que lo autorice. ¿Guardar así?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Volver')),
+                                ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Guardar sin rifas')),
+                              ],
+                            ),
+                          );
+                          if (goOn != true) return;
+                        }
+                        data['raffleIds'] = selectedRaffles.toList();
                       }
 
                       bool ok;
