@@ -1,8 +1,11 @@
+import 'package:excel/excel.dart' as xl;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
+import 'package:rifaapp/ui/core/utils/file_saver.dart';
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/widgets/current_raffle_banner.dart';
@@ -27,6 +30,8 @@ class AdvisorCashView extends StatefulWidget {
 class _AdvisorCashViewState extends State<AdvisorCashView> {
   final Set<String> _selected = {}; // abono ids
   String _methodFilter = 'TODOS'; // historial: TODOS / efectivo / transferencia
+  String _historySearch = ''; // historial: boleta, valor o número de aprobación
+  final _historySearchCtrl = TextEditingController();
   // Gastos en efectivo del asesor por justificar con el administrador (se descuentan de lo que entrega)
   num _pendingExpenses = 0;
 
@@ -36,6 +41,12 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _historySearchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -257,7 +268,7 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
     double sum(Iterable<CashPayment> l) => l.fold(0.0, (s, p) => s + p.abono.amount);
     final chosen = holding.where((p) => _selected.contains(p.abono.id)).toList();
     final reconciled = mine.where((p) => p.abono.cashState == 'RECIBIDO' || p.abono.cashState == 'VALIDADA').toList();
-    final history = mine.where((p) => _methodFilter == 'TODOS' || (_methodFilter == 'transferencia') == p.abono.isTransfer).toList()
+    final history = mine.where((p) => (_methodFilter == 'TODOS' || (_methodFilter == 'transferencia') == p.abono.isTransfer) && _matchesHistory(p)).toList()
       ..sort((a, b) => b.abono.date.compareTo(a.abono.date));
     final canExpenses = me.canRegisterExpenses;
 
@@ -416,6 +427,33 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
             ],
           ),
           const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    hintText: 'Buscar por N° de boleta, valor o aprobación',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    suffixIcon: _historySearch.isEmpty
+                        ? null
+                        : IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(() { _historySearchCtrl.clear(); _historySearch = ''; })),
+                  ),
+                  controller: _historySearchCtrl,
+                  onChanged: (v) => setState(() => _historySearch = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: history.isEmpty ? null : () => _exportHistory(history),
+                icon: const Icon(Icons.table_chart_outlined, size: 18),
+                label: const Text('Excel'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.green.shade800, side: BorderSide(color: Colors.green.shade700), padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             children: [
@@ -447,6 +485,52 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
         ],
       ),
     );
+  }
+
+  /// Búsqueda del historial: número de boleta (cualquiera de sus oportunidades), valor (con o sin puntos) o número de aprobación.
+  bool _matchesHistory(CashPayment p) {
+    final q = foldText(_historySearch).replaceAll(RegExp(r'[\s.,\$]'), '');
+    if (q.isEmpty) return true;
+    final digits = q.replaceAll(RegExp(r'[^0-9]'), '');
+    final approval = foldText(p.abono.approvalNumber ?? '').replaceAll(RegExp(r'[^0-9a-z]'), '');
+    return p.ticket.numbers.any((n) => n.contains(q)) ||
+        (digits.isNotEmpty && p.abono.amount.round().toString().contains(digits)) ||
+        (approval.isNotEmpty && approval.contains(q)) ||
+        p.ticket.ticketNumber.toString() == q;
+  }
+
+  /// Excel con lo que se ve en el historial (ya filtrado).
+  Future<void> _exportHistory(List<CashPayment> rows) async {
+    try {
+      final excel = xl.Excel.createExcel();
+      final sheet = excel['Mis cobros'];
+      excel.delete('Sheet1');
+      const headers = ['Fecha', 'Boleta', 'Comprador', 'Valor', 'Método', 'Banco origen', 'Aprobación', 'Cuenta destino', 'Estado'];
+      sheet.appendRow([for (final h in headers) xl.TextCellValue(h)]);
+      for (final p in rows) {
+        final (state, _) = _stateOf(p);
+        sheet.appendRow([
+          xl.TextCellValue(cashDate(p.abono.date)),
+          xl.TextCellValue(p.ticket.displayNumber),
+          xl.TextCellValue(p.ticket.buyerName),
+          xl.DoubleCellValue(p.abono.amount),
+          xl.TextCellValue(p.abono.isTransfer ? 'Transferencia' : 'Efectivo'),
+          xl.TextCellValue(p.abono.isTransfer ? (p.abono.originBank ?? '') : ''),
+          xl.TextCellValue(p.abono.isTransfer ? (p.abono.approvalNumber ?? '') : ''),
+          xl.TextCellValue(p.abono.isTransfer ? (p.abono.cuentaDestino ?? '') : ''),
+          xl.TextCellValue(state),
+        ]);
+      }
+      final total = rows.fold<double>(0, (s, p) => s + p.abono.amount);
+      sheet.appendRow([xl.TextCellValue('TOTAL'), xl.TextCellValue(''), xl.TextCellValue(''), xl.DoubleCellValue(total)]);
+      final bytes = excel.save();
+      if (bytes == null) throw Exception('No se pudo generar el archivo.');
+      final day = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      await saveAndDownloadBytes('mis_cobros_$day.xlsx', bytes, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Excel descargado con ${rows.length} pago(s).')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text('No se pudo exportar: $e')));
+    }
   }
 
   /// Estado del pago visto por el asesor: (texto, color)

@@ -7,6 +7,7 @@ const EVOLUTION_APIKEY = process.env.EVOLUTION_APIKEY || 'rifaapp_evo_secret_key
 const PUBLIC_WEBHOOK_URL = process.env.PUBLIC_WEBHOOK_URL || 'http://45.137.192.195/api/whatsapp/webhook';
 const botBrain = require('./botBrain');
 const driveService = require('./driveService');
+const ocrService = require('./ocrService');
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://williamrifas.santamariapp.com').replace(/\/+$/, '');
 
 /**
@@ -1570,6 +1571,33 @@ async function storeReceiptMedia(ctx, media) {
   return out;
 }
 
+const accountLabelOf = a => [a.bank, a.accountType, a.accountNumber, a.key ? `llave ${a.key}` : '', a.holder].filter(Boolean).join(' • ');
+
+/**
+ * Cuentas de la rifa cuyo número o llave aparece en el texto leído del comprobante. Solo cuenta un identificador fuerte
+ * (número completo, sus últimos 6 dígitos —los bancos suelen ocultar el resto— o una llave alfanumérica).
+ */
+function accountsFoundInProof(text, accounts) {
+  const digitsOnly = String(text || '').replace(/\D/g, '');
+  const compact = String(text || '').toLowerCase().replace(/\s+/g, '');
+  return (accounts || []).filter(a => [a.accountNumber, a.key].some(v => {
+    const raw = String(v || '').trim();
+    if (!raw) return false;
+    const d = raw.replace(/\D/g, '');
+    if (d.length >= 6 && d.length === raw.replace(/[\s.-]/g, '').length) {
+      return digitsOnly.includes(d) || (d.length >= 8 && digitsOnly.includes(d.slice(-6)));
+    }
+    const k = raw.toLowerCase().replace(/\s+/g, '');
+    return k.length >= 5 && compact.includes(k);
+  }));
+}
+
+/** Datos del comprobante que viajan de un paso al siguiente de la conversación. */
+const planCarry = plan => ({
+  approval: plan.approval || '', bank: plan.bank || '', soporte: plan.soporte || null, hint: plan.hint || '',
+  proofTotal: plan.proofTotal || 0, proofUnreadable: !!plan.proofUnreadable, accountIds: plan.accountIds || []
+});
+
 async function startReceiptFlow(ctx, info) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, session } = ctx;
   const soporte = await storeReceiptMedia(ctx, info.media);
@@ -1586,15 +1614,34 @@ async function startReceiptFlow(ctx, info) {
     return;
   }
 
+  // Se lee la imagen (OCR en el servidor): número de aprobación, banco de origen, valor y a qué cuenta de la rifa se hizo
+  let proofRead = null;
+  if (info.media && info.media.base64) {
+    try {
+      proofRead = await ocrService.readProof(Buffer.from(String(info.media.base64).replace(/^data:[^;]+;base64,/, ''), 'base64'));
+    } catch (err) {
+      console.warn('⚠️ No se pudo leer el comprobante del bot:', err.message);
+    }
+  }
+  const readable = !!(proofRead && proofRead.readable);
+  const found = readable ? accountsFoundInProof(proofRead.text, mainRaffle.transferAccounts || []) : [];
+  const readAmounts = readable ? (proofRead.amounts || []).filter(v => Number.isFinite(v) && v > 0) : [];
+  const proofTotal = readAmounts.length ? Math.max(...readAmounts) : 0;
   const base = {
-    approval: info.approval || '',
-    bank: info.bank || '',
+    // El número de aprobación se sube del soporte; lo escrito por el cliente en el mensaje tiene prioridad
+    approval: info.approval || (readable && proofRead.references && proofRead.references[0]) || '',
+    bank: info.bank || (readable && proofRead.bank) || '',
     soporte,
-    hint: info.hintNumber || ''
+    hint: info.hintNumber || '',
+    proofTotal,
+    proofUnreadable: !!(proofRead && proofRead.available && !readable),
+    accountIds: found.map(a => a.id)
   };
   if (!info.amount) {
-    setPending(senderPhone, { type: 'RECEIPT_AMOUNT', ...base }, db, saveDBCallback, mainRaffle.id);
-    await sendTextMessage(instance, senderPhone, `📸 *¡Recibí tu comprobante!*\n\nPara registrarlo bien necesito el *valor transferido*. ¿De cuánto fue? Escríbelo solo en números (ej: *150000*).`);
+    setPending(senderPhone, { type: 'RECEIPT_AMOUNT', ...base, suggestedAmount: proofTotal || 0 }, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, proofTotal
+      ? `📸 *¡Recibí tu comprobante!*\n\nLeí *${money(proofTotal)}* en la imagen. ¿Ese es el valor transferido? Responde *SÍ* o escribe el valor correcto solo en números (ej: *150000*).`
+      : `📸 *¡Recibí tu comprobante!*\n\nPara registrarlo bien necesito el *valor transferido*. ¿De cuánto fue? Escríbelo solo en números (ej: *150000*).`);
     return;
   }
   await receiptSelectTarget(ctx, { ...base, amount: info.amount }, payable);
@@ -1620,6 +1667,21 @@ async function receiptSelectTarget(ctx, plan, payable) {
 
 async function receiptConfirm(ctx, ticket, plan) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice } = ctx;
+  // ¿A qué cuenta se transfirió? Si el comprobante no lo deja claro y la rifa tiene varias cuentas, se le pregunta al cliente
+  const accounts = mainRaffle.transferAccounts || [];
+  if (accounts.length && !plan.account) {
+    const foundAccounts = (plan.accountIds || []).map(id => accounts.find(a => a.id === id)).filter(Boolean);
+    if (accounts.length === 1) plan = { ...plan, account: accounts[0] };
+    else if (foundAccounts.length === 1) plan = { ...plan, account: foundAccounts[0] };
+    else {
+      const options = foundAccounts.length > 1 ? foundAccounts : accounts;
+      let ask = `🏦 *¿A cuál de nuestras cuentas hiciste la transferencia?*\n\nNo logré identificarla en el comprobante. Responde con el número:\n\n`;
+      options.forEach((a, i) => { ask += `${i + 1}️⃣ ${accountLabelOf(a)}\n`; });
+      setPending(senderPhone, { type: 'RECEIPT_ACCOUNT', ticketId: ticket.id, amount: plan.amount, ...planCarry(plan), accountIds: options.map(a => a.id) }, db, saveDBCallback, mainRaffle.id);
+      await sendTextMessage(instance, senderPhone, ask.trim());
+      return;
+    }
+  }
   const price = priceOf(ticket, ticketPrice);
   const paid = Number(ticket.totalPaid) || 0;
   const balance = balanceOf(ticket, ticketPrice);
@@ -1633,6 +1695,7 @@ async function receiptConfirm(ctx, ticket, plan) {
   msg += `💸 *Valor de este comprobante:* ${money(amount)}\n`;
   if (plan.approval) msg += `🧾 *Comprobante No.:* ${plan.approval}\n`;
   if (plan.bank) msg += `🏛️ *Medio / Banco:* ${plan.bank}\n`;
+  if (plan.account) msg += `🏦 *Cuenta destino:* ${accountLabelOf(plan.account)}\n`;
 
   if (amount > balance) {
     const surplus = amount - balance;
@@ -1653,7 +1716,10 @@ async function receiptConfirm(ctx, ticket, plan) {
   }
   msg += `\n👉 *¿Confirmas que este pago es para la boleta ${numbersOf(ticket)}?* Responde *SÍ* para registrarlo o *NO* para cancelar.`;
 
-  setPending(senderPhone, { type: 'RECEIPT_CONFIRM', ticketId: ticket.id, amount, approval: plan.approval, bank: plan.bank, soporte: plan.soporte }, db, saveDBCallback, mainRaffle.id);
+  setPending(senderPhone, {
+    type: 'RECEIPT_CONFIRM', ticketId: ticket.id, amount, ...planCarry(plan),
+    accountId: plan.account ? plan.account.id : null, accountLabel: plan.account ? accountLabelOf(plan.account) : ''
+  }, db, saveDBCallback, mainRaffle.id);
   await sendTextMessage(instance, senderPhone, msg);
 }
 
@@ -1689,6 +1755,8 @@ async function receiptRegister(ctx, pending) {
   } else {
     flags.push({ code: 'SIN_SOPORTE', level: 'MEDIA', detail: 'El comprobante llegó por WhatsApp pero no se pudo guardar la imagen: solicítela de nuevo antes de validar.' });
   }
+  if (pending.proofUnreadable) flags.push({ code: 'COMPROBANTE_ILEGIBLE', level: 'MEDIA', detail: 'No se pudo leer el comprobante: compare a mano el valor, la cuenta y el número de aprobación con el soporte.' });
+  else if (!pending.approval) flags.push({ code: 'SIN_APROBACION', level: 'MEDIA', detail: 'No se encontró el número de aprobación en el comprobante: ingréselo a mano al validar.' });
   if (amount > balanceBefore) flags.push({ code: 'EXCEDENTE', level: 'BAJA', detail: `El pago supera el saldo por ${money(amount - balanceBefore)}: distribuya el excedente en otra boleta.` });
 
   const now = new Date().toISOString();
@@ -1702,6 +1770,10 @@ async function receiptRegister(ctx, pending) {
     note: `Transferencia reportada por WhatsApp${pending.approval ? ` (Comprobante: #${pending.approval})` : ''} — confirmada por el cliente`,
     approvalNumber: pending.approval || '',
     originBank: pending.bank || 'Transferencia Bancaria',
+    cuentaDestino: pending.accountLabel || '',
+    ...(pending.accountId ? { transferAccountId: pending.accountId } : {}),
+    // Valor total que muestra el comprobante: permite repartir una misma transferencia entre varias boletas
+    ...(pending.proofTotal > 0 ? { proofTotal: pending.proofTotal } : {}),
     transferDate: now,
     duplicateApprovalConfirmed: sameApproval.length > 0,
     soporteUrl: soporte ? soporte.url : null,
@@ -1784,9 +1856,23 @@ async function handlePendingFlow(ctx) {
 
   if (pending.type === 'RECEIPT_AMOUNT') {
     if (wantsHuman) { clear(); return false; }
-    const amount = detectAmount(userText);
-    if (!amount) return remind(`No pude entender el valor. Escríbelo solo en números, por ejemplo *150000*.`);
-    await receiptSelectTarget(ctx, { amount, approval: pending.approval, bank: pending.bank, soporte: pending.soporte, hint: pending.hint });
+    // "SÍ" confirma el valor que se leyó en el comprobante
+    const amount = (isYes(userText) && pending.suggestedAmount) ? pending.suggestedAmount : detectAmount(userText);
+    if (!amount) return remind(`No pude entender el valor. Escríbelo solo en números, por ejemplo *150000*${pending.suggestedAmount ? ` o responde *SÍ* si fueron ${money(pending.suggestedAmount)}` : ''}.`);
+    await receiptSelectTarget(ctx, { ...planCarry(pending), amount });
+    return true;
+  }
+
+  if (pending.type === 'RECEIPT_ACCOUNT') {
+    if (wantsHuman) { clear(); return false; }
+    if (isNo(userText)) return cancelled();
+    const accounts = mainRaffle.transferAccounts || [];
+    const options = (pending.accountIds || []).map(id => accounts.find(a => a.id === id)).filter(Boolean);
+    const chosenAccount = /^\d{1,2}$/.test(norm) ? (options[parseInt(norm, 10) - 1] || null) : null;
+    if (!chosenAccount) return remind(`Responde con el número de la lista (1${options.length > 1 ? ` a ${options.length}` : ''}) para saber a qué cuenta transferiste, o *NO* para cancelar.`);
+    const accTicket = (db.tickets || []).find(t => t.id === pending.ticketId);
+    if (!accTicket) { clear(); return false; }
+    await receiptConfirm(ctx, accTicket, { ...planCarry(pending), amount: pending.amount, account: chosenAccount });
     return true;
   }
 
@@ -1798,7 +1884,7 @@ async function handlePendingFlow(ctx) {
     if (/^\d{1,2}$/.test(norm)) chosen = candidates[parseInt(norm, 10) - 1] || null;
     if (!chosen && /^\d{3,}$/.test(norm)) chosen = candidates.find(t => (t.numbers || []).includes(norm) || (t.numbers || []).includes(norm.padStart(digits, '0'))) || null;
     if (!chosen) return remind(`Responde con el número de la lista (1${candidates.length > 1 ? ` a ${candidates.length}` : ''}) o escribe *NO* para cancelar.`);
-    await receiptConfirm(ctx, chosen, { amount: pending.amount, approval: pending.approval, bank: pending.bank, soporte: pending.soporte });
+    await receiptConfirm(ctx, chosen, { ...planCarry(pending), amount: pending.amount });
     return true;
   }
 
