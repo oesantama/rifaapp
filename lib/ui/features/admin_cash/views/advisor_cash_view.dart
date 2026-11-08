@@ -26,6 +26,7 @@ class AdvisorCashView extends StatefulWidget {
 
 class _AdvisorCashViewState extends State<AdvisorCashView> {
   final Set<String> _selected = {}; // abono ids
+  String _methodFilter = 'TODOS'; // historial: TODOS / efectivo / transferencia
   // Gastos en efectivo del asesor por justificar con el administrador (se descuentan de lo que entrega)
   num _pendingExpenses = 0;
 
@@ -255,6 +256,9 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
     final holding = mine.where((p) => p.abono.cashState == 'EN_PODER_ASESOR').toList();
     double sum(Iterable<CashPayment> l) => l.fold(0.0, (s, p) => s + p.abono.amount);
     final chosen = holding.where((p) => _selected.contains(p.abono.id)).toList();
+    final reconciled = mine.where((p) => p.abono.cashState == 'RECIBIDO' || p.abono.cashState == 'VALIDADA').toList();
+    final history = mine.where((p) => _methodFilter == 'TODOS' || (_methodFilter == 'transferencia') == p.abono.isTransfer).toList()
+      ..sort((a, b) => b.abono.date.compareTo(a.abono.date));
     final canExpenses = me.canRegisterExpenses;
 
     final kpis = [
@@ -281,9 +285,18 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
         icon: Icons.hourglass_top,
       ),
       CashKpi(
+        title: 'TRANSFERENCIAS POR VALIDAR',
+        value: cashCurrency.format(sum(mine.where((p) => p.abono.isTransfer && p.abono.cashState == 'POR_VALIDAR'))),
+        subtitle: 'Esperando validación del administrador',
+        color: Colors.indigo,
+        icon: Icons.account_balance,
+      ),
+      CashKpi(
         title: 'CONCILIADO EN CAJA',
-        value: cashCurrency.format(sum(mine.where((p) => p.abono.cashState == 'RECIBIDO' || p.abono.cashState == 'VALIDADA'))),
-        subtitle: 'Recibido por la empresa',
+        value: cashCurrency.format(sum(reconciled)),
+        // Aclara de qué es: efectivo ya recibido por la empresa y transferencias ya validadas
+        subtitle: 'Efectivo ${cashCurrency.format(sum(reconciled.where((p) => !p.abono.isTransfer)))} • '
+            'Transferencias ${cashCurrency.format(sum(reconciled.where((p) => p.abono.isTransfer)))}',
         color: AppTheme.secondaryEmerald,
         icon: Icons.verified,
       ),
@@ -395,7 +408,82 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
             Text('Aún no ha reportado entregas.', style: TextStyle(color: Colors.grey[600]))
           else
             for (final d in cashVM.deliveries) DeliveryCard(delivery: d),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Expanded(child: Text('Historial de mis cobros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+              Text('${history.length} pago(s)', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final f in const [('TODOS', 'Todos'), ('efectivo', 'Efectivo'), ('transferencia', 'Transferencias')])
+                ChoiceChip(
+                  label: Text(f.$2),
+                  selected: _methodFilter == f.$1,
+                  onSelected: (_) => setState(() => _methodFilter = f.$1),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (history.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text('Aún no tiene cobros registrados.', style: TextStyle(color: Colors.grey[600])),
+            )
+          else
+            Card(
+              child: Column(
+                children: [
+                  for (final p in history.take(200)) ...[
+                    _historyTile(p),
+                    if (p != history.take(200).last) const Divider(height: 1),
+                  ],
+                ],
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  /// Estado del pago visto por el asesor: (texto, color)
+  (String, Color) _stateOf(CashPayment p) => switch (p.abono.cashState) {
+        'EN_PODER_ASESOR' => ('En mi poder', Colors.orange.shade800),
+        'EN_ENTREGA' => ('Entregado, por confirmar', Colors.blue.shade700),
+        'RECIBIDO' => ('Recibido en caja', AppTheme.secondaryEmerald),
+        'POR_VALIDAR' => ('Por validar', Colors.indigo),
+        'VALIDADA' => ('Validada en caja', AppTheme.secondaryEmerald),
+        'RECHAZADA' => ('Rechazada', AppTheme.dangerRose),
+        _ => (p.abono.cashState, Colors.grey),
+      };
+
+  Widget _historyTile(CashPayment p) {
+    final (label, color) = _stateOf(p);
+    final isTransfer = p.abono.isTransfer;
+    final details = <String>[
+      'Boleta N° ${p.ticket.displayNumber}',
+      if (p.ticket.buyerName.isNotEmpty) p.ticket.buyerName,
+      cashDate(p.abono.date),
+      if (isTransfer && (p.abono.originBank ?? '').isNotEmpty) p.abono.originBank!,
+      if (isTransfer && (p.abono.approvalNumber ?? '').isNotEmpty) 'Aprob. ${p.abono.approvalNumber}',
+    ];
+    return ListTile(
+      dense: true,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: (isTransfer ? Colors.indigo : Colors.green).withValues(alpha: 0.12),
+        child: Icon(isTransfer ? Icons.account_balance : Icons.payments_outlined, size: 18, color: isTransfer ? Colors.indigo : Colors.green.shade700),
+      ),
+      title: Text('${cashCurrency.format(p.abono.amount)} • ${isTransfer ? 'Transferencia' : 'Efectivo'}',
+          style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(details.join(' • '), style: const TextStyle(fontSize: 11.5)),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withValues(alpha: 0.5))),
+        child: Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: color)),
       ),
     );
   }

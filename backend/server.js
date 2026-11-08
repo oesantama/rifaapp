@@ -7819,6 +7819,10 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   );
   const counts = t => t.status === 'PAGADA' || t.status === 'CONFIRMADA' || t.status === 'ABONO_PARCIAL';
   const totalTicketsSold = advTickets.filter(counts).length;
+  // Boletas del asesor sin importar si están apartadas, abonadas o pagadas
+  const ticketsReserved = advTickets.filter(t => t.status === 'RESERVADA').length;
+  const ticketsPartial = advTickets.filter(t => t.status === 'ABONO_PARCIAL').length;
+  const ticketsPaid = advTickets.filter(t => t.status === 'PAGADA' || t.status === 'CONFIRMADA').length;
   const totalCollected = advTickets.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
 
   const street = advTickets.filter(t => ticketZoneOf(t, adv) === 'CALLE');
@@ -7887,6 +7891,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
 
   return {
     pendingToEarn, pendingBalance, pendingTicketsCount, rateType, rateValue,
+    ticketsReserved, ticketsPartial, ticketsPaid, ticketsHeld: ticketsReserved + ticketsPartial + ticketsPaid,
     type, advTickets, totalTicketsSold, totalCollected, commissionEarned, activeTier, tierDescription,
     streetSold, streetCollected, officeSold, officeCollected,
     zoneUndefined: type === 'INTEGRAL' ? advTickets.filter(t => !SALE_ZONES.includes(t.saleZone)).length : 0
@@ -7935,6 +7940,11 @@ app.get('/api/commissions', (req, res) => {
       phone: adv.phone,
       advisorType: c.type,
       totalTicketsSold: c.totalTicketsSold,
+      // Todas las boletas del asesor (apartadas + abonadas + pagadas)
+      ticketsHeld: c.ticketsHeld,
+      ticketsReserved: c.ticketsReserved,
+      ticketsPartial: c.ticketsPartial,
+      ticketsPaid: c.ticketsPaid,
       totalCollected: c.totalCollected,
       // Solo las ventas de calle comisionan; las de oficina/punto se muestran aparte
       streetSold: c.streetSold,

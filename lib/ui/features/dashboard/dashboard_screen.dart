@@ -53,6 +53,45 @@ class DashboardScreen extends StatelessWidget {
         double totalCollected = targetTickets.fold(0.0, (sum, t) => sum + t.totalPaid);
         double totalConfirmed = targetTickets.where((t) => t.confirmedByAdmin).fold(0.0, (sum, t) => sum + t.totalPaid);
         double pendingTurnIn = totalCollected - totalConfirmed;
+        String collectedSub = authVM.isAsesor ? 'Abonos y ventas mías' : 'Abonos y pagos de todos los asesores';
+        String confirmedSub = authVM.isAsesor ? 'Recibido en caja admin' : 'Dinero auditado en caja';
+        String turnInSub = authVM.isAsesor ? 'Por rendir al administrador' : 'En manos de asesores';
+        if (authVM.isAsesor && authVM.activeAdvisor != null) {
+          // El asesor ve las MISMAS cifras que en "Mi Caja": por estado de cada pago (efectivo / transferencia), no por boleta
+          final myId = authVM.activeAdvisor!.id;
+          double cash = 0, transfer = 0, okCash = 0, okTransfer = 0, inHand = 0, toValidate = 0, inDelivery = 0;
+          for (final t in targetTickets) {
+            for (final a in t.abonos) {
+              if (a.amount <= 0) continue;
+              final isT = a.isTransfer;
+              if (isT) {
+                transfer += a.amount;
+              } else {
+                cash += a.amount;
+              }
+              final st = a.cashState;
+              if (st == 'RECIBIDO' || st == 'VALIDADA') {
+                if (isT) {
+                  okTransfer += a.amount;
+                } else {
+                  okCash += a.amount;
+                }
+              } else if (a.sellerId == myId) {
+                if (st == 'EN_PODER_ASESOR') inHand += a.amount;
+                if (st == 'EN_ENTREGA') inDelivery += a.amount;
+                if (st == 'POR_VALIDAR') toValidate += a.amount;
+              }
+            }
+          }
+          totalCollected = cash + transfer;
+          totalConfirmed = okCash + okTransfer;
+          pendingTurnIn = inHand;
+          collectedSub = 'Efectivo ${currency.format(cash)} • Transferencias ${currency.format(transfer)}';
+          confirmedSub = 'Efectivo ${currency.format(okCash)} • Transferencias ${currency.format(okTransfer)}';
+          turnInSub = 'Efectivo en mi poder'
+              '${inDelivery > 0 ? ' • por confirmar ${currency.format(inDelivery)}' : ''}'
+              '${toValidate > 0 ? ' • transferencias por validar ${currency.format(toValidate)}' : ''}';
+        }
 
         // Comisiones: las calcula el servidor (rango vigente, solo ventas de calle, sobre lo realmente recaudado).
         // Antes se estimaba aquí con una tarifa plana por boleta y no coincidía con la liquidación.
@@ -214,21 +253,21 @@ class DashboardScreen extends StatelessWidget {
                       StatCard(
                         title: authVM.isAsesor ? 'Mi Recaudo Total' : 'Total Recaudado Global',
                         value: currency.format(totalCollected),
-                        subtitle: authVM.isAsesor ? 'Abonos y ventas mías' : 'Abonos y pagos de todos los asesores',
+                        subtitle: collectedSub,
                         icon: Icons.attach_money,
                         iconColor: AppTheme.secondaryEmerald,
                       ),
                       StatCard(
                         title: authVM.isAsesor ? 'Mi Dinero Confirmado' : 'Confirmado por Admin',
                         value: currency.format(totalConfirmed),
-                        subtitle: authVM.isAsesor ? 'Recibido en caja admin' : 'Dinero auditado en caja',
+                        subtitle: confirmedSub,
                         icon: Icons.verified,
                         iconColor: AppTheme.primaryBlue,
                       ),
                       StatCard(
                         title: authVM.isAsesor ? 'Mi Saldo por Entregar' : 'Pendiente Entrega Total',
                         value: currency.format(pendingTurnIn),
-                        subtitle: authVM.isAsesor ? 'Por rendir al administrador' : 'En manos de asesores',
+                        subtitle: turnInSub,
                         icon: Icons.account_balance_wallet,
                         iconColor: AppTheme.accentAmber,
                       ),

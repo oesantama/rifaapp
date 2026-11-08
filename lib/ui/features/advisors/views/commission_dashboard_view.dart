@@ -409,6 +409,9 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
     double myPaid = 0.0;
     double myPending = 0.0;
     int mySold = 0;
+    int myReserved = 0;
+    int myPartial = 0;
+    int myPaidTickets = 0;
     double myToEarn = 0.0;
     double myToCollect = 0.0;
     String myRateType = 'PORCENTAJE';
@@ -419,7 +422,11 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
       myEarned = (myAdvisorStat['commissionEarned'] as num?)?.toDouble() ?? 0.0;
       myPaid = (myAdvisorStat['commissionPaid'] as num?)?.toDouble() ?? 0.0;
       myPending = (myAdvisorStat['pendingCommission'] as num?)?.toDouble() ?? 0.0;
-      mySold = (myAdvisorStat['totalTicketsSold'] as num?)?.toInt() ?? 0;
+      // "Boletas vendidas" = todas las del asesor, estén apartadas, abonadas o pagadas
+      mySold = (myAdvisorStat['ticketsHeld'] as num?)?.toInt() ?? (myAdvisorStat['totalTicketsSold'] as num?)?.toInt() ?? 0;
+      myReserved = (myAdvisorStat['ticketsReserved'] as num?)?.toInt() ?? 0;
+      myPartial = (myAdvisorStat['ticketsPartial'] as num?)?.toInt() ?? 0;
+      myPaidTickets = (myAdvisorStat['ticketsPaid'] as num?)?.toInt() ?? 0;
       myToEarn = (myAdvisorStat['pendingToEarn'] as num?)?.toDouble() ?? 0.0;
       myToCollect = (myAdvisorStat['pendingBalance'] as num?)?.toDouble() ?? 0.0;
       myRateType = (myAdvisorStat['rateType'] ?? 'PORCENTAJE').toString();
@@ -760,7 +767,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                 val: '$mySold',
                 icon: Icons.confirmation_number_outlined,
                 color: AppTheme.primaryBlue,
-                subtitle: 'Ventas registradas',
+                subtitle: 'Apartadas $myReserved • Abonadas $myPartial • Pagadas $myPaidTickets',
               ),
               _buildMetricCard(
                 title: 'Tu Ganancia Total',
