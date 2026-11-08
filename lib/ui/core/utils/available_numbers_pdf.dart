@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
@@ -65,10 +66,12 @@ class AvailableNumbersPdf {
     required int totalScoped,
     required int totalAvailable,
   }) async {
-    final sorted = [...tickets]..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+    final sorted = [...tickets]..sort((a, b) => a.ticketNumber.compareTo(b.ticketNumber));
     final digits = raffle.digits;
     final maxOpps = sorted.fold<int>(1, (m, t) => _numbersOf(t, digits).length > m ? _numbersOf(t, digits).length : m);
     final columns = _columnsFor(digits, maxOpps);
+    // Ancho con el que se escribe el número de boleta (0001, 0102...)
+    final boletaWidth = math.max(3, math.max(raffle.totalTickets, sorted.fold<int>(0, (m, t) => t.ticketNumber > m ? t.ticketNumber : m)).toString().length);
     const margin = 28.0;
     final pageFormat = PdfPageFormat.a4.copyWith(marginLeft: margin, marginRight: margin, marginTop: 24, marginBottom: 30);
     const gap = 6.0;
@@ -101,20 +104,20 @@ class AvailableNumbersPdf {
           mainAxisSize: pw.MainAxisSize.min,
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            if (multi || fullBoard)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(bottom: 3),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (multi)
-                      pw.Text('${nums.length} OPORTUNIDADES', style: pw.TextStyle(fontSize: 5.5, color: _slate, fontWeight: pw.FontWeight.bold))
-                    else
-                      pw.SizedBox(),
-                    if (fullBoard) pw.Text(_statusLabel[t.status] ?? t.status, style: pw.TextStyle(fontSize: 5.5, color: border, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 3),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('BOLETA ${t.ticketNumber.toString().padLeft(boletaWidth, '0')}',
+                      style: pw.TextStyle(fontSize: 6, color: _navy, fontWeight: pw.FontWeight.bold)),
+                  if (fullBoard)
+                    pw.Text(_statusLabel[t.status] ?? t.status, style: pw.TextStyle(fontSize: 5.5, color: border, fontWeight: pw.FontWeight.bold))
+                  else if (multi)
+                    pw.Text('${nums.length} OPORT.', style: pw.TextStyle(fontSize: 5.5, color: _slate, fontWeight: pw.FontWeight.bold)),
+                ],
               ),
+            ),
             pw.Wrap(
               alignment: pw.WrapAlignment.center,
               spacing: 3,
@@ -129,10 +132,10 @@ class AvailableNumbersPdf {
     // Bloques de 100 números: "0400 - 0499"
     final blocks = <int, List<Ticket>>{};
     for (final t in sorted) {
-      blocks.putIfAbsent(t.sortNumber ~/ 100, () => []).add(t);
+      blocks.putIfAbsent((t.ticketNumber - 1) ~/ 100, () => []).add(t);
     }
 
-    String pad(int n) => n.toString().padLeft(digits, '0');
+    String pad(int n) => n.toString().padLeft(boletaWidth, '0');
 
     pw.Widget blockHeader(int block, int count) => pw.Container(
           margin: const pw.EdgeInsets.only(top: 10, bottom: 6),
@@ -142,7 +145,7 @@ class AvailableNumbersPdf {
               pw.Container(width: 4, height: 20, decoration: pw.BoxDecoration(color: _amber, borderRadius: pw.BorderRadius.circular(2))),
               pw.SizedBox(width: 8),
               pw.Expanded(
-                child: pw.Text('BLOQUE ${pad(block * 100)} - ${pad(block * 100 + 99)}',
+                child: pw.Text('BOLETAS ${pad(block * 100 + 1)} - ${pad(block * 100 + 100)}',
                     style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: _navy)),
               ),
               pw.Text('$count ${fullBoard ? 'boletas' : (count == 1 ? 'disponible' : 'disponibles')}',

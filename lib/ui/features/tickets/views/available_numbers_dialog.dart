@@ -663,7 +663,6 @@ $advisorHeader
               maxOpps: maxOpps,
             ),
             const Divider(height: 1),
-            _buildPaginationBar(total: _showFullBoard ? scopedTickets.length : availableTickets.length),
 
             // MAIN PREVIEW & CANVAS AREA (SMOOTH MOUSE/TOUCH SCROLLING + ZOOM)
             Expanded(
@@ -677,7 +676,7 @@ $advisorHeader
                       child: SingleChildScrollView(
                         controller: _verticalScrollController,
                         physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 70),
                         child: Center(
                           child: SingleChildScrollView(
                             controller: _horizontalScrollController,
@@ -699,6 +698,14 @@ $advisorHeader
                         ),
                       ),
                     ),
+                  ),
+
+                  // Páginas: barra flotante abajo, para no gastar alto de pantalla arriba
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 12,
+                    child: Center(child: _buildPaginationBar(total: _showFullBoard ? scopedTickets.length : availableTickets.length)),
                   ),
 
                   // Floating Zoom Controls
@@ -804,14 +811,14 @@ $advisorHeader
     final isMobile = MediaQuery.of(context).size.width < 750;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Wrap(
-        spacing: 12,
-        runSpacing: 10,
+        spacing: 8,
+        runSpacing: 4,
         alignment: WrapAlignment.spaceBetween,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
@@ -1002,12 +1009,12 @@ $advisorHeader
                 segments: const [
                   ButtonSegment(
                     value: false,
-                    label: Text('Solo Disponibles', style: TextStyle(fontSize: 11)),
+                    label: Text('Disponibles', style: TextStyle(fontSize: 11)),
                     icon: Icon(Icons.filter_alt_outlined, size: 14),
                   ),
                   ButtonSegment(
                     value: true,
-                    label: Text('Tablero Completo', style: TextStyle(fontSize: 11)),
+                    label: Text('Todo el tablero', style: TextStyle(fontSize: 11)),
                     icon: Icon(Icons.grid_view_rounded, size: 14),
                   ),
                 ],
@@ -1027,11 +1034,11 @@ $advisorHeader
               ),
 
               // Copy WhatsApp Text
-              OutlinedButton.icon(
+              IconButton.outlined(
+                tooltip: 'Copiar texto para WhatsApp',
                 onPressed: () => _copyNumbersText(availableTickets),
-                icon: const Icon(Icons.content_copy_rounded, size: 16),
-                label: isMobile ? const Text('Copiar') : const Text('WhatsApp'),
-                style: OutlinedButton.styleFrom(
+                icon: const Icon(Icons.content_copy_rounded, size: 18),
+                style: IconButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   foregroundColor: const Color(0xFF128C7E),
                   side: const BorderSide(color: Color(0xFF128C7E)),
@@ -1039,15 +1046,15 @@ $advisorHeader
               ),
 
               // Download Excel
-              ElevatedButton.icon(
+              IconButton.filled(
+                tooltip: 'Descargar Excel (.xlsx)',
                 onPressed: () => _openExcelExportModal(
                   context: context,
                   allRaffleTickets: allRaffleTickets,
                   advisors: advVM.advisors,
                 ),
-                icon: const Icon(Icons.table_chart_outlined, size: 16),
-                label: const Text('Excel (.xlsx)'),
-                style: ElevatedButton.styleFrom(
+                icon: const Icon(Icons.table_chart_outlined, size: 18),
+                style: IconButton.styleFrom(
                   backgroundColor: Colors.green.shade700,
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
@@ -1055,13 +1062,13 @@ $advisorHeader
               ),
 
               // Download PDF (todas las boletas, en bloques)
-              FilledButton.icon(
+              IconButton.filled(
+                tooltip: 'Descargar PDF con todas las boletas',
                 onPressed: _isExportingPdf ? null : () => _downloadPdf(scopedTickets: scopedTickets, availableTickets: availableTickets),
                 icon: _isExportingPdf
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.picture_as_pdf_outlined, size: 16),
-                label: const Text('PDF'),
-                style: FilledButton.styleFrom(
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                style: IconButton.styleFrom(
                   backgroundColor: const Color(0xFFDC2626),
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
@@ -1069,11 +1076,11 @@ $advisorHeader
               ),
 
               // Download Image PNG
-              FilledButton.icon(
+              IconButton.filled(
+                tooltip: 'Descargar imagen de esta página (PNG)',
                 onPressed: _isExporting ? null : _downloadImage,
-                icon: const Icon(Icons.image_outlined, size: 16),
-                label: Text(isMobile ? 'Imagen' : 'Imagen (esta página)'),
-                style: FilledButton.styleFrom(
+                icon: const Icon(Icons.image_outlined, size: 18),
+                style: IconButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                   foregroundColor: Colors.white,
                   visualDensity: VisualDensity.compact,
@@ -1117,49 +1124,64 @@ $advisorHeader
           if (_verticalScrollController.hasClients) _verticalScrollController.jumpTo(0);
         });
     return Container(
-      color: Theme.of(context).cardColor,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      constraints: const BoxConstraints(maxWidth: 560),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.25)),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Boletas por página:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: [for (final n in _pageSizes) ButtonSegment(value: n, label: Text('$n', style: const TextStyle(fontSize: 11)))],
-            selected: {_pageSize},
-            onSelectionChanged: (v) => setState(() {
-              _pageSize = v.first;
-              _page = 0;
-            }),
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          ),
           IconButton(
             tooltip: 'Primera página',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.first_page),
+            icon: const Icon(Icons.first_page, size: 20),
             onPressed: page > 0 ? () => go(0) : null,
           ),
           IconButton(
             tooltip: 'Página anterior',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_left),
+            icon: const Icon(Icons.chevron_left, size: 22),
             onPressed: page > 0 ? () => go(page - 1) : null,
           ),
-          Text('Página ${page + 1} de $pages  •  boletas $from-$to de $total',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          Flexible(
+            child: Text(
+              '${page + 1} / $pages  •  $from-$to de $total',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+          ),
           IconButton(
             tooltip: 'Página siguiente',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.chevron_right),
+            icon: const Icon(Icons.chevron_right, size: 22),
             onPressed: page < pages - 1 ? () => go(page + 1) : null,
           ),
           IconButton(
             tooltip: 'Última página',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.last_page),
+            icon: const Icon(Icons.last_page, size: 20),
             onPressed: page < pages - 1 ? () => go(pages - 1) : null,
+          ),
+          const SizedBox(height: 22, child: VerticalDivider(width: 10)),
+          PopupMenuButton<int>(
+            tooltip: 'Boletas por página',
+            initialValue: _pageSize,
+            onSelected: (n) => setState(() {
+              _pageSize = n;
+              _page = 0;
+            }),
+            itemBuilder: (_) => [for (final n in _pageSizes) PopupMenuItem(value: n, child: Text('$n por página'))],
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('$_pageSize', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                const Icon(Icons.arrow_drop_down, size: 18),
+              ]),
+            ),
           ),
         ],
       ),
