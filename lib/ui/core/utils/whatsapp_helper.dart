@@ -97,8 +97,7 @@ class WhatsAppHelper {
         b.writeln('🏆 *Gana con:* ${raffle.winningRuleText}');
       }
       if (raffle.hasWeeklyDraws) {
-        final minAbono =
-            raffle.weeklyMinAbonoType == 'PORCENTAJE' ? raffle.ticketPrice * raffle.weeklyMinAbonoValue / 100 : raffle.weeklyMinAbonoValue;
+        final minAbono = raffle.weeklyMinAbonoOf(raffle.nextWeeklyPrize);
         b.writeln('🗓️ *Sorteos semanales:* cada ${raffle.weeklyDrawDay}'
             '${weeklyLottery.isNotEmpty ? ' con la $weeklyLottery' : ''}');
         if (minAbono > 0) b.writeln('   Participas con un abono mínimo de ${currency.format(minAbono)}.');

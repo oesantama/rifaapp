@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:rifaapp/data/models/advisor.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -64,7 +65,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
 
   List<Advisor> _filteredAdvisors(List<Advisor> all) => _advisorSearch.isEmpty
       ? all
-      : all.where((a) => a.name.toLowerCase().contains(_advisorSearch) || a.code.toLowerCase().contains(_advisorSearch) || a.username.toLowerCase().contains(_advisorSearch)).toList();
+      : all.where((a) => foldContains(a.name, _advisorSearch) || foldContains(a.code, _advisorSearch) || foldContains(a.username, _advisorSearch)).toList();
 
   @override
   void didChangeDependencies() {
@@ -96,8 +97,9 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
         'image/jpeg',
       );
 
-      final url = uploadRes['webViewUrl'] ?? uploadRes['file']?['webViewUrl'];
-      if (url != null && url.isNotEmpty) {
+      // El enlace DIRECTO de la imagen (no el de la página de Drive, que no es una imagen y se ve rota)
+      final url = normalizeDriveImageUrl((uploadRes['url'] ?? uploadRes['file']?['url'] ?? uploadRes['webViewUrl'] ?? uploadRes['file']?['webViewUrl'] ?? '').toString());
+      if (url.isNotEmpty) {
         final current = _prizeImagesController.text.trim();
         _prizeImagesController.text = current.isEmpty ? url : '$current\n$url';
         if (mounted) {
@@ -1151,7 +1153,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       hintText: 'Buscar asesor por nombre o cédula',
                       border: OutlineInputBorder(),
                     ),
-                    onChanged: (v) => setState(() => _advisorSearch = v.trim().toLowerCase()),
+                    onChanged: (v) => setState(() => _advisorSearch = foldText(v)),
                   ),
                   const SizedBox(height: 8),
                 ],

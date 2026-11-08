@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +108,7 @@ class _VoidHistoryTabState extends State<_VoidHistoryTab> {
   }
 
   List<Map<String, dynamic>> get _filtered {
-    final q = _search.trim().toLowerCase();
+    final q = foldText(_search);
     return _entries.where((e) {
       if (_type != 'TODOS' && e['type'] != _type) return false;
       if (q.isEmpty) return true;
@@ -119,8 +120,8 @@ class _VoidHistoryTabState extends State<_VoidHistoryTab> {
         e['reason'],
         e['by'],
         ((e['numbers'] as List?) ?? []).join(' ')
-      ].join(' ').toLowerCase();
-      return text.contains(q);
+      ].join(' ');
+      return foldText(text).contains(q);
     }).toList();
   }
 

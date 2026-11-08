@@ -216,9 +216,7 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
 
     double reqAbono = 0.0;
     if (currentRaffle != null) {
-      reqAbono = currentRaffle.weeklyMinAbonoType == 'PORCENTAJE'
-          ? (currentRaffle.ticketPrice * (currentRaffle.weeklyMinAbonoValue / 100))
-          : currentRaffle.weeklyMinAbonoValue;
+      reqAbono = currentRaffle.weeklyMinAbonoOf(currentRaffle.weeklyPrizeForDraw(drawName, basePrizeAmount));
     }
 
     bool qualifies(Ticket t) => t.status != 'DISPONIBLE' && t.totalPaid >= reqAbono;

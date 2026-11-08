@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/data/models/lottery.dart';
@@ -87,7 +88,7 @@ class _LotteriesViewState extends State<LotteriesView> {
     final vm = context.watch<LotteryViewModel>();
     final isMobile = MediaQuery.of(context).size.width < 600;
     final query = _search.trim().toLowerCase();
-    final shown = vm.lotteries.where((b) => query.isEmpty || b.name.toLowerCase().contains(query)).toList();
+    final shown = vm.lotteries.where((b) => query.isEmpty || foldContains(b.name, query)).toList();
     final activeCount = vm.lotteries.where((b) => b.active).length;
 
     return Scaffold(

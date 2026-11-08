@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rifaapp/data/services/auth_http.dart';
 import 'package:rifaapp/data/models/ticket.dart';
@@ -92,12 +93,14 @@ class TicketViewModel extends ChangeNotifier {
   }
 
   bool _matchesSearch(Ticket t) {
-    final q = _searchQuery.trim().toLowerCase();
+    // Sin distinguir mayúsculas, tildes ni espacios repetidos: "maria jose" encuentra "María José"
+    final q = foldText(_searchQuery);
     if (q.isEmpty) return true;
     return t.ticketNumber.toString().contains(q) ||
-        t.buyerName.toLowerCase().contains(q) ||
+        foldText(t.buyerName).contains(q) ||
         t.buyerPhone.contains(q) ||
-        t.buyerDocument.toLowerCase().contains(q) ||
+        foldText(t.buyerDocument).contains(q) ||
+        foldText(t.advisorName).contains(q) ||
         t.numbers.any((n) => n.contains(q));
   }
 

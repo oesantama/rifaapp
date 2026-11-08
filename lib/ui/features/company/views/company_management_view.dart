@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/ui/core/widgets/error_alert.dart';
 import 'package:rifaapp/ui/features/company/views/plan_widgets.dart';
@@ -1195,9 +1196,7 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
   @override
   Widget build(BuildContext context) {
     final filteredCompanies = _companies.where((c) {
-      return c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          c.code.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          c.adminUsername.toLowerCase().contains(_searchQuery.toLowerCase());
+      return foldContains(c.name, _searchQuery) || foldContains(c.code, _searchQuery) || foldContains(c.adminUsername, _searchQuery);
     }).toList();
 
     final isMobile = MediaQuery.of(context).size.width < 600;

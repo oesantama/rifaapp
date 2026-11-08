@@ -56,6 +56,14 @@ class WeeklyPrize {
       };
 }
 
+/// Enlace directo de imagen para cualquier enlace de Drive (uc?export=view, /file/d/ID/view, open?id=).
+String normalizeDriveImageUrl(String url) {
+  final u = url.trim();
+  if (!RegExp(r'(drive|docs)\.google\.com', caseSensitive: false).hasMatch(u)) return u;
+  final m = RegExp(r'/d/([A-Za-z0-9_-]{10,})').firstMatch(u) ?? RegExp(r'[?&]id=([A-Za-z0-9_-]{10,})').firstMatch(u);
+  return m == null ? u : 'https://lh3.googleusercontent.com/d/${m.group(1)}=s1600';
+}
+
 class Raffle {
   final String id;
   final String title;
@@ -107,6 +115,41 @@ class Raffle {
     final colNow = DateTime.now().toUtc().subtract(const Duration(hours: 5));
     final today = DateTime(colNow.year, colNow.month, colNow.day);
     return DateTime(d.year, d.month, d.day).isBefore(today);
+  }
+
+  /// Abono mínimo para participar en un sorteo semanal: el del propio sorteo (cada uno tiene el suyo) o, sin él, el de la rifa.
+  double weeklyMinAbonoOf([WeeklyPrize? prize]) {
+    final type = prize?.minAbonoType ?? weeklyMinAbonoType;
+    final value = prize?.minAbonoValue ?? weeklyMinAbonoValue;
+    return type == 'PORCENTAJE' ? ticketPrice * value / 100 : value;
+  }
+
+  static DateTime? _parseDrawDate(String s) {
+    final m = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{4})$').firstMatch(s.trim());
+    return m != null ? DateTime(int.parse(m.group(3)!), int.parse(m.group(2)!), int.parse(m.group(1)!)) : DateTime.tryParse(s.trim());
+  }
+
+  /// Próximo sorteo semanal (el primero que aún no se juega; si todos pasaron, el último).
+  WeeklyPrize? get nextWeeklyPrize {
+    final dated = [
+      for (final p in weeklyPrizes)
+        if (_parseDrawDate(p.drawDate) case final d?) (p, d),
+    ]..sort((a, b) => a.$2.compareTo(b.$2));
+    if (dated.isEmpty) return weeklyPrizes.isEmpty ? null : weeklyPrizes.first;
+    final from = DateTime.now().subtract(const Duration(days: 1));
+    return dated.firstWhere((x) => !x.$2.isBefore(from), orElse: () => dated.last).$1;
+  }
+
+  /// Sorteo semanal que se registra: por nombre, luego por valor del premio y, si no, el próximo.
+  WeeklyPrize? weeklyPrizeForDraw(String drawName, double amount) {
+    final name = drawName.trim().toLowerCase();
+    for (final p in weeklyPrizes) {
+      if (name.isNotEmpty && p.name.trim().toLowerCase() == name) return p;
+    }
+    for (final p in weeklyPrizes) {
+      if (amount > 0 && p.amount == amount) return p;
+    }
+    return nextWeeklyPrize;
   }
 
   String get mainLottery => mainLotteryName.trim().isNotEmpty ? mainLotteryName.trim() : lotteryName.trim();
@@ -238,7 +281,7 @@ class Raffle {
       isIndependentBook: json['isIndependentBook'] == true,
       templates: json['templates'] is Map ? Map<String, dynamic>.from(json['templates']) : const {},
       createdAt: json['createdAt'] ?? '',
-      prizeImages: [for (final img in (json['prizeImages'] as List? ?? [])) img.toString()],
+      prizeImages: [for (final img in (json['prizeImages'] as List? ?? [])) normalizeDriveImageUrl(img.toString())],
     );
   }
 

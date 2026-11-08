@@ -320,12 +320,53 @@ function formatRaffleDate(dateStr, longFormat = true) {
   }
 }
 
+/** Convierte cualquier enlace de Drive (uc?export=view, /file/d/ID/view, open?id=) al enlace directo de imagen. */
+function normalizeDriveImageUrl(url) {
+  const u = String(url || '').trim();
+  if (!u || !/(drive|docs)\.google\.com/i.test(u)) return u;
+  const m = u.match(/\/d\/([A-Za-z0-9_-]{10,})/) || u.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  return m ? `https://lh3.googleusercontent.com/d/${m[1]}=s1600` : u;
+}
+
+function parseDrawDate(value) {
+  const s = String(value || '').trim();
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const d = dmy ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])) : new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** Abono mínimo para participar en un sorteo semanal: el del propio sorteo (cada uno tiene el suyo) o, si no lo define, el de la rifa. */
+function weeklyMinAbonoOf(raffle, prize) {
+  const price = Number(raffle.ticketPrice) || 0;
+  const hasOwn = prize && prize.minAbonoType && prize.minAbonoValue !== undefined && prize.minAbonoValue !== null;
+  const type = hasOwn ? prize.minAbonoType : (raffle.weeklyMinAbonoType || 'PORCENTAJE');
+  const value = hasOwn ? Number(prize.minAbonoValue) : (Number.isFinite(Number(raffle.weeklyMinAbonoValue)) && raffle.weeklyMinAbonoValue !== null && raffle.weeklyMinAbonoValue !== undefined ? Number(raffle.weeklyMinAbonoValue) : 50);
+  return type === 'PORCENTAJE' ? price * value / 100 : value;
+}
+
+/** Próximo sorteo semanal (el primero que aún no se juega; si todos pasaron, el último). */
+function nextWeeklyPrize(raffle) {
+  const prizes = Array.isArray(raffle.weeklyPrizes) ? raffle.weeklyPrizes : [];
+  if (prizes.length === 0) return null;
+  const from = new Date(Date.now() - 24 * 3600 * 1000);
+  const dated = prizes.map(p => ({ p, d: parseDrawDate(p.drawDate) })).filter(x => x.d).sort((a, b) => a.d - b.d);
+  if (dated.length === 0) return prizes[0];
+  return (dated.find(x => x.d >= from) || dated[dated.length - 1]).p;
+}
+
+/** Sorteo semanal que se está registrando: por nombre, luego por valor del premio, y si no, el próximo. */
+function weeklyPrizeForDraw(raffle, drawName, prizeAmount) {
+  const prizes = Array.isArray(raffle.weeklyPrizes) ? raffle.weeklyPrizes : [];
+  const name = String(drawName || '').trim().toLowerCase();
+  return (name && prizes.find(p => String(p.name || '').trim().toLowerCase() === name))
+    || (Number(prizeAmount) > 0 && prizes.find(p => Number(p.amount) === Number(prizeAmount)))
+    || nextWeeklyPrize(raffle);
+}
+
 function renderTerms(template, raffle, company) {
   const money = v => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
   const date = formatRaffleDate(raffle.mainDrawDate, true);
-  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
-  const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
-  const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
+  const minAbono = weeklyMinAbonoOf(raffle, nextWeeklyPrize(raffle));
   const lottery = lotteryPhrase(mainLotteryOf(raffle));
   const weeklyLottery = lotteryPhrase(String(raffle.lotteryName || '').trim() || mainLotteryOf(raffle));
   const values = {
@@ -681,6 +722,10 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Boleta Nº ${escapeHtml(opportunitiesText)} - ${escapeHtml(raffle.title || companyName)}</title>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="${escapeHtml(`${raffle.title || companyName} - Boleta ${opportunitiesText}`)}">
+  <meta property="og:description" content="${escapeHtml(`Consulta el estado de tu boleta con ${companyName}`)}">
+  ${(() => { const pic = images.map(normalizeDriveImageUrl).find(u => /^https:\/\//i.test(u) && !/\.(mp4|mov|webm)(\?|$)/i.test(u)); return pic ? `<meta property="og:image" content="${escapeHtml(pic)}">` : ''; })()}
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0F172A">
   <link rel="icon" type="image/png" href="/favicon.png">
@@ -3945,9 +3990,7 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
   const paid = Number(ticket.totalPaid) || 0;
   const payments = (ticket.abonos || []).filter(a => (a.amount || 0) > 0);
   const last = payments[payments.length - 1];
-  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
-  const minValue = raffle.weeklyMinAbonoValue !== undefined && raffle.weeklyMinAbonoValue !== null ? Number(raffle.weeklyMinAbonoValue) : 50;
-  const minAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * minValue / 100 : minValue;
+  const minAbono = weeklyMinAbonoOf(raffle, nextWeeklyPrize(raffle));
   const weeklyLottery = lotteryPhrase(String(raffle.lotteryName || '').trim() || mainLotteryOf(raffle));
   const owes = paid < price;
   // One field per line and a blank line between accounts; a paid ticket does not need them
@@ -4232,7 +4275,7 @@ app.put('/api/raffles/:id', adminOnly, async (req, res) => {
     }
   }
   if (req.body.description !== undefined) raffle.description = req.body.description;
-  if (Array.isArray(req.body.prizeImages)) raffle.prizeImages = req.body.prizeImages;
+  if (Array.isArray(req.body.prizeImages)) raffle.prizeImages = req.body.prizeImages.map(normalizeDriveImageUrl);
   if (req.body.mainDrawDate !== undefined) raffle.mainDrawDate = req.body.mainDrawDate;
   if (req.body.weeklyPrizesStartDate !== undefined) raffle.weeklyPrizesStartDate = req.body.weeklyPrizesStartDate;
   if (req.body.assignedAdvisorIds !== undefined) {
@@ -7446,11 +7489,7 @@ app.post('/api/winners', adminOnly, (req, res) => {
   const rawNumStr = numStr;
 
   // Minimum paid to participate; same defaults as the app (50% of the price) when not configured
-  const minType = raffle.weeklyMinAbonoType || 'PORCENTAJE';
-  const minValue = Number.isFinite(Number(raffle.weeklyMinAbonoValue)) && raffle.weeklyMinAbonoValue !== null && raffle.weeklyMinAbonoValue !== undefined
-    ? Number(raffle.weeklyMinAbonoValue)
-    : 50;
-  const reqAbono = minType === 'PORCENTAJE' ? (Number(raffle.ticketPrice) || 0) * (minValue / 100) : minValue;
+  const reqAbono = weeklyMinAbonoOf(raffle, weeklyPrizeForDraw(raffle, drawName, prizeAmount));
   const raffleTickets = db.tickets.filter(t => t.raffleId === raffle.id);
   const qualifies = t => t.status !== 'DISPONIBLE' && (t.totalPaid || 0) >= reqAbono;
 
@@ -7980,6 +8019,17 @@ function repairCrossCompanyAdvisors(database = db) {
 
 async function startServer() {
   await loadDB();
+  try {
+    // Fotos de rifas guardadas con enlaces de Drive que no son imagen (página de vista / uc?export=view): se pasan al enlace directo
+    let fixed = 0;
+    for (const r of db.raffles || []) {
+      if (!Array.isArray(r.prizeImages)) continue;
+      r.prizeImages = r.prizeImages.map(u => { const n = normalizeDriveImageUrl(u); if (n !== u) fixed++; return n; });
+    }
+    if (fixed > 0) { console.log(`🖼️ Normalizados ${fixed} enlaces de fotos de rifas.`); saveDB(); }
+  } catch (err) {
+    console.error('⚠️ No se pudieron normalizar las fotos de rifas:', err.message);
+  }
   try {
     const repair = repairCrossCompanyAdvisors();
     if (repair.total > 0) {

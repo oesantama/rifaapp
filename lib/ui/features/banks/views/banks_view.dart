@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/data/models/bank.dart';
@@ -88,7 +89,7 @@ class _BanksViewState extends State<BanksView> {
     final vm = context.watch<BankViewModel>();
     final isMobile = MediaQuery.of(context).size.width < 600;
     final query = _search.trim().toLowerCase();
-    final shown = vm.banks.where((b) => query.isEmpty || b.name.toLowerCase().contains(query)).toList();
+    final shown = vm.banks.where((b) => query.isEmpty || foldContains(b.name, query)).toList();
     final activeCount = vm.banks.where((b) => b.active).length;
 
     return Scaffold(

@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -564,7 +565,7 @@ $advisorHeader
 
     // Apply quick search filter if any
     if (_searchFilter.trim().isNotEmpty) {
-      final query = _searchFilter.trim().toLowerCase();
+      final query = foldText(_searchFilter);
       availableTickets = availableTickets.where((t) {
         return t.displayNumber.toLowerCase().contains(query) || t.ticketNumber.toString().contains(query);
       }).toList();
