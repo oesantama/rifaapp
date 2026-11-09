@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.10] - 2026-11-09
+
+- Lectura de comprobantes: reconoce «Número de operación» como referencia (BBVA y otros) y acepta referencias largas de hasta 40 caracteres (antes máx. 22), por lo que ya se lee la referencia de las transferencias Bre-B de BBVA.
+
 ## [3.4.9] - 2026-11-09
 
 - Actualización del APK: «Descargar e instalar» ahora abre la descarga en el navegador del teléfono (la vía que sí permite instalar); la instalación dentro de la app queda como opción aparte porque en varios teléfonos se cerraba al 100 % sin instalar.

@@ -61,7 +61,7 @@ function recognize(buffer) {
 // ---------------------------------------------------------------------------
 // Interpretación del texto
 // ---------------------------------------------------------------------------
-const REF_LABEL = /(referencia|\bref\b\.?|comprobante|aprobaci[oó]n|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago))/i;
+const REF_LABEL = /(referencia|\bref\b\.?|comprobante|aprobaci[oó]n|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
 
 const normRef = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 // El OCR confunde letras y números parecidos: se comparan con la misma equivalencia en ambos lados
@@ -73,13 +73,13 @@ function extractReferences(text) {
   const add = (raw, score) => {
     const value = normRef(raw);
     const digits = (value.match(/\d/g) || []).length;
-    if (value.length < 5 || value.length > 22 || digits < 4) return;
+    if (value.length < 5 || value.length > 40 || digits < 4) return;
     if (!found.some(f => f.value === value)) found.push({ value, score });
   };
   const tokens = line => {
     const out = [];
     // números con espacios o guiones internos (ej: "1843 852 709") y códigos con letra (ej: "M18437283")
-    for (const m of line.matchAll(/[A-Za-z]?\d[\d \-]{3,22}\d|[A-Za-z]\d{5,}/g)) out.push(m[0]);
+    for (const m of line.matchAll(/[A-Za-z]?\d[\d \-]{3,38}\d|[A-Za-z]\d{5,}/g)) out.push(m[0]);
     return out;
   };
   lines.forEach((line, i) => {
