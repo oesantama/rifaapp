@@ -228,6 +228,17 @@ class TicketViewModel extends ChangeNotifier {
     }
   }
 
+  /// Libera un número apartado sin abonos y recarga la rifa. Devuelve null si salió bien o el mensaje de error.
+  Future<String?> releaseTicket(String ticketId, {String? raffleId}) async {
+    try {
+      await _repository.releaseTicket(ticketId);
+      await loadTickets(raffleId: raffleId);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   /// Voids a sale and reloads the raffle. Returns null on success or the error message.
   Future<String?> voidTicket(String ticketId, String reason, {String? raffleId}) async {
     try {

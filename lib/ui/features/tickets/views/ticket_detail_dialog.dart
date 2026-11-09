@@ -1031,6 +1031,88 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     );
   }
 
+  /// Libera el número apartado (fiado) mientras no tenga abonos: queda disponible para venderlo de nuevo.
+  Future<void> _confirmRelease() async {
+    final t = widget.ticket;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.lock_open, color: AppTheme.dangerRose),
+          SizedBox(width: 10),
+          Expanded(child: Text('Liberar este número', style: TextStyle(fontWeight: FontWeight.bold))),
+        ]),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Boleta N° ${t.displayNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 6),
+                Text('Apartada por: ${t.buyerName.isNotEmpty ? t.buyerName : "—"}${t.buyerPhone.isNotEmpty ? " (${t.buyerPhone})" : ""}'),
+                Text('Asesor: ${t.advisorName.isNotEmpty ? t.advisorName : "—"}'),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Chip(label: const Text('APARTADA / FIADA'), backgroundColor: Colors.purple.withValues(alpha: 0.12)),
+                  const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.arrow_forward)),
+                  Chip(label: const Text('DISPONIBLE'), backgroundColor: AppTheme.secondaryEmerald.withValues(alpha: 0.18)),
+                ]),
+                const SizedBox(height: 8),
+                const Text(
+                  'Sin abonos: el total de la boleta sigue pendiente. Al liberarla quedará DISPONIBLE y cualquiera podrá apartarla o venderla de nuevo.',
+                  style: TextStyle(fontSize: 12.5, height: 1.35),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'El histórico se conserva: quién la apartó, quién la liberó y cuándo quedan guardados en el historial de la boleta.',
+                  style: TextStyle(fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    // Segunda confirmación
+    final sure = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Está seguro?'),
+        content: Text('Va a liberar la boleta N° ${t.displayNumber}. Quedará DISPONIBLE para venderla de nuevo. Esta acción queda registrada en el historial.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No, volver')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Sí, liberar número'),
+          ),
+        ],
+      ),
+    );
+    if (sure != true || !mounted) return;
+    final error = await Provider.of<TicketViewModel>(context, listen: false).releaseTicket(t.id, raffleId: t.raffleId);
+    if (!mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(error)));
+      return;
+    }
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text('Número ${t.displayNumber} liberado: quedó disponible.')),
+    );
+  }
+
   Widget _buildAnnulmentsHistory(NumberFormat currency) {
     return Container(
       width: double.infinity,
@@ -2068,6 +2150,26 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
               if (widget.ticket.annulments.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildAnnulmentsHistory(currency),
+              ],
+              // Apartada (fiada) sin ningún abono: se puede liberar el número (administrador o el asesor que la apartó)
+              if (widget.ticket.status == 'RESERVADA' &&
+                  widget.ticket.totalPaid <= 0 &&
+                  widget.ticket.abonos.isEmpty &&
+                  (authVM.isAdmin || (authVM.isAsesor && authVM.activeAdvisor?.id == widget.ticket.advisorId))) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _confirmRelease,
+                    icon: const Icon(Icons.lock_open),
+                    label: const Text('Liberar número'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.dangerRose,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
               ],
               if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE' && widget.ticket.abonos.any((a) => a.voidBlocker != null)) ...[
                 const SizedBox(height: 12),

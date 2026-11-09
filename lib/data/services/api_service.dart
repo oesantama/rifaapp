@@ -1172,6 +1172,17 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Libera un número apartado (fiado) que aún no tiene abonos: vuelve a quedar disponible.
+  Future<Ticket> releaseTicket(String ticketId) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/tickets/$ticketId/release'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({}),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return Ticket.fromJson(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   /// Voids one payment (admins); it stays in the ticket history.
   Future<Ticket> voidAbono(String ticketId, String abonoId, String reason) async {
     final response = await authPost(

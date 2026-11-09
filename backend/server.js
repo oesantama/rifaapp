@@ -6460,26 +6460,10 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   res.json(withVerification(ticket));
 });
 
-// POST Void a sale (admins only): the ticket becomes available again and the whole previous
-// sale (buyer, advisor, payments, channel) is kept in ticket.annulments with who/when/why.
-app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
-  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
-  if (!ticket) return res.status(404).json({ error: 'Boleta no encontrada' });
-  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
-  if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
-  if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible; no hay venta que anular.' });
-  const locked = (ticket.abonos || []).find(a => abonoVoidBlocker(a));
-  if (locked) {
-    return res.status(409).json({ error: `No se puede anular la venta: ${abonoVoidBlocker(locked).replace(': no se puede anular.', '').toLowerCase()}.` });
-  }
-
-  const reason = String((req.body || {}).reason || '').trim();
-  if (reason.length < 10) {
-    return res.status(400).json({ error: 'Escriba una observación que explique la anulación (mínimo 10 caracteres).' });
-  }
-
-  const { role, record } = req.auth;
-  const byName = role === 'superadmin' ? (record.name || 'SuperAdministrador') : (record.adminName || 'Administrador');
+/** Devuelve la boleta a DISPONIBLE conservando la venta anterior en ticket.annulments (quién, cuándo y por qué). */
+function annulTicketSale(ticket, auth, reason, auditType = 'VOID_TICKET') {
+  const { role, record } = auth;
+  const byName = role === 'superadmin' ? (record.name || 'SuperAdministrador') : role === 'asesor' ? (record.name || 'Asesor') : (record.adminName || 'Administrador');
   const now = new Date().toISOString();
   const previous = {
     status: ticket.status,
@@ -6521,7 +6505,7 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
   if (!db.auditLogs) db.auditLogs = [];
   db.auditLogs.push({
     id: `audit-${Date.now()}`,
-    type: 'VOID_TICKET',
+    type: auditType,
     targetId: ticket.id,
     raffleId: ticket.raffleId,
     numbers: ticket.numbers,
@@ -6533,6 +6517,53 @@ app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
     date: now
   });
 
+}
+
+// POST Void a sale (admins only): the ticket becomes available again and the whole previous
+// sale (buyer, advisor, payments, channel) is kept in ticket.annulments with who/when/why.
+app.post('/api/tickets/:id/void', adminOnly, (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible; no hay venta que anular.' });
+  const locked = (ticket.abonos || []).find(a => abonoVoidBlocker(a));
+  if (locked) {
+    return res.status(409).json({ error: `No se puede anular la venta: ${abonoVoidBlocker(locked).replace(': no se puede anular.', '').toLowerCase()}.` });
+  }
+
+  const reason = String((req.body || {}).reason || '').trim();
+  if (reason.length < 10) {
+    return res.status(400).json({ error: 'Escriba una observación que explique la anulación (mínimo 10 caracteres).' });
+  }
+
+  annulTicketSale(ticket, req.auth, reason);
+  saveDB();
+  notifyRaffleChanged(ticket.raffleId);
+  res.json(ticket);
+});
+
+// POST Liberar número: una boleta APARTADA (fiada) que todavía no tiene ningún abono (el total sigue pendiente) vuelve a quedar
+// disponible. Lo puede hacer el administrador o el asesor dueño de la boleta; queda en el historial de la boleta.
+app.post('/api/tickets/:id/release', (req, res) => {
+  const ticket = (db.tickets || []).find(t => t.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Boleta no encontrada' });
+  const raffle = (db.raffles || []).find(r => r.id === ticket.raffleId);
+  const role = req.auth && req.auth.role;
+  if (role === 'asesor') {
+    if (!raffle || raffle.companyId !== req.auth.record.companyId) return res.status(404).json({ error: 'Boleta no encontrada' });
+    if (ticket.advisorId !== req.auth.record.id) return res.status(403).json({ error: 'Solo puede liberar los números que usted apartó.' });
+  } else if (role === 'admin' || role === 'superadmin') {
+    if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
+  } else {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible.' });
+  if (ticket.status !== 'RESERVADA') return res.status(400).json({ error: 'Solo se puede liberar un número apartado que aún no tiene abonos.' });
+  if ((ticket.totalPaid || 0) > 0 || (ticket.abonos || []).length > 0) {
+    return res.status(400).json({ error: 'La boleta ya tiene abonos: no se puede liberar. Un administrador puede anular la venta.' });
+  }
+  annulTicketSale(ticket, req.auth, String((req.body || {}).reason || '').trim() || 'Número liberado: apartado sin abonos.', 'RELEASE_TICKET');
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
   res.json(ticket);
@@ -7930,8 +7961,11 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
     tierDescription = 'Asesor de punto: no comisiona';
   } else if (commType === 'ESCALONADO' && tiers) {
     const sortedTiers = [...tiers].sort((a, b) => (Number(a.min || a.minBoletas) || 0) - (Number(b.min || b.minBoletas) || 0));
+    // El rango se define por las boletas de calle que tiene el asesor (apartadas + abonadas + pagadas), no solo las pagadas:
+    // con 21 o más ya comisiona el porcentaje del siguiente rango sobre TODO lo recaudado (no solo sobre lo nuevo).
+    const streetHeld = street.filter(t => ['RESERVADA', 'ABONO_PARCIAL', 'PAGADA', 'CONFIRMADA'].includes(t.status)).length;
     for (const t of sortedTiers) {
-      if (streetSold >= (Number(t.min || t.minBoletas) || 0)) activeTier = t;
+      if (streetHeld >= (Number(t.min || t.minBoletas) || 0)) activeTier = t;
     }
     if (activeTier) {
       const rate = Number(activeTier.rate) || 0;
@@ -7939,7 +7973,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
       rateValue = rate;
       const maxStr = (activeTier.max !== null && activeTier.max !== undefined && String(activeTier.max).trim() !== '') ? ` a ${activeTier.max}` : ' o más';
       if ((activeTier.type || 'PORCENTAJE') === 'VALOR_FIJO') {
-        commissionEarned = streetSold * rate;
+        commissionEarned = streetHeld * rate;
         tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
       } else {
         commissionEarned = (streetCollected * rate) / 100;

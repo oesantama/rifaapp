@@ -8,6 +8,17 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.2] - 2026-11-08
+
+- Comisión escalonada: el rango se define por las boletas del asesor (apartadas + abonadas + pagadas). Con 21 o más comisiona el 20% sobre todo lo recaudado.
+- "Liberar número" pide doble confirmación y conserva el histórico.
+
+## [3.3.1] - 2026-11-08
+
+- Botón "Liberar número" en las boletas apartadas (fiadas) que aún no tienen abonos (administrador o asesor que la apartó).
+- El bot registra el medio de venta "WhatsApp".
+- El saldo pendiente de una boleta disponible es el precio completo.
+
 ## [3.3.0] - 2026-11-08
 
 ### Nuevo
