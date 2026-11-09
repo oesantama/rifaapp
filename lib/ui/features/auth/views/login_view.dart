@@ -637,24 +637,6 @@ class _LoginViewState extends State<LoginView> {
                           ),
                   ),
 
-                  const SizedBox(height: 14),
-
-                  // Demo Mode Button (only when the SuperAdmin offers the demo)
-                  if (context.watch<AppConfigViewModel>().demoEnabled)
-                    OutlinedButton.icon(
-                      onPressed: _isLoading ? null : _handleDemoLogin,
-                      icon: const Icon(Icons.science_outlined, color: Colors.amber, size: 20),
-                      label: const Text(
-                        'PROBAR MODO DEMO (Reset 48h)',
-                        style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Colors.amber, width: 1.5),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -719,6 +701,22 @@ class _LoginViewState extends State<LoginView> {
                       ],
                     ),
                   ),
+
+                  // Modo demo: separado del ingreso y con aspecto de enlace, para que no se confunda con "Ingresar"
+                  if (context.watch<AppConfigViewModel>().demoEnabled) ...[
+                    const SizedBox(height: 18),
+                    const Divider(color: Color(0xFF334155)),
+                    const SizedBox(height: 6),
+                    Center(
+                      child: Text('¿Aún no tiene cuenta y quiere conocer la app?', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _handleDemoLogin,
+                      icon: const Icon(Icons.science_outlined, color: Colors.amber, size: 18),
+                      label: const Text('Probar modo demo (datos de ejemplo, se reinicia cada 48 h)',
+                          textAlign: TextAlign.center, style: TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
 
                   const SizedBox(height: 12),
                   const LegalLinks(),

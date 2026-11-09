@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.9] - 2026-11-09
+
+- Actualización del APK: «Descargar e instalar» ahora abre la descarga en el navegador del teléfono (la vía que sí permite instalar); la instalación dentro de la app queda como opción aparte porque en varios teléfonos se cerraba al 100 % sin instalar.
+- Inicio de sesión: «Probar modo demo» ya no queda pegado a «Ingresar»; pasa debajo del recuadro de descargas, separado y con aspecto de enlace, para que no se confunda.
+- Boletas: nuevo filtro «Pago confirmado (admin)» para ver las boletas pagadas que el administrador ya validó (legalizó); antes solo aparecían en «Todas». «Pagada al asesor» sigue siendo lo que el asesor recibió pero aún no se legaliza.
+
 ## [3.4.8] - 2026-11-09
 
 - Bot de WhatsApp: cuando WhatsApp identifica al cliente con un código interno (@lid), el bot usa el teléfono real que acompaña al mensaje, para poder responderle y asociarle sus boletas.

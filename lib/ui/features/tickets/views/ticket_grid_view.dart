@@ -273,6 +273,9 @@ class _TicketGridViewState extends State<TicketGridView> {
                         _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL', statusCounts['ABONO_PARCIAL'] ?? 0),
                         const SizedBox(width: 8),
                         _buildFilterChip(context, ticketVM, 'PAGADA', statusCounts['PAGADA'] ?? 0),
+                        // Pagadas que el administrador ya validó (legalizadas): antes solo se veían en "Todas"
+                        const SizedBox(width: 8),
+                        _buildFilterChip(context, ticketVM, 'CONFIRMADA', statusCounts['CONFIRMADA'] ?? 0),
                         if ((statusCounts['POR_VALIDAR'] ?? 0) > 0) ...[
                           const SizedBox(width: 8),
                           _buildFilterChip(context, ticketVM, 'POR_VALIDAR', statusCounts['POR_VALIDAR'] ?? 0),

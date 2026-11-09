@@ -23,10 +23,31 @@ class _ApkUpdateDialogState extends State<ApkUpdateDialog> {
   int _percent = 0;
   bool _installing = false;
   String? _error;
+  // Por defecto la descarga la hace el navegador del teléfono (Chrome), que es lo que siempre ha permitido instalar.
+  // La instalación dentro de la app (ota_update) exige un permiso aparte de Android y en varios teléfonos se cierra sin instalar.
+  bool _inApp = false;
+  bool _browserOpened = false;
 
   @override
   void initState() {
     super.initState();
+    _openBrowser();
+  }
+
+  Future<void> _openBrowser() async {
+    var ok = false;
+    try {
+      ok = await launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication);
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _browserOpened = ok;
+      _error = ok ? null : 'No se pudo abrir el navegador. Abra Chrome y entre a ${widget.url}';
+    });
+  }
+
+  void _startInApp() {
+    setState(() => _inApp = true);
     _start();
   }
 
@@ -92,7 +113,11 @@ class _ApkUpdateDialogState extends State<ApkUpdateDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_error != null)
+          if (!_inApp && _error == null)
+            Text(_browserOpened
+                ? 'Se abrió la descarga en su navegador.\n\n1. Espere a que termine de descargar.\n2. Toque el archivo descargado (o la notificación).\n3. Toque "Instalar". No pierde sus datos.\n\nSi Android le pregunta por "Instalar apps desconocidas", actívelo para el navegador y vuelva a tocar el archivo.'
+                : 'Abriendo la descarga...')
+          else if (_error != null)
             Text(_error!, style: const TextStyle(color: AppTheme.dangerRose, fontWeight: FontWeight.w600))
           else if (_installing)
             const Text('Listo. Toque "Instalar" en la pantalla de Android. No pierde sus datos.')
@@ -106,9 +131,10 @@ class _ApkUpdateDialogState extends State<ApkUpdateDialog> {
         ],
       ),
       actions: [
-        if (_error != null) TextButton(onPressed: _start, child: const Text('Reintentar')),
-        // Plan B: si la descarga dentro de la app falla, el navegador del teléfono la descarga y la instala
-        if (_error != null)
+        if (!_inApp) TextButton(onPressed: _openBrowser, child: const Text('Descargar de nuevo')),
+        if (!_inApp) TextButton(onPressed: _startInApp, child: const Text('Instalar dentro de la app')),
+        if (_inApp && _error != null) TextButton(onPressed: _start, child: const Text('Reintentar')),
+        if (_inApp)
           TextButton(
             onPressed: () => launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication),
             child: const Text('Descargar con el navegador'),
@@ -118,7 +144,7 @@ class _ApkUpdateDialogState extends State<ApkUpdateDialog> {
             _sub?.cancel();
             Navigator.of(context).pop();
           },
-          child: Text(_installing ? 'Cerrar' : 'Cancelar'),
+          child: Text(_installing || !_inApp ? 'Cerrar' : 'Cancelar'),
         ),
       ],
     );
