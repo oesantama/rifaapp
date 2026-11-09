@@ -22,6 +22,17 @@ function formatPhoneNumber(number) {
   return clean;
 }
 
+/**
+ * Número real de quien escribe. WhatsApp a veces identifica al cliente con un código interno (@lid) y entrega el
+ * teléfono aparte (remoteJidAlt / senderPn): se usa siempre el teléfono, nunca el código, para poder responderle.
+ */
+function senderJidOf(key, data) {
+  const jid = String((key && key.remoteJid) || '');
+  if (!jid.endsWith('@lid')) return jid;
+  const alt = (key && (key.remoteJidAlt || key.senderPn)) || (data && (data.senderPn || data.remoteJidAlt)) || '';
+  return String(alt).includes('@') ? String(alt) : (alt ? `${alt}@s.whatsapp.net` : jid);
+}
+
 function getInstanceName(auth) {
   if (!auth) return 'rifaapp_bot';
   if (auth.role === 'superadmin') {
@@ -699,7 +710,7 @@ async function handleWebhookEventInner(body, db, saveDBCallback) {
     return { ignored: true };
   }
 
-  const rawSender = (key.remoteJid || '').split('@')[0].split(':')[0];
+  const rawSender = senderJidOf(key, body.data).split('@')[0].split(':')[0];
   const senderPhone = formatPhoneNumber(rawSender);
 
   // Documentos (Excel devuelto de AGIL): los atiende quien se registró con setDocumentHandler
@@ -2471,7 +2482,7 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
   if (!isMessage) return { ignored: true };
   const key = (body.data && body.data.key) || {};
   const m = (body.data && body.data.message) || {};
-  const from = String(key.remoteJid || '').split('@')[0];
+  const from = senderJidOf(key, body.data).split('@')[0];
   const info = {
     kind: 'mensaje',
     instance,

@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.8] - 2026-11-09
+
+- Bot de WhatsApp: cuando WhatsApp identifica al cliente con un código interno (@lid), el bot usa el teléfono real que acompaña al mensaje, para poder responderle y asociarle sus boletas.
+
 ## [3.4.7] - 2026-11-09
 
 - Control → WhatsApp Bot: interruptor «Responder ventas automáticamente». Apagado, el bot deja de contestar a los clientes sin desconectar WhatsApp; las alertas, los avisos de pago, el acceso de asesores y AGIL siguen funcionando. El cambio queda en el registro del bot.
