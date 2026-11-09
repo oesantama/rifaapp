@@ -221,12 +221,13 @@ module.exports = function createAgilService(deps) {
         if (settled) adv.legalized += amount; else { adv.pending += amount; adv.pendingCount += 1; }
       }
     }
-    // Gastos de cada cuenta o del efectivo (no se asocian a una rifa: con filtro de rifa no se restan)
-    if (!f.raffleId) {
+    // Gastos de cada cuenta o del efectivo. Con filtro de rifa solo cuentan los de las cuentas de esa rifa (el efectivo no es de una rifa)
+    {
       for (const e of db.expenses || []) {
         if (e.companyId !== company.id || e.voided) continue;
         if (f.from && e.date < f.from) continue;
         if (f.to && e.date > f.to) continue;
+        if (f.raffleId && (e.account === CASH_KEY || !accounts.has(e.account))) continue;
         // Gasto en efectivo de un asesor que aún no se concilia con el administrador: reduce lo que ese asesor debe entregar
         if (e.account === CASH_KEY && e.advisorId && !e.applied) {
           const key = e.advisorId;

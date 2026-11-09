@@ -1,3 +1,4 @@
+import 'package:rifaapp/ui/features/analytics/sales_projection_view.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'ui/core/utils/apk_updater.dart';
 import 'package:rifaapp/data/services/api_service.dart';
@@ -302,6 +303,7 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                     const WinnerRegistrationView(),
                     const ControlView(),
                     const AgilPaymentsView(),
+                    const SalesProjectionTab(),
                   ]
                 : [
                     DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
@@ -311,6 +313,7 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                     const WinnerRegistrationView(),
                     const ControlView(),
                     const AgilPaymentsView(),
+                    const SalesProjectionTab(),
                   ])
             : [
                 DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
@@ -725,6 +728,11 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                                 selectedIcon: Icon(Icons.receipt_long),
                                 label: Text('Pagos'),
                               ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.insights_outlined),
+                                selectedIcon: Icon(Icons.insights),
+                                label: Text('Proyección'),
+                              ),
                             ]
                           : const [
                               NavigationRailDestination(
@@ -761,6 +769,11 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                                 icon: Icon(Icons.receipt_long_outlined),
                                 selectedIcon: Icon(Icons.receipt_long),
                                 label: Text('Pagos'),
+                              ),
+                              NavigationRailDestination(
+                                icon: Icon(Icons.insights_outlined),
+                                selectedIcon: Icon(Icons.insights),
+                                label: Text('Proyección'),
                               ),
                             ])
                       : [
@@ -828,6 +841,7 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                               BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                               BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
                               BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
+                              BottomNavigationBarItem(icon: Icon(Icons.insights), label: 'Proyección'),
                             ]
                           : const [
                               BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
@@ -837,6 +851,7 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                               BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
                               BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
                               BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
+                              BottomNavigationBarItem(icon: Icon(Icons.insights), label: 'Proyección'),
                             ])
                       : [
                           const BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),

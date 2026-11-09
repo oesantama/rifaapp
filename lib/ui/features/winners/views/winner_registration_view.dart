@@ -530,7 +530,8 @@ class _WinnerRegistrationViewState extends State<WinnerRegistrationView> {
 
         final isMobile = MediaQuery.of(context).size.width < 600;
         // The main draw has its own card; the history lists the weekly draws
-        final weeklyDraws = winnerVM.winners.where((w) => !w.isMainDraw).toList();
+        // Solo los sorteos de la rifa actual: el histórico de otras rifas no se mezcla
+        final weeklyDraws = winnerVM.winners.where((w) => !w.isMainDraw && currentRaffle != null && w.raffleId == currentRaffle.id).toList();
 
         return SingleChildScrollView(
           padding: EdgeInsets.all(isMobile ? 12 : 20),

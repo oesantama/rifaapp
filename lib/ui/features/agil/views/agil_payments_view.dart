@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
@@ -52,7 +54,11 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   static final _day = DateFormat('yyyy-MM-dd');
   static final _shown = DateFormat('dd/MM/yyyy');
 
+  // Solo lo de la rifa actual (sus cuentas y sus pagos)
+  String _raffleId = '';
+
   Map<String, String> get _dateFilters => {
+        if (_raffleId.isNotEmpty) 'raffleId': _raffleId,
         if (_from != null) 'from': _day.format(_from!),
         if (_to != null) 'to': _day.format(_to!),
       };
@@ -69,6 +75,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   @override
   void initState() {
     super.initState();
+    _raffleId = context.read<RaffleViewModel>().selectedRaffle?.id ?? '';
     _load();
   }
 
@@ -230,6 +237,14 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 700;
+    // Al cambiar de rifa se recarga con las cuentas y pagos de la nueva
+    final currentRaffleId = context.watch<RaffleViewModel>().selectedRaffle?.id ?? '';
+    if (currentRaffleId != _raffleId) {
+      _raffleId = currentRaffleId;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
     return Padding(
       padding: EdgeInsets.fromLTRB(isMobile ? 10 : 16, isMobile ? 10 : 14, isMobile ? 10 : 16, 0),
       child: Column(

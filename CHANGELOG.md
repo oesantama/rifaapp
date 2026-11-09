@@ -8,6 +8,18 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.3] - 2026-11-08
+
+- "Proyección" ahora es una opción del menú principal (administrador), junto a Asesores, Ganadores y Pagos.
+
+## [3.4.2] - 2026-11-08
+
+- Pagos: el resumen y el detalle muestran solo las cuentas, pagos y gastos de las cuentas de la rifa actual.
+
+## [3.4.1] - 2026-11-08
+
+- Ganadores: el historial de sorteos muestra solo los de la rifa actual (no mezcla los de otras rifas).
+
 ## [3.4.0] - 2026-11-08
 
 - Nueva pantalla "Proyección y gráficas de ventas" (administrador): ventas por día de la semana, boletas acumuladas con proyección hasta el sorteo, ventas diarias, ritmo promedio y asesores con más boletas.

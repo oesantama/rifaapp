@@ -3,6 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
@@ -10,7 +12,9 @@ import 'package:rifaapp/ui/core/theme.dart';
 class SalesProjectionView extends StatefulWidget {
   final String raffleId;
   final String raffleTitle;
-  const SalesProjectionView({super.key, required this.raffleId, required this.raffleTitle});
+  /// true = dentro del menú principal (sin barra propia); false = pantalla abierta aparte.
+  final bool embedded;
+  const SalesProjectionView({super.key, required this.raffleId, required this.raffleTitle, this.embedded = false});
 
   static Future<void> open(BuildContext context, {required String raffleId, required String raffleTitle}) =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => SalesProjectionView(raffleId: raffleId, raffleTitle: raffleTitle)));
@@ -52,6 +56,24 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) {
+      return _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center)))
+              : Column(children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+                    child: Row(children: [
+                      const Icon(Icons.insights, color: AppTheme.primaryBlue),
+                      const SizedBox(width: 8),
+                      const Expanded(child: Text('Proyección de ventas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                      IconButton(onPressed: _load, icon: const Icon(Icons.refresh), tooltip: 'Actualizar'),
+                    ]),
+                  ),
+                  Expanded(child: _content()),
+                ]);
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Proyección de ventas'),
@@ -322,3 +344,15 @@ class _CumulativePainter extends CustomPainter {
 }
 
 const ui_td = ui.TextDirection.ltr;
+
+/// Pestaña del menú principal: la proyección de la rifa seleccionada (se recarga al cambiar de rifa).
+class SalesProjectionTab extends StatelessWidget {
+  const SalesProjectionTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final raffle = context.watch<RaffleViewModel>().selectedRaffle;
+    if (raffle == null) return const Center(child: Text('Seleccione una rifa para ver su proyección.'));
+    return SalesProjectionView(key: ValueKey(raffle.id), raffleId: raffle.id, raffleTitle: raffle.title, embedded: true);
+  }
+}
