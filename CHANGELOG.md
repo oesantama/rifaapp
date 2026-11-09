@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.6] - 2026-11-08
+
+- "Liberar número": el abono de $0 que se guarda al apartar ya no impide liberar; solo cuentan los abonos con dinero.
+
 ## [3.3.5] - 2026-11-08
 
 - Al crear un asesor se le envía por WhatsApp el enlace, usuario, contraseña e instructivo.

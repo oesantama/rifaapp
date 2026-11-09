@@ -6560,7 +6560,7 @@ app.post('/api/tickets/:id/release', (req, res) => {
   }
   if (ticket.status === 'DISPONIBLE') return res.status(400).json({ error: 'La boleta ya está disponible.' });
   if (ticket.status !== 'RESERVADA') return res.status(400).json({ error: 'Solo se puede liberar un número apartado que aún no tiene abonos.' });
-  if ((ticket.totalPaid || 0) > 0 || (ticket.abonos || []).length > 0) {
+  if ((ticket.totalPaid || 0) > 0 || (ticket.abonos || []).some(a => Number(a.amount) > 0)) {
     return res.status(400).json({ error: 'La boleta ya tiene abonos: no se puede liberar. Un administrador puede anular la venta.' });
   }
   annulTicketSale(ticket, req.auth, String((req.body || {}).reason || '').trim() || 'Número liberado: apartado sin abonos.', 'RELEASE_TICKET');

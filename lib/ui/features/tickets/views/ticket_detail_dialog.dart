@@ -1549,7 +1549,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
               // Apartada (fiada) sin ningún abono: se puede liberar el número (administrador o el asesor que la apartó)
               if (widget.ticket.status == 'RESERVADA' &&
                   widget.ticket.totalPaid <= 0 &&
-                  widget.ticket.abonos.isEmpty &&
+                  !widget.ticket.abonos.any((a) => a.amount > 0) &&
                   (authVM.isAdmin || (authVM.isAsesor && authVM.activeAdvisor?.id == widget.ticket.advisorId))) ...[
                 const SizedBox(height: 10),
                 SizedBox(
