@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.3] - 2026-11-08
+
+- El botón "Liberar número" ahora está arriba, debajo de Precio / Pagado / Saldo de la boleta apartada.
+
 ## [3.3.2] - 2026-11-08
 
 - Comisión escalonada: el rango se define por las boletas del asesor (apartadas + abonadas + pagadas). Con 21 o más comisiona el 20% sobre todo lo recaudado.

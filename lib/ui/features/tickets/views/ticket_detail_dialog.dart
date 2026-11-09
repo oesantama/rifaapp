@@ -1546,6 +1546,26 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                   _infoTile('Saldo Pendiente', currency.format((widget.ticket.price - widget.ticket.totalPaid).clamp(0, double.infinity)), AppTheme.dangerRose),
                 ],
               ),
+              // Apartada (fiada) sin ningún abono: se puede liberar el número (administrador o el asesor que la apartó)
+              if (widget.ticket.status == 'RESERVADA' &&
+                  widget.ticket.totalPaid <= 0 &&
+                  widget.ticket.abonos.isEmpty &&
+                  (authVM.isAdmin || (authVM.isAsesor && authVM.activeAdvisor?.id == widget.ticket.advisorId))) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _confirmRelease,
+                    icon: const Icon(Icons.lock_open),
+                    label: const Text('Liberar número'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.dangerRose,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               Form(
                 key: _formKey,
@@ -2150,26 +2170,6 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
               if (widget.ticket.annulments.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _buildAnnulmentsHistory(currency),
-              ],
-              // Apartada (fiada) sin ningún abono: se puede liberar el número (administrador o el asesor que la apartó)
-              if (widget.ticket.status == 'RESERVADA' &&
-                  widget.ticket.totalPaid <= 0 &&
-                  widget.ticket.abonos.isEmpty &&
-                  (authVM.isAdmin || (authVM.isAsesor && authVM.activeAdvisor?.id == widget.ticket.advisorId))) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _confirmRelease,
-                    icon: const Icon(Icons.lock_open),
-                    label: const Text('Liberar número'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.dangerRose,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
               ],
               if (authVM.isAdmin && widget.ticket.status != 'DISPONIBLE' && widget.ticket.abonos.any((a) => a.voidBlocker != null)) ...[
                 const SizedBox(height: 12),
