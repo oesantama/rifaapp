@@ -1091,7 +1091,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
 
       // Con los datos completos, preguntar (una sola vez) por qué medio se enteró de nosotros
       const hasRealAdvisor = !!targetTicket.advisorId && targetTicket.advisorName !== 'Venta WhatsApp';
-      const askAdvisorRef = missingAfter.length === 0 && !hasRealAdvisor && targetTicket.advisorName !== 'Venta Directa WhatsApp';
+      const askAdvisorRef = false; // el bot ya no pregunta por el asesor: la venta queda directa con el administrador
       const askHowHeard = missingAfter.length === 0 && !askAdvisorRef && cfg.howHeard.enabled && !targetTicket.howHeard && !session?.howHeard;
       if (askAdvisorRef) replyMsg += `\n\n${ADVISOR_REF_QUESTION}`;
       else if (askHowHeard) replyMsg += `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
@@ -1253,8 +1253,8 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
     const perTicket = (opportunities > 1) ? `cada boleta incluye *${opportunities} números*` : 'un número por boleta';
     let dispMsg = `Estos son algunos números libres de *${mainRaffle.title}* 🎟️\n(${perTicket}; con cualquiera de los números de la boleta la aparto completa)\n\n`;
     sample.forEach(t => { dispMsg += `▫️ ${(t.numbers || []).join('  •  ')}\n`; });
-    dispMsg += `\nQuedan *${availableTickets.length}* boletas libres${availableTickets.length > sample.length ? ` (te muestro ${sample.length})` : ''}. Valor: ${money(ticketPrice)} COP cada una.\n`;
-    dispMsg += `\n✍️ Escríbeme el número que quieres (de ${digits} cifras, por ejemplo *${sample[0].numbers[0]}*) y te lo aparto. Si quieres ver otros, escribe *DISPONIBLES* otra vez.`;
+    dispMsg += `\nValor: ${money(ticketPrice)} COP cada boleta.\n`;
+    dispMsg += `\n✍️ Escríbeme el número que quieres (de ${digits} cifras, por ejemplo *${sample[0].numbers[0]}*) y te lo aparto. Si no ves el que buscas, escríbelo igual y te digo si está libre; o escribe *DISPONIBLES* para ver otros.`;
     await sendTextMessage(instance, senderPhone, dispMsg);
     return { handled: true };
   }
@@ -1499,7 +1499,7 @@ async function sendReservedReply(ctx, ticket, number, changed) {
   const profile = knownProfile(db, senderPhone, session);
   const missing = missingProfileFields(profile);
   const hasRealAdvisor = !!ticket.advisorId && ticket.advisorName !== 'Venta WhatsApp';
-  const askAdvisorRef = missing.length === 0 && !hasRealAdvisor && ticket.advisorName !== 'Venta Directa WhatsApp';
+  const askAdvisorRef = false; // el bot ya no pregunta por el asesor: la venta queda directa con el administrador
   const askHowHeard = missing.length === 0 && !askAdvisorRef && cfg.howHeard.enabled && !ticket.howHeard && !session?.howHeard;
 
   let msg = `${changed ? '🔄 ¡Listo, cambié tu boleta!' : '✅ ¡Listo, ya te aparté la boleta!'} 🎟️\n\n`;
@@ -2093,7 +2093,7 @@ async function receiptRegister(ctx, pending, opts = {}) {
   const profile = knownProfile(db, senderPhone, session);
   const missing = missingProfileFields(profile);
   const hasRealAdvisor = !!ticket.advisorId && ticket.advisorName !== 'Venta WhatsApp';
-  const askAdvisorRef = !hasRealAdvisor && ticket.advisorName !== 'Venta Directa WhatsApp';
+  const askAdvisorRef = false; // el bot ya no pregunta por el asesor: la venta queda directa con el administrador
 
   let msg = `✅ *¡Pago registrado!* 📸\n\n`;
   msg += `🎟️ *Boleta:* ${numbersOf(ticket)}\n💸 *Comprobante:* ${money(amount)}\n`;

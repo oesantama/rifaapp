@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.11] - 2026-11-09
+
+- Bot de WhatsApp: ya no pregunta por el asesor que atendió al cliente; la venta queda directa con el administrador (solo se asigna asesor si el número pertenece al rango asignado de uno).
+- Bot: «DISPONIBLES» muestra solo las 50 boletas al azar y el valor; se quitó el texto «Quedan X boletas libres» y se aclara que el cliente puede escribir un número que no aparezca para saber si está libre.
+
 ## [3.4.10] - 2026-11-09
 
 - Lectura de comprobantes: reconoce «Número de operación» como referencia (BBVA y otros) y acepta referencias largas de hasta 40 caracteres (antes máx. 22), por lo que ya se lee la referencia de las transferencias Bre-B de BBVA.
