@@ -809,6 +809,9 @@ _(Escribe el número de la opción o tu consulta)_`;
   const session = getSession(senderPhone, db);
   const cfg = botBrain.getBotConfig(company);
 
+  // Respuestas automáticas de ventas en pausa (la conexión de WhatsApp sigue abierta para los demás procesos)
+  if (company && company.botSalesEnabled === false) return { ignored: true, paused: true };
+
   // 0. Si el chat está actualmente en atención manual por un asesor humano:
   if (session?.humanAssisted) {
     const isHumanResetCommand = cleanLower === 'menu' || cleanLower === 'menú' || cleanLower === 'bot' || 
@@ -2499,7 +2502,7 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
   try {
     const result = await botContext.run({ origin: 'respuesta-bot', msgId, ageMin }, () => handleWebhookEventInner(body, db, saveDBCallback));
     // Los mensajes propios, de grupos o sin contenido no son de clientes: no llenan el registro
-    if (isClientMsg) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.ignored ? 'ignorado' : 'ok'), ms: Date.now() - t0 });
+    if (isClientMsg) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.paused ? 'ignorado-pausa' : (result && result.ignored ? 'ignorado' : 'ok')), ms: Date.now() - t0 });
     return result;
   } catch (err) {
     botLog({ ...info, result: 'error', error: String(err.message || err).slice(0, 160), ms: Date.now() - t0 });

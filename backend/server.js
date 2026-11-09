@@ -2879,7 +2879,20 @@ app.post('/api/bot/handoffs/:id/resolve', adminOnly, (req, res) => {
 // Salud del bot: estado de la conexión de WhatsApp de la empresa y su actividad reciente (el registro sobrevive a los reinicios)
 app.get('/api/bot/health', adminOnly, (req, res) => {
   const instanceName = whatsappService.getInstanceName(req.auth);
-  res.json({ instanceName, health: whatsappService.getHealth(instanceName), log: whatsappService.getBotLog(instanceName, 40) });
+  const company = targetCompanyOf(req);
+  res.json({ instanceName, salesEnabled: !(company && company.botSalesEnabled === false), health: whatsappService.getHealth(instanceName), log: whatsappService.getBotLog(instanceName, 40) });
+});
+
+// Pausar / reanudar las respuestas automáticas de ventas SIN desconectar WhatsApp (alertas, avisos y AGIL siguen funcionando)
+app.put('/api/bot/sales-enabled', adminOnly, (req, res) => {
+  const company = botCompany(req, res);
+  if (!company) return;
+  const enabled = !!(req.body && req.body.enabled);
+  company.botSalesEnabled = enabled;
+  company.botSalesEnabledAt = new Date().toISOString();
+  saveDB();
+  whatsappService.botLog({ kind: 'pausa', instance: whatsappService.getInstanceName(req.auth), enabled, by: actorName(req) });
+  res.json({ salesEnabled: enabled, message: enabled ? 'Respuestas automáticas activadas.' : 'Respuestas automáticas en pausa: el bot no contestará hasta que lo active.' });
 });
 
 // Historial del bot (60 días): ?kind=envio|mensaje|conexion|reinicio &phone=últimos dígitos &days=n &limit=n (máx. 1000)

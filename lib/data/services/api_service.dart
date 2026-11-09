@@ -1800,6 +1800,14 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Pausa (false) o reanuda (true) las respuestas automáticas de ventas sin desconectar WhatsApp.
+  Future<bool> setBotSalesEnabled(bool enabled) async {
+    final response = await authPut(Uri.parse('$baseUrl/bot/sales-enabled'),
+        headers: {'Content-Type': 'application/json'}, body: jsonEncode({'enabled': enabled})).timeout(const Duration(seconds: 15));
+    if (response.statusCode == 200) return jsonDecode(response.body)['salesEnabled'] == true;
+    throw ApiException.fromResponse(response);
+  }
+
   Future<Map<String, dynamic>> getWhatsAppStatus() async {
     final response = await authGet(Uri.parse('$baseUrl/whatsapp/status'));
     if (response.statusCode == 200) {

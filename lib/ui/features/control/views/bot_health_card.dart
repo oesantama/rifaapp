@@ -19,6 +19,7 @@ class _BotHealthCardState extends State<BotHealthCard> {
   String? _error;
   Timer? _timer;
   bool _expanded = false;
+  bool _savingSwitch = false;
 
   @override
   void initState() {
@@ -42,6 +43,21 @@ class _BotHealthCardState extends State<BotHealthCard> {
       });
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _toggleSales(bool value) async {
+    setState(() => _savingSwitch = true);
+    try {
+      final enabled = await ApiService().setBotSalesEnabled(value);
+      if (mounted) {
+        setState(() => _data = {...?_data, 'salesEnabled': enabled});
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'Respuestas automáticas activadas.' : 'Respuestas automáticas en pausa. WhatsApp sigue conectado.')));
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo cambiar: $e')));
+    } finally {
+      if (mounted) setState(() => _savingSwitch = false);
     }
   }
 
@@ -69,6 +85,8 @@ class _BotHealthCardState extends State<BotHealthCard> {
         return 'Mensaje de ${e['from'] ?? ''} (${e['tipo'] ?? ''}) → $res';
       case 'conexion':
         return 'Conexión: ${e['from'] != null ? '${e['from']} → ' : ''}${e['state']}';
+      case 'pausa':
+        return 'Respuestas automáticas ${e['enabled'] == true ? 'ACTIVADAS' : 'PAUSADAS'} por ${e['by'] ?? ''}';
       case 'reinicio':
         return 'Reinicio automático de la conexión (${e['note'] ?? ''}) ${e['ok'] == true ? '✓' : '✗'}';
       default:
@@ -88,8 +106,11 @@ class _BotHealthCardState extends State<BotHealthCard> {
     final needsQr = health?['needsQr'] == true;
     final ok = state == 'open';
     final restarts = (health?['restartsLast24h'] as num?)?.toInt() ?? 0;
-    final color = ok ? AppTheme.secondaryEmerald : (needsQr ? AppTheme.dangerRose : Colors.orange.shade800);
-    final headline = ok
+    final salesOn = _data?['salesEnabled'] != false;
+    final color = ok && !salesOn ? Colors.orange.shade800 : ok ? AppTheme.secondaryEmerald : (needsQr ? AppTheme.dangerRose : Colors.orange.shade800);
+    final headline = ok && !salesOn
+        ? 'Respuestas automáticas en pausa'
+        : ok
         ? 'Bot activo 24/7'
         : needsQr
             ? 'WhatsApp se desvinculó: escanee el QR para reconectar'
@@ -127,6 +148,18 @@ class _BotHealthCardState extends State<BotHealthCard> {
                   Icon(_expanded ? Icons.expand_less : Icons.expand_more),
                 ],
               ),
+            ),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Responder ventas automáticamente', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(salesOn
+                  ? 'El bot contesta a los clientes. Apáguelo para pausarlo sin desconectar WhatsApp.'
+                  : 'En pausa: el bot no contesta. WhatsApp sigue conectado; las alertas, avisos de pago y AGIL siguen funcionando. Los comprobantes que lleguen se atienden a mano.',
+                  style: const TextStyle(fontSize: 12)),
+              value: salesOn,
+              onChanged: _savingSwitch ? null : _toggleSales,
             ),
             if (_expanded) ...[
               const Divider(height: 20),
