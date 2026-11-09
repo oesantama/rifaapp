@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:rifaapp/ui/core/theme.dart';
 
 /// Descarga la última versión del APK desde el propio servidor y abre el instalador de Android:
@@ -106,6 +107,12 @@ class _ApkUpdateDialogState extends State<ApkUpdateDialog> {
       ),
       actions: [
         if (_error != null) TextButton(onPressed: _start, child: const Text('Reintentar')),
+        // Plan B: si la descarga dentro de la app falla, el navegador del teléfono la descarga y la instala
+        if (_error != null)
+          TextButton(
+            onPressed: () => launchUrl(Uri.parse(widget.url), mode: LaunchMode.externalApplication),
+            child: const Text('Descargar con el navegador'),
+          ),
         TextButton(
           onPressed: () {
             _sub?.cancel();

@@ -6,6 +6,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 SITE="${1:-https://williamrifas.santamariapp.com}"
 export PATH="$HOME/development/flutter/bin:$PATH"
-flutter build apk --release --dart-define=API_URL="$SITE/api"
+flutter build apk --release --target-platform android-arm64 --dart-define=API_URL="$SITE/api"
 cp build/app/outputs/flutter-apk/app-release.apk build/rifamaster.apk
 echo "APK listo: build/rifamaster.apk ($(du -h build/rifamaster.apk | cut -f1)) → $SITE"
