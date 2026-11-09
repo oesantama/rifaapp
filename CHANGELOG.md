@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.4] - 2026-11-08
+
+- Proyección: barras de ventas por fecha (línea de tiempo) bajo el gráfico de días de la semana; lista de TODOS los asesores de la mayor venta a la menor, con boletas y dinero; moneda como $1.000.
+
 ## [3.4.3] - 2026-11-08
 
 - "Proyección" ahora es una opción del menú principal (administrador), junto a Asesores, Ganadores y Pagos.

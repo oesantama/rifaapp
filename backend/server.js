@@ -8151,7 +8151,9 @@ app.get('/api/analytics/sales', adminOnly, (req, res) => {
   // Boletas por día necesarias para agotar la rifa a tiempo
   const neededPerDay = daysLeft && daysLeft > 0 ? Math.max(0, totalTickets - soldCount) / daysLeft : null;
 
+  // Todos los asesores de la empresa (también los que aún no venden), de la mayor venta a la menor
   const byAdvisor = new Map();
+  (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, { name: a.name, tickets: 0, money: 0 }));
   sold.forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
 
   res.json({
@@ -8159,7 +8161,7 @@ app.get('/api/analytics/sales', adminOnly, (req, res) => {
     today, firstSaleDay: first, spanDays, drawDay, daysLeft, avgAll, avg7, neededPerDay, collectRatio,
     bestWeekday: best && best.tickets > 0 ? { weekday: best.weekday, name: best.name, avgTickets: best.avgTickets } : null,
     projectionAll: project(avgAll), projection7: project(avg7),
-    daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets).slice(0, 8)
+    daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets || b.money - a.money || a.name.localeCompare(b.name))
   });
 });
 

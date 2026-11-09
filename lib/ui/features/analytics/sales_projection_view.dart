@@ -28,7 +28,7 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
   String? _error;
   bool _loading = true;
   bool _byMoney = false; // día de la semana: boletas o dinero
-  final _money = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0);
+  final _money = NumberFormat.currency(locale: 'es_CO', symbol: '\$', decimalDigits: 0, customPattern: '\u00A4#,##0');
 
   @override
   void initState() {
@@ -114,14 +114,11 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
                 best == null ? 'Aún sin ventas' : 'Promedio ${_f1(double.parse(_n(best['avgTickets']).toStringAsFixed(1)))} boletas ese día'),
           ]),
           const SizedBox(height: 20),
-          _section('¿Qué día de la semana se vende más?', trailing: SegmentedButton<bool>(
-            segments: const [ButtonSegment(value: false, label: Text('Boletas')), ButtonSegment(value: true, label: Text('Dinero'))],
-            selected: {_byMoney},
-            onSelectionChanged: (s) => setState(() => _byMoney = s.first),
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          )),
+          _section('¿Qué día de la semana se vende más?', trailing: _metricToggle()),
           _weekdayChart(d),
+          const SizedBox(height: 20),
+          _section('Ventas por fecha', trailing: _metricToggle()),
+          _timelineBars(d),
           const SizedBox(height: 20),
           _section('Boletas vendidas acumuladas y proyección'),
           SizedBox(height: 220, child: _card(CustomPaint(painter: _CumulativePainter(d), size: Size.infinite))),
@@ -136,9 +133,6 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
             ]),
           ),
           const SizedBox(height: 20),
-          _section('Ventas de los últimos 30 días'),
-          _dailyBars(d),
-          const SizedBox(height: 20),
           _section('Proyección hasta el sorteo'),
           _projection('Con el promedio de toda la rifa', d['projectionAll'] as Map<String, dynamic>?, total),
           const SizedBox(height: 10),
@@ -149,7 +143,7 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
             style: TextStyle(fontSize: 11.5, color: Colors.grey[600], height: 1.35),
           ),
           const SizedBox(height: 20),
-          _section('Asesores con más boletas'),
+          _section('Asesores: de la mayor venta a la menor'),
           _advisors(d),
           const SizedBox(height: 30),
         ],
@@ -222,27 +216,43 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
     ));
   }
 
-  Widget _dailyBars(Map<String, dynamic> d) {
+  Widget _metricToggle() => SegmentedButton<bool>(
+        segments: const [ButtonSegment(value: false, label: Text('Boletas')), ButtonSegment(value: true, label: Text('Dinero'))],
+        selected: {_byMoney},
+        onSelectionChanged: (s) => setState(() => _byMoney = s.first),
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      );
+
+  /// Barras por fecha, de la primera venta a hoy (con desplazamiento horizontal si son muchos días).
+  Widget _timelineBars(Map<String, dynamic> d) {
     final daily = (d['daily'] as List).cast<Map<String, dynamic>>();
-    final last = daily.length > 30 ? daily.sublist(daily.length - 30) : daily;
-    final maxT = last.map((e) => _n(e['tickets']).toDouble()).fold<double>(0, math.max);
-    return _card(SizedBox(
-      height: 120,
-      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-        for (final e in last)
-          Expanded(
-            child: Tooltip(
-              message: '${e['date']}: ${e['tickets']} boletas • ${_money.format(_n(e['money']))}',
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1),
-                child: Container(
-                  height: maxT > 0 ? math.max(2.0, 100 * _n(e['tickets']).toDouble() / maxT) : 2,
-                  decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.75), borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-                ),
+    double value(Map<String, dynamic> e) => (_byMoney ? _n(e['money']) : _n(e['tickets'])).toDouble();
+    final maxV = daily.map(value).fold<double>(0, math.max);
+    const barW = 34.0;
+    final bars = Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+      for (final e in daily)
+        SizedBox(
+          width: barW,
+          child: Tooltip(
+            message: '${e['date']}: ${e['tickets']} boletas • ${_money.format(_n(e['money']))}',
+            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+              Text(_byMoney ? NumberFormat.compact(locale: 'es').format(value(e)) : _f1(value(e)), style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 3),
+              Container(
+                width: barW - 10,
+                height: maxV > 0 ? math.max(3.0, 120 * value(e) / maxV) : 3,
+                decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.8), borderRadius: const BorderRadius.vertical(top: Radius.circular(5))),
               ),
-            ),
+              const SizedBox(height: 5),
+              Text((e['date'] as String).substring(8) + '/' + (e['date'] as String).substring(5, 7), style: const TextStyle(fontSize: 10)),
+            ]),
           ),
-      ]),
+        ),
+    ]);
+    return _card(SizedBox(
+      height: 175,
+      child: SingleChildScrollView(scrollDirection: Axis.horizontal, reverse: true, child: Align(alignment: Alignment.bottomLeft, child: bars)),
     ));
   }
 
@@ -266,17 +276,20 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
 
   Widget _advisors(Map<String, dynamic> d) {
     final list = (d['topAdvisors'] as List).cast<Map<String, dynamic>>();
-    if (list.isEmpty) return _card(const Text('Aún no hay ventas.'));
+    if (list.isEmpty) return _card(const Text('Aún no hay asesores.'));
     final maxT = list.map((e) => _n(e['tickets']).toDouble()).fold<double>(1, math.max);
     return _card(Column(children: [
-      for (final a in list)
+      for (var i = 0; i < list.length; i++)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(children: [
-            SizedBox(width: 130, child: Text(a['name'] as String, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5))),
-            Expanded(child: LinearProgressIndicator(value: _n(a['tickets']).toDouble() / maxT, minHeight: 10, borderRadius: BorderRadius.circular(6))),
+            SizedBox(width: 26, child: Text('${i + 1}', style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
+            SizedBox(width: 130, child: Text(list[i]['name'] as String, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5))),
+            Expanded(child: LinearProgressIndicator(value: _n(list[i]['tickets']).toDouble() / maxT, minHeight: 10, borderRadius: BorderRadius.circular(6))),
             const SizedBox(width: 8),
-            Text('${a['tickets']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(width: 28, child: Text('${list[i]['tickets']}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
+            const SizedBox(width: 8),
+            SizedBox(width: 92, child: Text(_money.format(_n(list[i]['money'])), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
           ]),
         ),
     ]));
