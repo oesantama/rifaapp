@@ -178,7 +178,7 @@ module.exports = function createAlertService({ getDb, saveDB, weeklyMinAbonoOf, 
       if (!phone) return;
       const instance = whatsappService.getInstanceName({ role: 'admin', record: company });
       const health = whatsappService.getHealth(instance);
-      if (health && health.state === 'open') await whatsappService.sendTextMessage(instance, phone, text);
+      if (health && health.state === 'open') await whatsappService.sendTextMessage(instance, phone, text, { origin: 'alerta' });
     } catch (err) {
       log.warn(`⚠️ Aviso por WhatsApp no enviado: ${err.message}`);
     }

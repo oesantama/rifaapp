@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.5] - 2026-11-09
+
+- Proyección: sección informativa (solo administrador) con las boletas del chatbot apartadas, abonadas y pagadas, y el detalle de qué asesores quedaron referenciados y cuántas no tienen asesor.
+- Bot de WhatsApp: ya no responde mensajes antiguos (más de 30 min, p. ej. los que llegan tarde tras una reconexión) ni duplicados.
+- Bot de WhatsApp: registro de TODOS los envíos (a quién, quién los originó, en respuesta a qué mensaje y con cuánto retraso) y de los mensajes recibidos; se conserva 60 días y luego se depura solo ese archivo (no se borra nada de WhatsApp). Consulta: GET /api/bot/log (administrador).
+
 ## [3.4.4] - 2026-11-08
 
 - Proyección: barras de ventas por fecha (línea de tiempo) bajo el gráfico de días de la semana; lista de TODOS los asesores de la mayor venta a la menor, con boletas y dinero; moneda como $1.000.

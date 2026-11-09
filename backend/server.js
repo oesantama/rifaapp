@@ -2882,6 +2882,13 @@ app.get('/api/bot/health', adminOnly, (req, res) => {
   res.json({ instanceName, health: whatsappService.getHealth(instanceName), log: whatsappService.getBotLog(instanceName, 40) });
 });
 
+// Historial del bot (60 días): ?kind=envio|mensaje|conexion|reinicio &phone=últimos dígitos &days=n &limit=n (máx. 1000)
+app.get('/api/bot/log', adminOnly, (req, res) => {
+  const instanceName = whatsappService.getInstanceName(req.auth);
+  const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit, 10) || 200));
+  res.json({ instanceName, retentionDays: Number(process.env.BOT_LOG_RETENTION_DAYS) || 60, log: whatsappService.getBotLog(instanceName, limit, { kind: req.query.kind, phone: req.query.phone, days: req.query.days }) });
+});
+
 app.get('/api/whatsapp/status', async (req, res) => {
   try {
     const instanceName = whatsappService.getInstanceName(req.auth);
@@ -6730,7 +6737,7 @@ ${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
-    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
       console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
     });
   }
@@ -6855,7 +6862,7 @@ ${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
-        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
           console.warn('⚠️ No se pudo enviar WhatsApp de confirmación de pago:', err.message);
         });
       } else if (action === 'rechazar') {
@@ -6868,7 +6875,7 @@ Hola *${ticket.buyerName || 'Participante'}*, te informamos que tu comprobante d
 
 Por favor verifica la transacción o comunícate con nosotros por este medio para aclararlo y conservar tus números. 📲`;
 
-        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, rejectMsg).catch(err => {
+        whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, rejectMsg, { origin: 'aviso-comprador' }).catch(err => {
           console.warn('⚠️ No se pudo enviar WhatsApp de rechazo de transferencia:', err.message);
         });
       }
@@ -6900,7 +6907,7 @@ ${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
-    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
       console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
     });
   }
@@ -7034,7 +7041,7 @@ ${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
 
 ¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
 
-    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg).catch(err => {
+    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
       console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
     });
   }
@@ -7381,7 +7388,7 @@ async function sendAdvisorAccess(req, advisor, company, password, isReset) {
     if (!health || health.state !== 'open') return { sent: false, reason: 'El WhatsApp de la empresa no está conectado.' };
     const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
     const baseUrl = `${proto}://${req.get('host')}`;
-    await whatsappService.sendTextMessage(instance, advisor.phone, advisorAccessMessage({ advisor, company, password, baseUrl, isReset }));
+    await whatsappService.sendTextMessage(instance, advisor.phone, advisorAccessMessage({ advisor, company, password, baseUrl, isReset }), { origin: 'acceso-asesor' });
     return { sent: true };
   } catch (err) {
     return { sent: false, reason: `No se pudo enviar por WhatsApp: ${err.message}` };
@@ -8156,12 +8163,28 @@ app.get('/api/analytics/sales', adminOnly, (req, res) => {
   (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, { name: a.name, tickets: 0, money: 0 }));
   sold.forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
 
+  // Boletas que vendió el chatbot (solo informativo): apartadas, abonadas y pagadas, y por cuál asesor quedaron referenciadas
+  const botStatus = t => t.status === 'RESERVADA' ? 'reserved' : t.status === 'ABONO_PARCIAL' ? 'partial' : (t.status === 'PAGADA' || t.status === 'CONFIRMADA') ? 'paid' : null;
+  const chatbot = { reserved: 0, partial: 0, paid: 0, total: 0, collected: 0, withAdvisor: 0, withoutAdvisor: 0, advisors: [], noAdvisor: { reserved: 0, partial: 0, paid: 0, total: 0 } };
+  const botAdv = new Map();
+  tickets.filter(t => t.soldByBot).forEach(t => {
+    const st = botStatus(t);
+    if (!st) return;
+    chatbot[st]++; chatbot.total++; chatbot.collected += Number(t.totalPaid) || 0;
+    const adv = t.advisorId ? (db.advisors || []).find(x => x.id === t.advisorId) : null;
+    if (!adv) { chatbot.withoutAdvisor++; chatbot.noAdvisor[st]++; chatbot.noAdvisor.total++; return; }
+    chatbot.withAdvisor++;
+    const e = botAdv.get(adv.id) || { name: adv.name, reserved: 0, partial: 0, paid: 0, total: 0 };
+    e[st]++; e.total++; botAdv.set(adv.id, e);
+  });
+  chatbot.advisors = [...botAdv.values()].sort((x, y) => y.total - x.total || x.name.localeCompare(y.name));
+
   res.json({
     raffleId: raffle.id, raffleTitle: raffle.title, ticketPrice: price, totalTickets, soldCount, collected,
     today, firstSaleDay: first, spanDays, drawDay, daysLeft, avgAll, avg7, neededPerDay, collectRatio,
     bestWeekday: best && best.tickets > 0 ? { weekday: best.weekday, name: best.name, avgTickets: best.avgTickets } : null,
     projectionAll: project(avgAll), projection7: project(avg7),
-    daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets || b.money - a.money || a.name.localeCompare(b.name))
+    chatbot, daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets || b.money - a.money || a.name.localeCompare(b.name))
   });
 });
 

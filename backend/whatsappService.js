@@ -182,6 +182,8 @@ async function disconnectInstance(instanceName) {
  * Envía un archivo (ej: el Excel de pagos) por WhatsApp. buffer = contenido del archivo.
  */
 async function sendDocument(instanceName, number, { buffer, fileName, caption = '', mimetype = 'application/octet-stream' }) {
+  const ctx = botContext.getStore() || {};
+  botLog({ kind: 'envio', instance: instanceName, to: maskPhone(formatPhoneNumber(number)), origin: ctx.origin || 'sistema', documento: String(fileName || '').slice(0, 60) });
   return evoRequest(`/message/sendMedia/${instanceName}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -208,18 +210,44 @@ async function fetchMediaBase64(instanceName, key) {
   return (res.ok && res.data && res.data.base64) || null;
 }
 
+const { AsyncLocalStorage } = require('async_hooks');
+// Contexto de cada mensaje entrante: así cada respuesta del bot queda ligada al mensaje que la originó en el registro
+const botContext = new AsyncLocalStorage();
+
 /**
- * Envía un mensaje de texto por WhatsApp con formateo de número automático
+ * Envía un mensaje de texto por WhatsApp con formateo de número automático.
+ * meta.origin dice quién lo manda (alerta, confirmación al comprador…); las respuestas del bot se marcan solas.
+ * Cada envío queda en el registro (destino enmascarado y primeras palabras), sin guardar nada más.
  */
-async function sendTextMessage(instanceName, number, text) {
+async function sendTextMessage(instanceName, number, text, meta = {}) {
   const targetNumber = formatPhoneNumber(number);
-  return evoRequest(`/message/sendText/${instanceName}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      number: targetNumber,
-      text: text
-    })
+  const ctx = botContext.getStore() || {};
+  let res;
+  try {
+    res = await evoRequest(`/message/sendText/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        number: targetNumber,
+        text: text
+      })
+    });
+  } catch (err) {
+    botLog({ kind: 'envio', instance: instanceName, to: maskPhone(targetNumber), origin: meta.origin || ctx.origin || 'sistema', ok: false, error: String(err.message || err).slice(0, 120) });
+    throw err;
+  }
+  botLog({
+    kind: 'envio', instance: instanceName, to: maskPhone(targetNumber),
+    origin: meta.origin || ctx.origin || 'sistema',
+    enRespuestaA: ctx.msgId || undefined, edadMensajeMin: ctx.ageMin,
+    chars: String(text || '').length, texto: String(text || '').replace(/\s+/g, ' ').slice(0, 90),
+    ok: !!(res && res.ok), status: res && res.status
   });
+  return res;
+}
+
+function maskPhone(n) {
+  const d = String(n || '').replace(/\D/g, '');
+  return d ? `***${d.slice(-4)}` : '';
 }
 
 // Memoria y persistencia de sesiones conversacionales por WhatsApp
@@ -2195,10 +2223,10 @@ async function handlePendingFlow(ctx) {
 // Registro permanente del bot + vigilante de conexión (para que funcione 24/7 y se pueda saber qué pasó)
 // ---------------------------------------------------------------------------
 const BOT_LOG_FILE = process.env.BOT_LOG_FILE || require('path').join(__dirname, 'assets', 'bot-log.jsonl');
-const BOT_LOG_MAX_BYTES = 1.5 * 1024 * 1024;
+const BOT_LOG_RETENTION_DAYS = Number(process.env.BOT_LOG_RETENTION_DAYS) || 60;
 const recentBotLog = [];
 
-/** Una línea por evento, en un archivo que sobrevive a los reinicios. No guarda el contenido de los mensajes. */
+/** Una línea por evento, en un archivo que sobrevive a los reinicios. No guarda el contenido de los mensajes del cliente. */
 function botLog(entry) {
   const line = { at: new Date().toISOString(), ...entry };
   recentBotLog.push(line);
@@ -2207,21 +2235,43 @@ function botLog(entry) {
     const fs = require('fs');
     fs.mkdirSync(require('path').dirname(BOT_LOG_FILE), { recursive: true });
     fs.appendFileSync(BOT_LOG_FILE, JSON.stringify(line) + '\n');
-    if (fs.statSync(BOT_LOG_FILE).size > BOT_LOG_MAX_BYTES) {
-      const lines = fs.readFileSync(BOT_LOG_FILE, 'utf8').trim().split('\n');
-      fs.writeFileSync(BOT_LOG_FILE, lines.slice(-1200).join('\n') + '\n');
-    }
   } catch (_) { /* el registro nunca debe tumbar al bot */ }
 }
 
-function getBotLog(instance, limit = 40) {
+/** Conserva solo los últimos BOT_LOG_RETENTION_DAYS días del registro del bot (solo este archivo; no toca WhatsApp). */
+function pruneBotLog() {
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(BOT_LOG_FILE)) return;
+    const limit = Date.now() - BOT_LOG_RETENTION_DAYS * 24 * 3600 * 1000;
+    const lines = fs.readFileSync(BOT_LOG_FILE, 'utf8').split('\n').filter(Boolean);
+    const keep = lines.filter(l => { try { return Date.parse(JSON.parse(l).at) >= limit; } catch (_) { return false; } });
+    if (keep.length !== lines.length) {
+      fs.writeFileSync(BOT_LOG_FILE + '.tmp', keep.length ? keep.join('\n') + '\n' : '');
+      fs.renameSync(BOT_LOG_FILE + '.tmp', BOT_LOG_FILE);
+    }
+  } catch (_) { /* sin archivo todavía */ }
+}
+setTimeout(pruneBotLog, 20 * 1000).unref();
+setInterval(pruneBotLog, 24 * 3600 * 1000).unref();
+
+/** Consulta del registro: por instancia, tipo (mensaje|envio|conexion|reinicio), teléfono (últimos dígitos) y días hacia atrás. */
+function getBotLog(instance, limit = 40, filters = {}) {
   let lines = recentBotLog;
-  if (lines.length < 40) {
+  const wide = filters.kind || filters.phone || filters.days;
+  if (wide || lines.length < 40) {
     try {
-      lines = require('fs').readFileSync(BOT_LOG_FILE, 'utf8').trim().split('\n').slice(-400).map(l => JSON.parse(l));
+      lines = require('fs').readFileSync(BOT_LOG_FILE, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean);
     } catch (_) { /* sin archivo todavía */ }
   }
-  return lines.filter(l => !instance || l.instance === instance).slice(-limit).reverse();
+  const since = filters.days ? Date.now() - Number(filters.days) * 24 * 3600 * 1000 : 0;
+  const tail = String(filters.phone || '').replace(/\D/g, '').slice(-4);
+  return lines
+    .filter(l => (!instance || l.instance === instance)
+      && (!filters.kind || l.kind === filters.kind)
+      && (!tail || String(l.to || l.from || '').endsWith(tail))
+      && (!since || Date.parse(l.at) >= since))
+    .slice(-limit).reverse();
 }
 
 const botHealth = new Map(); // instancia -> { state, since, lastOkAt, lastRestartAt, restarts: [ms] }
@@ -2240,6 +2290,10 @@ function getHealth(instance) {
     restartsLast24h: (h.restarts || []).filter(t => now - t < 24 * 3600 * 1000).length
   };
 }
+
+// Mensajes más viejos que esto se descartan: el cliente ya no está esperando y una respuesta tardía confunde
+const BOT_MAX_MESSAGE_AGE_MIN = Number(process.env.BOT_MAX_MESSAGE_AGE_MIN) || 30;
+const seenMessageIds = new Set();
 
 const WATCHDOG_EVERY_MS = 60 * 1000;
 const WATCHDOG_STUCK_MS = 3 * 60 * 1000;      // "connecting" o similar por más de esto: se reinicia la instancia
@@ -2303,11 +2357,29 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
     propio: !!key.fromMe,
     grupo: String(key.remoteJid || '').endsWith('@g.us')
   };
+  // Edad del mensaje: si el servicio de WhatsApp lo entrega tarde (reconexión, reinicio, sincronización) no se responde
+  const ts = Number((body.data && body.data.messageTimestamp && (body.data.messageTimestamp.low ?? body.data.messageTimestamp)) || 0);
+  const ageMin = ts ? Math.round((Date.now() / 1000 - ts) / 60) : undefined;
+  const msgId = key.id ? String(key.id).slice(0, 24) : undefined;
+  info.msgId = msgId;
+  info.edadMin = ageMin;
+  const isClientMsg = !info.propio && !info.grupo;
+  if (isClientMsg) {
+    if (ageMin !== undefined && ageMin > BOT_MAX_MESSAGE_AGE_MIN) {
+      botLog({ ...info, result: 'ignorado-antiguo', note: `mensaje de hace ${ageMin} min: no se responde` });
+      return { ignored: true, stale: true };
+    }
+    if (msgId) {
+      if (seenMessageIds.has(msgId)) { botLog({ ...info, result: 'ignorado-duplicado' }); return { ignored: true, duplicate: true }; }
+      seenMessageIds.add(msgId);
+      if (seenMessageIds.size > 3000) seenMessageIds.delete(seenMessageIds.values().next().value);
+    }
+  }
   const t0 = Date.now();
   try {
-    const result = await handleWebhookEventInner(body, db, saveDBCallback);
+    const result = await botContext.run({ origin: 'respuesta-bot', msgId, ageMin }, () => handleWebhookEventInner(body, db, saveDBCallback));
     // Los mensajes propios, de grupos o sin contenido no son de clientes: no llenan el registro
-    if (!info.propio && !info.grupo) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.ignored ? 'ignorado' : 'ok'), ms: Date.now() - t0 });
+    if (isClientMsg) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.ignored ? 'ignorado' : 'ok'), ms: Date.now() - t0 });
     return result;
   } catch (err) {
     botLog({ ...info, result: 'error', error: String(err.message || err).slice(0, 160), ms: Date.now() - t0 });
@@ -2317,6 +2389,7 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
 
 module.exports = {
   getBotLog,
+  botLog,
   getHealth,
   startWatchdog,
   formatPhoneNumber,

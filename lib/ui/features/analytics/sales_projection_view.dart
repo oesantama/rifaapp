@@ -143,6 +143,9 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
             style: TextStyle(fontSize: 11.5, color: Colors.grey[600], height: 1.35),
           ),
           const SizedBox(height: 20),
+          _section('Boletas del chatbot (informativo)'),
+          _chatbot(d),
+          const SizedBox(height: 20),
           _section('Asesores: de la mayor venta a la menor'),
           _advisors(d),
           const SizedBox(height: 30),
@@ -272,6 +275,71 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
       const SizedBox(height: 4),
       Text(reaches ? '✅ Con este ritmo se agota la rifa antes del sorteo.' : '⚠️ Con este ritmo no se alcanza a vender toda la rifa.', style: TextStyle(fontSize: 12, color: reaches ? Colors.green[700] : Colors.orange[800])),
     ]));
+  }
+
+  Widget _chatbot(Map<String, dynamic> d) {
+    final c = (d['chatbot'] as Map?)?.cast<String, dynamic>() ?? {};
+    Widget box(String label, dynamic v, Color color) => Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+            child: Column(children: [
+              Text('${v ?? 0}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+              Text(label, style: const TextStyle(fontSize: 12)),
+            ]),
+          ),
+        );
+    return _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        box('Apartadas', c['reserved'], Colors.orange),
+        const SizedBox(width: 8),
+        box('Abonadas', c['partial'], Colors.blue),
+        const SizedBox(width: 8),
+        box('Pagadas', c['paid'], AppTheme.secondaryEmerald),
+      ]),
+      const SizedBox(height: 8),
+      Text('${c['total'] ?? 0} boletas por el chatbot • ${_money.format(_n(c['collected']))} recaudado • ${c['withAdvisor'] ?? 0} con asesor • ${c['withoutAdvisor'] ?? 0} sin asesor',
+          style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+      const SizedBox(height: 6),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(onPressed: () => _chatbotDetail(c), icon: const Icon(Icons.people_outline), label: const Text('Ver asesores referenciados')),
+      ),
+    ]));
+  }
+
+  void _chatbotDetail(Map<String, dynamic> c) {
+    final advisors = ((c['advisors'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final no = (c['noAdvisor'] as Map?)?.cast<String, dynamic>() ?? {};
+    String line(Map<String, dynamic> e) => '${e['reserved']} apartadas • ${e['partial']} abonadas • ${e['paid']} pagadas';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Boletas del chatbot por asesor'),
+        content: SizedBox(
+          width: 420,
+          child: ListView(shrinkWrap: true, children: [
+            Text('Total: ${c['reserved'] ?? 0} apartadas • ${c['partial'] ?? 0} abonadas • ${c['paid'] ?? 0} pagadas', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            const Text('Asesores referenciados', style: TextStyle(fontWeight: FontWeight.w600)),
+            if (advisors.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Ninguna boleta del chatbot tiene asesor.')),
+            for (final a in advisors)
+              ListTile(dense: true, contentPadding: EdgeInsets.zero, title: Text('${a['name']}  (${a['total']})'), subtitle: Text(line(a))),
+            const Divider(),
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.person_off_outlined),
+              title: Text('Sin asesor (${no['total'] ?? 0})'),
+              subtitle: Text(line(no)),
+            ),
+            const SizedBox(height: 6),
+            Text('Solo informativo para el administrador.', style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
+      ),
+    );
   }
 
   Widget _advisors(Map<String, dynamic> d) {
