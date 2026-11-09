@@ -639,6 +639,20 @@ class ApiService {
     return _localAdvisors;
   }
 
+  /// Resultado del envío del acceso por WhatsApp en la última creación de asesor (null = no se informó).
+  static String? lastAdvisorAccessNote;
+
+  /// Envía al asesor por WhatsApp el enlace, usuario, una contraseña temporal NUEVA y el instructivo. Devuelve el mensaje del servidor.
+  Future<String> sendAdvisorAccess(String advisorId) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/advisors/$advisorId/send-access'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({}),
+    ).timeout(const Duration(seconds: 40));
+    if (response.statusCode == 200) return (jsonDecode(response.body)['message'] ?? 'Acceso enviado.').toString();
+    throw ApiException.fromResponse(response);
+  }
+
   Future<Advisor> createAdvisor(Map<String, dynamic> body) async {
     if (!_useLocalFallback) {
       try {
@@ -648,7 +662,11 @@ class ApiService {
           body: jsonEncode(body),
         );
         if (response.statusCode == 201) {
-          return Advisor.fromJson(jsonDecode(response.body));
+          final json = jsonDecode(response.body);
+          lastAdvisorAccessNote = json['accessSent'] == true
+              ? 'Se envió por WhatsApp el enlace, usuario, contraseña e instructivo.'
+              : 'No se envió el acceso por WhatsApp: ${json['accessNote'] ?? ''} Use "Enviar acceso por WhatsApp" en el menú del asesor.';
+          return Advisor.fromJson(json);
         }
         throw ApiException.fromResponse(response);
       } on ApiException {

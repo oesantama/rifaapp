@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.5] - 2026-11-08
+
+- Al crear un asesor se le envía por WhatsApp el enlace, usuario, contraseña e instructivo.
+- Nueva opción "Enviar acceso por WhatsApp" en el menú de cada asesor (genera una contraseña temporal nueva).
+
 ## [3.3.4] - 2026-11-08
 
 - Si la descarga de la actualización dentro de la app falla, aparece el botón "Descargar con el navegador".

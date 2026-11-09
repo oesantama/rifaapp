@@ -48,6 +48,7 @@ class RaffleRepository {
   Future<List<Advisor>> fetchAdvisors() => _apiService.getAdvisors();
 
   Future<Advisor> createAdvisor(Map<String, dynamic> data) => _apiService.createAdvisor(data);
+  Future<String> sendAdvisorAccess(String advisorId) => _apiService.sendAdvisorAccess(advisorId);
 
   Future<Advisor> updateAdvisor(String id, Map<String, dynamic> data) => _apiService.updateAdvisor(id, data);
 

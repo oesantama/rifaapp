@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/data/services/api_service.dart';
 import 'package:rifaapp/ui/core/widgets/error_alert.dart';
 import 'package:rifaapp/ui/features/auth/views/change_password_dialog.dart' show validateNewPassword;
 import 'package:rifaapp/ui/features/tickets/view_models/ticket_view_model.dart';
@@ -418,7 +419,10 @@ class AdvisorManagementView extends StatelessWidget {
                       if (ok && ctx.mounted) {
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(isEditing ? 'Perfil de asesor actualizado con éxito' : 'Asesor creado con éxito')),
+                          SnackBar(
+                            duration: Duration(seconds: isEditing ? 4 : 8),
+                            content: Text(isEditing ? 'Perfil de asesor actualizado con éxito' : 'Asesor creado con éxito. ${ApiService.lastAdvisorAccessNote ?? ''}'),
+                          ),
                         );
                       }
                     } else {
@@ -910,6 +914,31 @@ class AdvisorManagementView extends StatelessWidget {
                                                 const SnackBar(content: Text('No hay una rifa activa seleccionada.')),
                                               );
                                             }
+                                          } else if (val == 'send_access') {
+                                            final go = await showDialog<bool>(
+                                              context: context,
+                                              builder: (dctx) => AlertDialog(
+                                                title: const Text('Enviar acceso por WhatsApp'),
+                                                content: Text(
+                                                  'Se enviará a ${adv.name} (${adv.phone}) el enlace, su usuario, una contraseña temporal NUEVA y un pequeño instructivo.\n\n'
+                                                  'La contraseña actual dejará de servir y deberá cambiarla al ingresar. Si WhatsApp no está conectado, no se cambia nada.',
+                                                ),
+                                                actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(dctx, false), child: const Text('Cancelar')),
+                                                  ElevatedButton(onPressed: () => Navigator.pop(dctx, true), child: const Text('Enviar')),
+                                                ],
+                                              ),
+                                            );
+                                            if (go == true && context.mounted) {
+                                              final (ok, msg) = await advVM.sendAccess(adv.id);
+                                              if (context.mounted) {
+                                                if (ok) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.secondaryEmerald, content: Text(msg)));
+                                                } else {
+                                                  await showErrorAlert(context, 'No se pudo enviar el acceso', msg);
+                                                }
+                                              }
+                                            }
                                           } else if (val == 'numbers') {
                                             AssignNumbersDialog.show(context, adv);
                                           } else if (val == 'toggle_status') {
@@ -939,6 +968,10 @@ class AdvisorManagementView extends StatelessWidget {
                                                 Text('Números Disponibles (Imagen/Excel)'),
                                               ],
                                             ),
+                                          ),
+                                          const PopupMenuItem(
+                                            value: 'send_access',
+                                            child: Row(children: [Icon(Icons.send_outlined, size: 18, color: Color(0xFF25D366)), SizedBox(width: 8), Text('Enviar acceso por WhatsApp')]),
                                           ),
                                           const PopupMenuItem(
                                             value: 'numbers',

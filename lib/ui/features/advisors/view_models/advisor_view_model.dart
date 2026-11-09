@@ -34,6 +34,15 @@ class AdvisorViewModel extends ChangeNotifier {
     }
   }
 
+  /// Envía el acceso por WhatsApp (genera una contraseña temporal nueva). Devuelve el mensaje de resultado y si salió bien.
+  Future<(bool, String)> sendAccess(String advisorId) async {
+    try {
+      return (true, await _repository.sendAdvisorAccess(advisorId));
+    } catch (e) {
+      return (false, e.toString().replaceFirst(RegExp(r'^(Exception|ApiException[^:]*): ?'), ''));
+    }
+  }
+
   Future<bool> createAdvisor(Map<String, dynamic> data) async {
     _isLoading = true;
     _lastError = null;

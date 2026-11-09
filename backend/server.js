@@ -7346,7 +7346,49 @@ app.get('/api/advisors', (req, res) => {
 });
 
 // POST Create Advisor
-app.post('/api/advisors', adminOnly, (req, res) => {
+
+/** Mensaje de bienvenida del asesor: enlace, usuario, contraseña y un pequeño instructivo. */
+function advisorAccessMessage({ advisor, company, password, baseUrl, isReset }) {
+  return [
+    `🎉 *¡Bienvenido(a) a Rifa Master, ${advisor.name.split(' ')[0]}!*`,
+    company && company.name ? `Empresa: *${company.name}*` : '',
+    '',
+    isReset ? 'Te generamos un acceso nuevo:' : 'Ya tienes tu cuenta de asesor:',
+    `🔗 *Ingreso:* ${baseUrl}`,
+    `👤 *Usuario:* ${advisor.username}`,
+    `🔑 *Contraseña temporal:* ${password}`,
+    '(Al entrar por primera vez el sistema te pedirá crear tu propia contraseña.)',
+    `📱 *App Android:* ${baseUrl}/descargar-apk`,
+    '',
+    '📖 *Cómo usar tu cuenta de asesor*',
+    '1️⃣ Entra al enlace, escribe tu usuario y contraseña y crea tu nueva clave.',
+    '2️⃣ Arriba elige la *rifa* en la que vas a trabajar.',
+    '3️⃣ En *Boletas* toca un número disponible: escribe los datos del comprador, el medio de venta y *aparta* la boleta o registra el pago.',
+    '4️⃣ Para abonar, abre la boleta apartada y registra el abono en *efectivo* o *transferencia* (adjunta el comprobante).',
+    '5️⃣ En *Mi Caja* ves el efectivo que tienes y lo que debes entregar al administrador. Entrégalo pronto: pasados 7 días te avisamos.',
+    '6️⃣ En el *Dashboard* ves tus ventas y tus ganancias. La campana 🔔 te avisa de sorteos cercanos y pagos pendientes.',
+    '',
+    '⚠️ Guarda tu contraseña y no la compartas. ¡Mucho éxito en las ventas! 🍀'
+  ].filter(l => l !== null).join('\n');
+}
+
+/** Envía el acceso del asesor por el WhatsApp de su empresa. Devuelve { sent, reason }. */
+async function sendAdvisorAccess(req, advisor, company, password, isReset) {
+  try {
+    if (!advisor.phone) return { sent: false, reason: 'El asesor no tiene teléfono.' };
+    const instance = whatsappService.getInstanceName({ role: 'admin', record: company || {} });
+    const health = whatsappService.getHealth(instance);
+    if (!health || health.state !== 'open') return { sent: false, reason: 'El WhatsApp de la empresa no está conectado.' };
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
+    const baseUrl = `${proto}://${req.get('host')}`;
+    await whatsappService.sendTextMessage(instance, advisor.phone, advisorAccessMessage({ advisor, company, password, baseUrl, isReset }));
+    return { sent: true };
+  } catch (err) {
+    return { sent: false, reason: `No se pudo enviar por WhatsApp: ${err.message}` };
+  }
+}
+
+app.post('/api/advisors', adminOnly, async (req, res) => {
   const { name, email, username, password, status, phone, code, mode, assignedTicketRanges, companyId } = req.body;
   const advisorType = req.body.type;
   const policyError = security.validatePasswordPolicy(password);
@@ -7418,7 +7460,37 @@ app.post('/api/advisors', adminOnly, (req, res) => {
   }
 
   saveDB();
-  res.status(201).json(newAdvisor);
+  // Se le envía por WhatsApp el enlace, usuario, contraseña e instructivo
+  const company = (db.companies || []).find(c => c.id === targetCompanyId);
+  const access = await sendAdvisorAccess(req, newAdvisor, company, password, false);
+  res.status(201).json({ ...newAdvisor, accessSent: access.sent, accessNote: access.reason || '' });
+});
+
+// POST Reenviar acceso: como la contraseña se guarda cifrada y no se puede leer, se genera una contraseña temporal NUEVA
+// (el asesor la cambia al entrar) y se envía por WhatsApp con el enlace y el instructivo. Si WhatsApp no está conectado no se cambia nada.
+app.post('/api/advisors/:id/send-access', adminOnly, async (req, res) => {
+  const advisor = (db.advisors || []).find(a => a.id === req.params.id);
+  if (!advisor) return res.status(404).json({ error: 'Asesor no encontrado' });
+  if (req.auth.role === 'admin' && advisor.companyId !== req.auth.record.id) return res.status(404).json({ error: 'Asesor no encontrado' });
+  if (!advisor.phone) return res.status(400).json({ error: 'El asesor no tiene teléfono registrado.' });
+  const company = (db.companies || []).find(c => c.id === advisor.companyId);
+  const instance = whatsappService.getInstanceName({ role: 'admin', record: company || {} });
+  const health = whatsappService.getHealth(instance);
+  if (!health || health.state !== 'open') return res.status(409).json({ error: 'El WhatsApp de la empresa no está conectado: no se envió nada y la contraseña actual no cambió.' });
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz';
+  const tmp = 'Rifa' + Array.from({ length: 3 }, () => alphabet[require('crypto').randomInt(alphabet.length)]).join('') + String(require('crypto').randomInt(1000, 10000));
+  const previousHash = advisor.password;
+  const previousMust = advisor.mustChangePassword;
+  advisor.password = security.hashPassword(tmp);
+  advisor.mustChangePassword = true;
+  const access = await sendAdvisorAccess(req, advisor, company, tmp, true);
+  if (!access.sent) {
+    advisor.password = previousHash;
+    advisor.mustChangePassword = previousMust;
+    return res.status(502).json({ error: `${access.reason} La contraseña actual no cambió.` });
+  }
+  saveDB();
+  res.json({ ok: true, message: `Acceso enviado por WhatsApp a ${advisor.name}.` });
 });
 
 // PUT Update Advisor
