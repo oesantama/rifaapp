@@ -12,6 +12,7 @@ import 'package:rifaapp/ui/features/raffles/view_models/raffle_view_model.dart';
 import 'package:rifaapp/ui/features/raffles/views/raffle_edit_dialog.dart';
 import 'package:rifaapp/ui/features/winners/view_models/winner_view_model.dart';
 import 'package:rifaapp/ui/features/advisors/views/commission_dashboard_view.dart';
+import 'package:rifaapp/ui/features/analytics/sales_projection_view.dart';
 import 'package:rifaapp/data/models/ticket.dart';
 import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart';
 
@@ -397,6 +398,18 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (authVM.isAdmin && currentRaffle != null) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => SalesProjectionView.open(context, raffleId: currentRaffle.id, raffleTitle: currentRaffle.title),
+                      icon: const Icon(Icons.insights),
+                      label: const Text('Proyección y gráficas de ventas', textAlign: TextAlign.center),
+                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8)),
+                    ),
+                  ),
+                ],
                 SizedBox(height: isMobile ? 16 : 24),
                 const CommissionDashboardView(),
               ],

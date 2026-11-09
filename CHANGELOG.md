@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.0] - 2026-11-08
+
+- Nueva pantalla "Proyección y gráficas de ventas" (administrador): ventas por día de la semana, boletas acumuladas con proyección hasta el sorteo, ventas diarias, ritmo promedio y asesores con más boletas.
+
 ## [3.3.8] - 2026-11-08
 
 - Panel de ganancias: explica la comisión así: "X% si la boleta está pagada completa • X/2% si está abonada" (también en los rangos).

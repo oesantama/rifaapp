@@ -639,6 +639,13 @@ class ApiService {
     return _localAdvisors;
   }
 
+  /// Ventas por día, por día de la semana y proyección hasta el sorteo (solo administrador).
+  Future<Map<String, dynamic>> getSalesAnalytics(String raffleId) async {
+    final response = await authGet(Uri.parse('$baseUrl/analytics/sales').replace(queryParameters: {'raffleId': raffleId})).timeout(const Duration(seconds: 30));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   /// Resultado del envío del acceso por WhatsApp en la última creación de asesor (null = no se informó).
   static String? lastAdvisorAccessNote;
 

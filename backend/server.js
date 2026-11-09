@@ -8099,6 +8099,70 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   };
 }
 
+// GET Analítica de ventas y proyección de una rifa (solo administrador): ventas por día y por día de la semana, ritmo promedio
+// y cuánto se proyecta vender hasta el sorteo. Días en calendario de Colombia.
+app.get('/api/analytics/sales', adminOnly, (req, res) => {
+  const { raffle } = commissionScope(req, req.query.raffleId);
+  if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada' });
+  const DAY = 24 * 3600 * 1000;
+  const dayMs = d => Date.parse(`${d}T00:00:00Z`);
+  const tickets = (db.tickets || []).filter(t => t.raffleId === raffle.id);
+  const price = Number(raffle.ticketPrice) || 0;
+  const sold = tickets.filter(t => t.status !== 'DISPONIBLE' && t.status !== 'ANULADA');
+  const perDay = new Map(); // día -> { tickets, money }
+  const bump = (d, k, v) => { if (!d) return; const e = perDay.get(d) || { tickets: 0, money: 0 }; e[k] += v; perDay.set(d, e); };
+  const ticketDay = t => { const ms = Date.parse(t.assignedDate || ''); return isNaN(ms) ? null : colombiaDay(ms); };
+  sold.forEach(t => bump(ticketDay(t), 'tickets', 1));
+  tickets.forEach(t => (t.abonos || []).forEach(a => { const ms = Date.parse(a.date || ''); if (!isNaN(ms) && Number(a.amount) > 0) bump(colombiaDay(ms), 'money', Number(a.amount)); }));
+
+  const today = colombiaDay(Date.now());
+  const days = [...perDay.keys()].sort();
+  const first = days[0] || today;
+  const spanDays = Math.max(1, Math.round((dayMs(today) - dayMs(first)) / DAY) + 1);
+  const daily = [];
+  let cumTickets = 0, cumMoney = 0;
+  for (let i = 0; i < spanDays; i++) {
+    const d = new Date(dayMs(first) + i * DAY).toISOString().slice(0, 10);
+    const e = perDay.get(d) || { tickets: 0, money: 0 };
+    cumTickets += e.tickets; cumMoney += e.money;
+    daily.push({ date: d, tickets: e.tickets, money: e.money, cumTickets, cumMoney });
+  }
+  // Por día de la semana (0 = domingo): total y promedio por cada vez que ese día ocurrió
+  const names = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  const weekday = names.map((name, i) => ({ weekday: i, name, tickets: 0, money: 0, occurrences: 0, avgTickets: 0, avgMoney: 0 }));
+  daily.forEach(d => { const w = weekday[new Date(dayMs(d.date)).getUTCDay()]; w.tickets += d.tickets; w.money += d.money; w.occurrences++; });
+  weekday.forEach(w => { w.avgTickets = w.occurrences ? w.tickets / w.occurrences : 0; w.avgMoney = w.occurrences ? w.money / w.occurrences : 0; });
+  const best = [...weekday].sort((a, b) => b.avgTickets - a.avgTickets || b.avgMoney - a.avgMoney)[0];
+
+  const soldCount = sold.length;
+  const collected = tickets.reduce((sum, t) => sum + (Number(t.totalPaid) || 0), 0);
+  const last7 = daily.slice(-7);
+  const avgAll = soldCount / spanDays;
+  const avg7 = last7.reduce((sum, d) => sum + d.tickets, 0) / Math.max(1, last7.length);
+  const drawDay = drawDayOf(raffle);
+  const daysLeft = drawDay ? Math.max(0, Math.round((dayMs(drawDay) - dayMs(today)) / DAY)) : null;
+  const totalTickets = tickets.length;
+  const collectRatio = soldCount > 0 && price > 0 ? Math.min(1, collected / (soldCount * price)) : 0;
+  const project = avg => {
+    if (daysLeft === null) return null;
+    const projSold = Math.min(totalTickets, Math.round(soldCount + avg * daysLeft));
+    return { avgPerDay: avg, tickets: projSold, soldOutPct: totalTickets ? projSold / totalTickets * 100 : 0, revenue: projSold * price, collected: projSold * price * collectRatio };
+  };
+  // Boletas por día necesarias para agotar la rifa a tiempo
+  const neededPerDay = daysLeft && daysLeft > 0 ? Math.max(0, totalTickets - soldCount) / daysLeft : null;
+
+  const byAdvisor = new Map();
+  sold.forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
+
+  res.json({
+    raffleId: raffle.id, raffleTitle: raffle.title, ticketPrice: price, totalTickets, soldCount, collected,
+    today, firstSaleDay: first, spanDays, drawDay, daysLeft, avgAll, avg7, neededPerDay, collectRatio,
+    bestWeekday: best && best.tickets > 0 ? { weekday: best.weekday, name: best.name, avgTickets: best.avgTickets } : null,
+    projectionAll: project(avgAll), projection7: project(avg7),
+    daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets).slice(0, 8)
+  });
+});
+
 // GET Commissions Summary
 /**
  * Raffle and advisors a commissions request may see: only the caller's company (the SuperAdmin passes a
