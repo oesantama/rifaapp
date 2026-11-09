@@ -343,47 +343,42 @@ function getAssignedAdvisorForTicket(ticket, raffle, db) {
 }
 
 function buildMainMenuMessage(companyName, advisor = null) {
-  let msg = `👋 ¡Hola! Te comunicas con *${companyName}* 🏢✨\n`;
+  let msg = `¡Hola! 👋 Te escribe el equipo de *${companyName}*.\n\n`;
   if (advisor) {
-    msg = `👋 ¡Hola! Te atiende *${advisor.name}*, asesor oficial de *${companyName}* 🏢✨\n`;
+    msg = `¡Hola! 👋 Soy *${advisor.name}*, asesor de *${companyName}*.\n\n`;
   }
-  msg += `_Rifas y Sorteos Oficiales_\n\n`;
-  msg += `Con gusto te atendemos. Por favor elige una opción:\n\n`;
-  msg += `1️⃣ 🎟️ *Rifas y Sorteos Oficiales*\n`;
-  msg += `   (Consulta de boletas, números disponibles, plan de premios y pagos)\n\n`;
-  msg += `2️⃣ 👤 *Hablar con un Asesor*\n`;
-  msg += `   (Atención humana personalizada para cualquier consulta)\n\n`;
-  msg += `👉 _Responde con el número de tu opción (*1* o *2*) o cuéntanos qué necesitas._`;
+  msg += `¿En qué te puedo ayudar?\n\n`;
+  msg += `1️⃣ Ver la rifa: números disponibles, premios y cómo pagar\n`;
+  msg += `2️⃣ Hablar con una persona del equipo\n\n`;
+  msg += `Respóndeme con *1* o *2*, o cuéntame directamente qué necesitas 😊`;
   return msg;
 }
 
 function buildAdvisorHandOffMessage(companyName, advisor = null) {
-  let msg = `👤 *¡TRANSFERIDO A ATENCIÓN HUMANA!* 📲✨\n\n`;
+  let msg = `Listo, ya avisé a nuestro equipo 🙌\n\n`;
   if (advisor) {
-    msg += `Nuestro asesor *${advisor.name}* de *${companyName}* ha sido notificado y te responderá directamente por este mismo chat en breve.\n\n`;
+    msg += `*${advisor.name}* te va a escribir por este mismo chat en un momento.\n\n`;
   } else {
-    msg += `Hemos notificado a nuestro equipo de *${companyName}*. Un asesor humano se comunicará contigo por este mismo chat a la brevedad.\n\n`;
+    msg += `Una persona de *${companyName}* te escribe por aquí en un momento.\n\n`;
   }
-  msg += `_(Hemos pausado las respuestas automáticas para este chat para que puedas conversar libremente con el asesor).\n\n`;
-  msg += `💡 *Si en cualquier momento deseas volver al menú automático, solo escribe MENU o BOT.*`;
+  msg += `Mientras tanto dejo de responder automáticamente para que puedan hablar con calma. Si quieres volver conmigo, escribe *MENU*.`;
   return msg;
 }
 
 function buildRaffleMessage(mainRaffle, companyName, digits, opportunities, ticketPrice, drawDateFormatted, lotteryName) {
-  let msg = `🎟️ *RIFAS Y SORTEOS OFICIALES - ${companyName}* 🏆\n\n`;
-  msg += `🎯 *Gran Sorteo:* ${mainRaffle.title}\n`;
+  let msg = `Te cuento sobre la rifa 🎟️\n\n`;
+  msg += `🎯 *${mainRaffle.title}*\n`;
   if (mainRaffle.description) msg += `🏆 *Premio Mayor:* ${mainRaffle.description}\n`;
   msg += `🔢 *Modalidad:* ${digits} cifras (${opportunities} oportunidades por boleta)\n`;
   msg += `📅 *Juega el:* ${drawDateFormatted} con ${lotteryName}\n`;
   msg += `💵 *Valor Boleta:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
   if (mainRaffle.minAbono) msg += `💰 *Abono Mínimo:* $${Number(mainRaffle.minAbono).toLocaleString('es-CO')} COP\n`;
-  msg += `\n📌 *¿Qué deseas hacer?*\n`;
-  msg += `• Escribe un *número de ${digits} cifras* para consultar si está libre (ej: ${digits === 4 ? '1987' : '428'}).\n`;
-  msg += `• Escribe *DISPONIBLES* para ver opciones libres al azar.\n`;
-  msg += `• Escribe *PREMIOS* para conocer el plan de premios y semanales.\n`;
-  msg += `• Escribe *CUENTAS* para ver los medios de pago (Nequi / Bancolombia).\n`;
-  msg += `• Envía la *foto de tu comprobante* si ya realizaste tu pago.\n`;
-  msg += `• Escribe *MENU* para volver al menú de opciones.`;
+  msg += `\n¿Qué quieres hacer?\n`;
+  msg += `• Escríbeme el número que te gusta (de *${digits} cifras*, por ejemplo ${'1234567890'.slice(0, digits)}) y te digo si está libre.\n`;
+  msg += `• Escribe *DISPONIBLES* y te muestro varios números libres.\n`;
+  msg += `• *PREMIOS* para ver qué se gana, *CUENTAS* para saber dónde pagar.\n`;
+  msg += `• Si ya pagaste, mándame la *foto del comprobante*.\n`;
+  msg += `• *MENU* para volver al inicio.`;
   return msg;
 }
 
@@ -561,7 +556,7 @@ function checkDuplicateApprovalNumber(approvalNumber, currentTicketId, db) {
 // ---------------------------------------------------------------------------
 // Entrenamiento del bot: preguntas sin respuesta, pase a asesor y "¿cómo se enteró?"
 // ---------------------------------------------------------------------------
-const ADVISOR_REF_QUESTION = '🤝 *¿Te recomendó algún asesor de nuestro equipo?*\nIndícanos su nombre o código (o escribe *Ninguno* si compraste directamente).';
+const ADVISOR_REF_QUESTION = '🤝 Por cierto, ¿te atendió o te recomendó alguno de nuestros asesores?\nEscríbeme su nombre (aunque sea solo el primero) y lo busco. Si no te acuerdas, dime *no me acuerdo* y te ayudo. Si compraste directamente, escribe *NINGUNO*.';
 const MAX_UNANSWERED = 300;
 const MAX_HANDOFFS = 300;
 
@@ -840,6 +835,19 @@ _(Escribe el número de la opción o tu consulta)_`;
     }
   }
 
+  // Audios, stickers, videos, ubicaciones, contactos y reacciones: no son un "mensaje no entendido" ni cuentan para pasar a un humano
+  if (!userText && !hasImage) {
+    const kinds = Object.keys(msgData);
+    const unreadable = ['audioMessage', 'pttMessage', 'stickerMessage', 'videoMessage', 'ptvMessage', 'contactMessage', 'contactsArrayMessage', 'locationMessage', 'documentMessage', 'documentWithCaptionMessage'];
+    if (!kinds.some(k => unreadable.includes(k))) return { ignored: true }; // reacciones, avisos internos de WhatsApp, etc.
+    const last = (session && session.lastMediaNoticeAt) || 0;
+    if (Date.now() - last > 30 * 60 * 1000) {
+      updateSession(senderPhone, { lastMediaNoticeAt: Date.now() }, db, saveDBCallback, null);
+      await sendTextMessage(instance, senderPhone, 'Por aquí solo alcanzo a leer mensajes escritos y fotos de comprobantes 🙏 Cuéntame en un mensaje de texto qué necesitas, o escribe *ASESOR* si prefieres hablar con una persona.');
+    }
+    return { handled: true };
+  }
+
   // Buscar rifas activas de la empresa
   const activeRaffles = (db.raffles || []).filter(r => 
     (!company || r.companyId === company.id) && 
@@ -884,7 +892,7 @@ _(Escribe el número de la opción o tu consulta)_`;
     const fails = (recent ? (s.failCount || 0) : 0) + 1;
     const limit = cfg.handoff.autoAfterFails;
     if (cfg.handoff.enabled && limit > 0 && fails >= limit) {
-      await startHandoff({ instance, senderPhone, company, advisor, cfg, db, saveDBCallback, raffleId: mainRaffle?.id, reason: 'NO_ENTENDIDO', lastText: userText, intro: '🤔 No logré entender tu mensaje, así que te comunico con una persona.' });
+      await startHandoff({ instance, senderPhone, company, advisor, cfg, db, saveDBCallback, raffleId: mainRaffle?.id, reason: 'NO_ENTENDIDO', lastText: userText, intro: 'Disculpa, no logré entenderte 😅 Mejor te paso con una persona del equipo.' });
       return;
     }
     updateSession(senderPhone, { failCount: fails, lastFailAt: Date.now() }, db, saveDBCallback, mainRaffle?.id);
@@ -922,17 +930,22 @@ _(Escribe el número de la opción o tu consulta)_`;
     const text = String(userText || '');
     const infoText = extractTransferInfo(text);
     const sess = flowCtx.session || {};
+    const pendingFresh = Date.now() - (sess.pendingAt || 0) < 2 * 3600 * 1000; // lo anotado por texto vale 2 horas
     const mine = myTickets(db, mainRaffle.id, senderPhone);
     let hint = '';
     for (const run of (text.match(/\d{3,}/g) || [])) {
       const candidate = run.length < digits ? run.padStart(digits, '0') : run;
       if (mine.some(t => (t.numbers || []).includes(candidate))) { hint = candidate; break; }
     }
-    if (!receiptMedia.base64) console.log(`ℹ️ [WhatsApp Bot] Comprobante de ${senderPhone} sin imagen en base64 (revisar webhook de Evolution).`);
+    if (!receiptMedia.base64) {
+      // El webhook no trajo la imagen: se pide a Evolution. Sin imagen no se registra ningún pago.
+      receiptMedia.base64 = await fetchMediaBase64(instance, key).catch(() => null);
+      if (!receiptMedia.base64) console.log(`ℹ️ [WhatsApp Bot] Comprobante de ${senderPhone} sin imagen en base64 (revisar webhook de Evolution).`);
+    }
     await startReceiptFlow(flowCtx, {
-      amount: detectAmount(text) || sess.pendingAmount || null,
-      approval: infoText.approvalNumber || sess.pendingApproval || '',
-      bank: infoText.bank || sess.pendingBank || '',
+      amount: detectAmount(text) || (pendingFresh ? sess.pendingAmount : null) || null,
+      approval: infoText.approvalNumber || (pendingFresh ? sess.pendingApproval : '') || '',
+      bank: infoText.bank || (pendingFresh ? sess.pendingBank : '') || '',
       hintNumber: hint,
       media: receiptMedia
     });
@@ -945,43 +958,26 @@ _(Escribe el número de la opción o tu consulta)_`;
   const waitingAdvisorRef = refreshedSession?.awaitingAdvisorRef === true &&
     Date.now() - (refreshedSession.awaitingAdvisorRefAt || 0) < 24 * 3600 * 1000;
   if (waitingAdvisorRef && targetTkt && (!targetTkt.advisorName || targetTkt.advisorName === 'Venta WhatsApp')) {
-    // Tras responder, se pregunta (una sola vez) por qué medio se enteró
-    const followUp = () => {
-      if (cfg.howHeard.enabled && !targetTkt.howHeard && !refreshedSession?.howHeard) {
-        updateSession(senderPhone, { awaitingAdvisorRef: false, awaitingHowHeard: true, awaitingHowHeardAt: Date.now() }, db, saveDBCallback, mainRaffle.id);
-        return `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
-      }
-      updateSession(senderPhone, { awaitingAdvisorRef: false }, db, saveDBCallback, mainRaffle.id);
-      return '';
-    };
-    if (cleanLower === 'ninguno' || cleanLower === 'ninguna' || cleanLower === 'nadie' || cleanLower === 'directo' || cleanLower === 'no') {
-      targetTkt.advisorId = null;
-      targetTkt.advisorName = 'Venta Directa WhatsApp';
-      if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
-      await sendTextMessage(instance, senderPhone, `🤝 ¡Perfecto! Tu boleta (${(targetTkt.numbers || []).join(' • ')}) quedó registrada como *compra directa*.${followUp()}`);
+    const normText = botBrain.normalize(userText);
+    if (DIRECT_WORDS.includes(normText) || hasPhrase(normText, ['compre directo', 'ningun asesor', 'sin asesor', 'no fue ningun asesor'])) {
+      await markDirectPurchase(flowCtx, targetTkt);
       return { handled: true };
     }
-
-    // Buscar si escribió el nombre o código de un asesor
-    const matchedAdvisor = (db.advisors || []).find(a => {
-      const advNameClean = (a.name || '').toLowerCase();
-      const advCodeClean = (a.code || '').toLowerCase();
-      const firstName = advNameClean.split(' ')[0];
-      return (advNameClean && cleanLower.includes(advNameClean)) || (advCodeClean && cleanLower.includes(advCodeClean)) ||
-             (firstName.length >= 4 && firstName !== 'asesor' && cleanLower.includes(firstName));
-    });
-
-    if (matchedAdvisor) {
-      targetTkt.advisorId = matchedAdvisor.id;
-      targetTkt.advisorName = matchedAdvisor.name;
-      if (targetTkt.abonos) {
-        targetTkt.abonos.forEach(ab => {
-          ab.sellerId = matchedAdvisor.id;
-          ab.sellerName = matchedAdvisor.name;
-        });
-      }
-      if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
-      await sendTextMessage(instance, senderPhone, `🤝 ¡Excelente! Tu boleta (${(targetTkt.numbers || []).join(' • ')}) ha quedado formalmente vinculada a nuestro asesor *${matchedAdvisor.name}*.${followUp()}`);
+    if (hasPhrase(normText, FORGOT_PHRASES)) {
+      await sendTextMessage(instance, senderPhone, 'No te preocupes 😊 Dime el nombre del asesor, aunque sea solo el primer nombre o una parte, y te muestro los que coinciden para que elijas.\n\nSi no lo recuerdas del todo, escribe *NINGUNO* y la dejo como compra directa.');
+      return { handled: true };
+    }
+    const matches = findAdvisorMatches(db, mainRaffle.companyId || (company && company.id), userText);
+    if (matches.length) {
+      await offerAdvisorChoices(flowCtx, targetTkt, matches);
+      return { handled: true };
+    }
+    // Parece un nombre pero no coincide con nadie (y no es otra consulta): se avisa en vez de quedarse callado
+    const looksLikeName = /^[a-zñ ]{3,40}$/.test(normText) && normText.split(' ').length <= 4 && !botBrain.isGreeting(userText)
+      && !hasPhrase(normText, ALL_INTENT_PHRASES) && !botBrain.matchFaq(cfg, userText) && !botBrain.isHandoffRequest(cfg, userText)
+      && !['menu', 'inicio', 'volver', 'bot', 'ayuda', 'rifa', 'rifas', 'asesor'].includes(normText);
+    if (looksLikeName) {
+      await sendTextMessage(instance, senderPhone, 'No encontré a ningún asesor con ese nombre 🤔 Pruébame con otro nombre o apellido, o escribe *NINGUNO* si compraste directamente.');
       return { handled: true };
     }
   }
@@ -995,10 +991,11 @@ _(Escribe el número de la opción o tu consulta)_`;
       updateSession(senderPhone, {
         pendingAmount: reportedAmount || undefined,
         pendingApproval: reportedApproval || undefined,
-        pendingBank: extractTransferInfo(userText).bank || undefined
+        pendingBank: extractTransferInfo(userText).bank || undefined,
+        pendingAt: Date.now()
       }, db, saveDBCallback, mainRaffle.id);
       await sendTextMessage(instance, senderPhone,
-        `📝 Anoté${reportedAmount ? ` el valor de *${money(reportedAmount)}*` : ''}${reportedApproval ? ` y el comprobante *#${reportedApproval}*` : ''}.\n\nPara registrar el pago envíame ahora la *foto o captura del comprobante*; yo la asocio a tu boleta y te pido confirmar.`);
+        `Gracias, anoté${reportedAmount ? ` el valor de *${money(reportedAmount)}*` : ''}${reportedApproval ? ` y el comprobante *#${reportedApproval}*` : ''} 📝\n\nPero todavía *no he registrado el pago*: para hacerlo necesito que me mandes la *foto o captura del comprobante*. Cuando me llegue, te pregunto a qué boleta corresponde y te pido que me confirmes antes de guardarlo.`);
       return { handled: true };
     }
   }
@@ -1112,10 +1109,8 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   if (await customIntents()) return { handled: true };
 
   // D. ENTRADA EXPLÍCITA AL FLUJO DE RIFAS (Opción 1)
-  if (cleanLower === '1' || cleanLower === 'rifa' || cleanLower === 'rifas' || 
-      cleanLower === 'sorteo' || cleanLower === 'sorteos' || 
-      cleanLower === 'boleta' || cleanLower === 'boletas' ||
-      cleanLower.includes('comprar boleta')) {
+  const normMsg = botBrain.normalize(userText);
+  if (['1', 'rifa', 'rifas', 'sorteo', 'sorteos', 'boleta', 'boletas'].includes(normMsg) || hasPhrase(normMsg, ['comprar boleta', 'comprar una boleta', 'comprar boletas'])) {
     
     updateSession(senderPhone, {
       currentTopic: 'rifa',
@@ -1146,9 +1141,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // 3. CONSULTA DE MEDIOS DE PAGO / CUENTAS (Priorizando cuentas de la rifa)
-  if (cleanLower.includes('cuenta') || cleanLower.includes('pago') || cleanLower.includes('banco') || 
-      cleanLower.includes('nequi') || cleanLower.includes('bancolombia') || cleanLower.includes('daviplata') ||
-      cleanLower.includes('donde pago') || cleanLower.includes('transferencia')) {
+  if (hasPhrase(normMsg, PAY_PHRASES)) {
     
     let bankAccounts = [];
     if (Array.isArray(mainRaffle.transferAccounts) && mainRaffle.transferAccounts.length > 0) {
@@ -1182,7 +1175,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // 4. CONSULTA DE PLAN DE PREMIOS / PREMIOS ACUMULADOS / SEMANALES
-  if (cleanLower.includes('premio') || cleanLower.includes('que se gana') || cleanLower.includes('gana') || cleanLower.includes('mayor') || cleanLower.includes('acumulado')) {
+  if (hasPhrase(normMsg, PRIZE_PHRASES)) {
     let prizeMsg = `🏆 *PLAN DE PREMIOS - ${mainRaffle.title}* 🎁\n\n`;
     prizeMsg += `🌟 *Premio Mayor:*\n${mainRaffle.description || 'Gran Premio Oficial del Sorteo'}\n\n`;
     
@@ -1207,7 +1200,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // 5. CONSULTA DE FECHA, LOTERÍA Y CONDICIONES
-  if (cleanLower.includes('fecha') || cleanLower.includes('cuando juega') || cleanLower.includes('loteria') || cleanLower.includes('con que juega')) {
+  if (hasPhrase(normMsg, DATE_PHRASES)) {
     let dateMsg = `📅 *FECHA Y LOTERÍA DEL SORTEO* 🎰\n\n`;
     dateMsg += `🎯 *Rifa:* ${mainRaffle.title}\n`;
     dateMsg += `🏆 *Lotería:* ${lotteryName}\n`;
@@ -1221,7 +1214,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // 6. CONSULTA DE POLÍTICAS Y REGLAS
-  if (cleanLower.includes('politica') || cleanLower.includes('regla') || cleanLower.includes('termino') || cleanLower.includes('condicion') || cleanLower.includes('como funciona')) {
+  if (hasPhrase(normMsg, RULE_PHRASES)) {
     let rulesMsg = `📜 *TÉRMINOS Y CONDICIONES - ${companyName}* 📋\n\n`;
     rulesMsg += `1️⃣ *Condición de Ganador:* La boleta debe encontrarse 100% cancelada antes del inicio del sorteo oficial de ${lotteryName}.\n`;
     rulesMsg += `2️⃣ *Apartados:* Las boletas apartadas sin abono tienen vigencia temporal fijada por la administración.\n`;
@@ -1234,84 +1227,66 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
   }
 
   // 7. MOSTRAR NÚMEROS DISPONIBLES AL AZAR
-  if (cleanLower.includes('disponible') || cleanLower.includes('libres') || cleanLower.includes('que numeros hay') || 
-      cleanLower.includes('muestrame') || cleanLower.includes('azar') || cleanLower.includes('que queda') || cleanLower === 'numeros') {
+  if (hasPhrase(normMsg, AVAIL_PHRASES)) {
     const availableTickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id && t.status === 'DISPONIBLE');
     if (availableTickets.length === 0) {
-      await sendTextMessage(instance, senderPhone, `❌ *¡Boletas agotadas!* No quedan números disponibles para esta rifa.`);
+      await sendTextMessage(instance, senderPhone, `😕 Se agotaron las boletas de esta rifa, ya no quedan números disponibles.`);
       return { handled: true };
     }
-    const shuffled = [...availableTickets].sort(() => 0.5 - Math.random()).slice(0, 8);
-    let dispMsg = `🎲 *NÚMEROS DISPONIBLES - ${mainRaffle.title}* 🎟️\n\n`;
-    dispMsg += `Aquí tienes opciones de números libres para jugar (${opportunities} números por boleta):\n\n`;
-    shuffled.forEach(t => {
-      dispMsg += `• ${t.numbers.join('  •  ')}\n`;
-    });
-    dispMsg += `\n💵 *Valor:* $${ticketPrice.toLocaleString('es-CO')} COP\n`;
-    dispMsg += `\n✍️ *Para apartar cualquiera de ellos,* solo responde con el número que deseas (ejemplo: *${shuffled[0].numbers[0]}*).`;
+    // 50 boletas al azar, mostradas en orden de menor a mayor; cada boleta con sus números juntos (van en pareja o más)
+    const sample = [...availableTickets].sort(() => 0.5 - Math.random()).slice(0, 50)
+      .sort((x, y) => String((x.numbers || [])[0] || '').localeCompare(String((y.numbers || [])[0] || '')));
+    const perTicket = (opportunities > 1) ? `cada boleta incluye *${opportunities} números*` : 'un número por boleta';
+    let dispMsg = `Estos son algunos números libres de *${mainRaffle.title}* 🎟️\n(${perTicket}; con cualquiera de los números de la boleta la aparto completa)\n\n`;
+    sample.forEach(t => { dispMsg += `▫️ ${(t.numbers || []).join('  •  ')}\n`; });
+    dispMsg += `\nQuedan *${availableTickets.length}* boletas libres${availableTickets.length > sample.length ? ` (te muestro ${sample.length})` : ''}. Valor: ${money(ticketPrice)} COP cada una.\n`;
+    dispMsg += `\n✍️ Escríbeme el número que quieres (de ${digits} cifras, por ejemplo *${sample[0].numbers[0]}*) y te lo aparto. Si quieres ver otros, escribe *DISPONIBLES* otra vez.`;
     await sendTextMessage(instance, senderPhone, dispMsg);
     return { handled: true };
   }
 
-  // 8. BÚSQUEDA Y CONSULTA DE NÚMERO (ESTRICTAMENTE EN OPORTUNIDADES t.numbers)
-  const numbersFound = userText.match(/\d+/g);
-  if (numbersFound && numbersFound.length > 0) {
-    const rawNumber = numbersFound[0];
+  // 8. CONSULTA DE NÚMERO: cada número debe tener las cifras que juega la rifa; el cliente puede mandar uno o varios
+  const numberQuery = parseNumberQuery(userText, digits);
+  if (numberQuery) {
     const tickets = (db.tickets || []).filter(t => t.raffleId === mainRaffle.id);
-
-    // BÚSQUEDA ESTRICTA DE LA OPORTUNIDAD: Se busca ÚNICAMENTE dentro de t.numbers
-    let matchedTicket = tickets.find(t => Array.isArray(t.numbers) && t.numbers.includes(rawNumber));
-
-    // Si no encontró coincidencia exacta y el usuario escribió menos cifras, rellenar con ceros (ej: 345 -> 0345)
-    let paddedNumber = rawNumber;
-    if (!matchedTicket && rawNumber.length < digits) {
-      paddedNumber = rawNumber.padStart(digits, '0');
-      matchedTicket = tickets.find(t => Array.isArray(t.numbers) && t.numbers.includes(paddedNumber));
+    const example = '1234567890'.slice(0, digits);
+    const lines = [];
+    const freeTickets = [];
+    const seenTickets = new Set();
+    let singleReply = null;
+    for (const q of numberQuery) {
+      if (q.tooLong) {
+        lines.push(`❌ *${q.raw}* trae ${q.raw.length} cifras y esta rifa se juega con *${digits}*. Escríbelo con ${digits} cifras (por ejemplo ${example}).`);
+        continue;
+      }
+      const t = tickets.find(x => Array.isArray(x.numbers) && x.numbers.includes(q.n));
+      if (!t) { lines.push(`❔ El *${q.n}* no está en las oportunidades de este sorteo.`); continue; }
+      if (seenTickets.has(t.id)) { lines.push(`ℹ️ El *${q.n}* es de la misma boleta que ya te mencioné (${numbersOf(t)}).`); continue; }
+      seenTickets.add(t.id);
+      if (t.status === 'DISPONIBLE') { freeTickets.push({ t, n: q.n }); lines.push(`✅ El *${q.n}* está libre (boleta ${numbersOf(t)}).`); continue; }
+      if (t.buyerPhone === senderPhone) {
+        const left = balanceOf(t, ticketPrice);
+        lines.push(`ℹ️ El *${q.n}* ya es tuyo: boleta ${numbersOf(t)}, ${STATUS_LABEL[t.status] || t.status}${left > 0 ? `, saldo pendiente ${money(left)}` : ''}.`);
+        continue;
+      }
+      const statusText = (t.status === 'PAGADA' || t.status === 'CONFIRMADA') ? 'vendido' : (t.status === 'ABONO_PARCIAL' ? 'con abono' : 'apartado');
+      lines.push(`❌ El *${q.n}* ya no está disponible (${statusText}).`);
     }
-
-    if (matchedTicket) {
-      if (matchedTicket.status === 'DISPONIBLE') {
-        // Se muestra y se pide confirmación: nunca se aparta (ni se cambia una boleta) sin que el cliente confirme
-        await offerReservation(flowCtx, matchedTicket, paddedNumber);
-        return { handled: true };
-      } else if (matchedTicket.buyerPhone === senderPhone) {
-        const left = balanceOf(matchedTicket, ticketPrice);
-        await sendTextMessage(instance, senderPhone,
-          `ℹ️ El número *${paddedNumber}* ya es tuyo: boleta *${numbersOf(matchedTicket)}*, ${STATUS_LABEL[matchedTicket.status] || matchedTicket.status}${left > 0 ? `, saldo pendiente *${money(left)}*` : ''}.\n\n${left > 0 ? 'Para pagar o abonar, envíame la *foto del comprobante*.' : 'Está al día. ¡Mucha suerte! 🍀'}`);
-        return { handled: true };
-      } else {
-        const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
-        let statusText = 'APARTADO';
-        if (matchedTicket.status === 'PAGADA' || matchedTicket.status === 'CONFIRMADA') statusText = 'VENDIDO';
-        if (matchedTicket.status === 'ABONO_PARCIAL') statusText = 'CON ABONO PARCIAL';
-
-        let busyReply = `❌ *El número ${paddedNumber} ya NO está disponible.* (Estado: *${statusText}*)\n\n`;
-        if (availableAlts.length > 0) {
-          busyReply += `🎲 *Te sugerimos estas opciones disponibles:*\n`;
-          availableAlts.forEach(a => {
-            busyReply += `• ${a.numbers.join('  •  ')}\n`;
-          });
-          busyReply += `\n¿Te gustaría apartar alguno de ellos? Escribe el número que prefieras o escribe *DISPONIBLES*.`;
-        } else {
-          busyReply += `💡 Puedes escribir otro número de ${digits} cifras para verificar si está libre.`;
-        }
-
-        await sendTextMessage(instance, senderPhone, busyReply);
-        return { handled: true };
-      }
-    } else {
-      const availableAlts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
-      let notFoundReply = `ℹ️ El número *${rawNumber}* no se encuentra en las oportunidades de este sorteo (*juega con ${digits} cifras*).\n\n`;
-      if (availableAlts.length > 0) {
-        notFoundReply += `🎲 *Te sugerimos estos números que sí están disponibles:*\n`;
-        availableAlts.forEach(a => {
-          notFoundReply += `• ${a.numbers.join('  •  ')}\n`;
-        });
-        notFoundReply += `\nEscribe el número que desees consultar o escribe *DISPONIBLES*.`;
-      }
-      await sendTextMessage(instance, senderPhone, notFoundReply);
+    if (numberQuery.length === 1 && freeTickets.length === 1) {
+      await offerReservation(flowCtx, freeTickets[0].t, freeTickets[0].n);
       return { handled: true };
     }
+    let reply = lines.join('\n');
+    if (!freeTickets.length) {
+      const alts = tickets.filter(t => t.status === 'DISPONIBLE').slice(0, 3);
+      if (alts.length) reply += `\n\nSi quieres, te sugiero estos que sí están libres:\n${alts.map(a => `▫️ ${a.numbers.join('  •  ')}`).join('\n')}\n\nEscríbeme el que prefieras o escribe *DISPONIBLES* para ver más.`;
+      await sendTextMessage(instance, senderPhone, reply);
+      return { handled: true };
+    }
+    if (freeTickets.length > 1) reply += `\n\nNada queda apartado hasta que tú me confirmes. Te voy preguntando de a una boleta: empecemos con la del *${freeTickets[0].n}*; después seguimos con ${freeTickets.slice(1).map(f => `*${f.n}*`).join(', ')}.`;
+    await sendTextMessage(instance, senderPhone, reply);
+    await offerReservation(flowCtx, freeTickets[0].t, freeTickets[0].n);
+    return { handled: true };
   }
 
   // 9. FALLBACK Y ENRUTAMIENTO INTELIGENTE
@@ -1337,6 +1312,68 @@ const NO_WORDS = new Set(['no', 'n', 'cancelar', 'cancela', 'cancelo', 'no graci
 const money = n => `$${Math.round(Number(n) || 0).toLocaleString('es-CO')}`;
 const isYes = text => YES_WORDS.has(botBrain.normalize(text));
 const isNo = text => NO_WORDS.has(botBrain.normalize(text));
+
+/** true si alguna de las frases aparece como palabra(s) completas (no dentro de otra palabra: "mayor" no está en "mayoría"). */
+const hasPhrase = (norm, list) => { const padded = ` ${norm} `; return list.some(w => padded.includes(` ${w} `)); };
+const PAY_PHRASES = ['cuenta', 'cuentas', 'banco', 'bancos', 'nequi', 'bancolombia', 'daviplata', 'transferencia', 'transferencias', 'pago', 'pagos', 'donde pago', 'como pago', 'como puedo pagar', 'medios de pago', 'formas de pago', 'metodos de pago', 'a donde consigno', 'donde consigno'];
+const PRIZE_PHRASES = ['premio', 'premios', 'que se gana', 'que gano', 'cuanto gano', 'cuanto se gana', 'que gana', 'acumulado', 'acumulados', 'plan de premios'];
+const DATE_PHRASES = ['fecha', 'cuando juega', 'cuando se juega', 'que dia juega', 'loteria', 'con que juega', 'con cual loteria'];
+const RULE_PHRASES = ['politica', 'politicas', 'regla', 'reglas', 'termino', 'terminos', 'condicion', 'condiciones', 'como funciona'];
+const AVAIL_PHRASES = ['disponible', 'disponibles', 'libre', 'libres', 'que numeros hay', 'muestrame', 'azar', 'que queda', 'numeros'];
+const ALL_INTENT_PHRASES = [...PAY_PHRASES, ...PRIZE_PHRASES, ...DATE_PHRASES, ...RULE_PHRASES, ...AVAIL_PHRASES];
+
+// ---- Número escrito por el cliente: solo cuenta como consulta de boleta si el mensaje es básicamente números
+const NUMBER_FILLERS = new Set(['quiero', 'quisiera', 'me', 'mi', 'el', 'la', 'los', 'las', 'un', 'una', 'numero', 'numeros', 'boleta', 'boletas', 'apartar', 'apartame', 'aparta', 'apartalo', 'dame', 'deme', 'separame', 'separa', 'comprar', 'compro', 'y', 'e', 'o', 'con', 'para', 'por', 'favor', 'porfa', 'tienes', 'tiene', 'esta', 'disponible', 'libre', 'hay', 'que', 'si', 'tambien', 'ademas', 'cual', 'es', 'del', 'de', 'al', 'ese', 'este', 'estos', 'esos', 'mas', 'otro', 'otros', 'seria', 'gustaria', 'jugar', 'juego', 'quedo', 'queda']);
+/**
+ * Cifras que pide la rifa (digits): cada número debe tener exactamente esa cantidad. Con menos se completa con ceros a la
+ * izquierda (345 → 0345); con más se rechaza sin cortar nada. Devuelve null si el mensaje no es una consulta de número
+ * (cédula, celular, valores, horas, frases largas), para que no se confunda con otra cosa.
+ */
+function parseNumberQuery(userText, digits) {
+  const norm = botBrain.normalize(userText);
+  const runs = norm.match(/\d+/g) || [];
+  if (!runs.length) return null;
+  if (runs.some(r => r.length >= 7)) return null;
+  if (/\b(cedula|nit|telefono|celular|cc|pesos|valor|abono|abone|transfer\w*|consign\w*|hora|horas|correo|email)\b/.test(norm) || /\ba las\b/.test(norm)) return null;
+  const unknown = norm.replace(/\d+/g, ' ').split(' ').filter(w => w && !NUMBER_FILLERS.has(w));
+  if (unknown.length > 1) return null;
+  const seen = new Set();
+  const out = [];
+  for (const raw of runs) {
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    if (raw.length > digits) out.push({ raw, tooLong: true });
+    else out.push({ raw, n: raw.length < digits ? raw.padStart(digits, '0') : raw, padded: raw.length < digits });
+  }
+  return out.slice(0, 8);
+}
+
+// ---- Asesor que lo atendió: se busca por nombre/código dentro de la MISMA empresa de la rifa
+const ADVISOR_STOP = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'asesor', 'asesora', 'con', 'fue', 'me', 'atendio', 'vendio', 'que', 'se', 'llama', 'llamaba', 'creo', 'era', 'un', 'una', 'senor', 'senora', 'don', 'dona', 'nombre', 'es', 'mi', 'y', 'no', 'recuerdo', 'acuerdo', 'compre', 'con', 'por', 'fue']);
+const FORGOT_PHRASES = ['no me acuerdo', 'no recuerdo', 'no lo recuerdo', 'no se', 'no se como se llama', 'no me acuerdo como se llama', 'olvide', 'se me olvido', 'ni idea', 'no sabria', 'no tengo el nombre'];
+const DIRECT_WORDS = ['ninguno', 'ninguna', 'nadie', 'directo', 'directa', 'no', 'sin asesor'];
+function findAdvisorMatches(db, companyId, text) {
+  if (!companyId) return [];
+  const tokens = botBrain.normalize(text).split(' ').filter(w => w.length >= 3 && !ADVISOR_STOP.has(w));
+  if (!tokens.length) return [];
+  const scored = (db.advisors || [])
+    .filter(a => a.companyId === companyId && (a.status || 'ACTIVO') === 'ACTIVO')
+    .map(a => {
+      const nameTokens = botBrain.normalize(a.name).split(' ').filter(Boolean);
+      const code = botBrain.normalize(a.code);
+      let score = 0;
+      for (const t of tokens) {
+        if (code && code === t) score += 100;
+        if (nameTokens.includes(t)) score += 3;
+        else if (nameTokens.some(n => n.startsWith(t))) score += 2;
+        else if (t.length >= 4 && nameTokens.some(n => n.includes(t))) score += 1;
+      }
+      return { a, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((x, y) => y.score - x.score || String(x.a.name).localeCompare(String(y.a.name)));
+  return scored.slice(0, 6).map(x => x.a);
+}
 
 function setPending(senderPhone, pending, db, saveDBCallback, raffleId) {
   updateSession(senderPhone, { pending: pending ? { ...pending, at: Date.now(), reminders: 0 } : null }, db, saveDBCallback, raffleId || null);
@@ -1451,7 +1488,7 @@ async function sendReservedReply(ctx, ticket, number, changed) {
   const askAdvisorRef = missing.length === 0 && !hasRealAdvisor && ticket.advisorName !== 'Venta Directa WhatsApp';
   const askHowHeard = missing.length === 0 && !askAdvisorRef && cfg.howHeard.enabled && !ticket.howHeard && !session?.howHeard;
 
-  let msg = `${changed ? '🔄 *¡BOLETA CAMBIADA!*' : '✅ *¡BOLETA APARTADA!*'} 🎟️\n\n`;
+  let msg = `${changed ? '🔄 ¡Listo, cambié tu boleta!' : '✅ ¡Listo, ya te aparté la boleta!'} 🎟️\n\n`;
   msg += `🔢 *Tus números:* ${numbersOf(ticket)}\n`;
   msg += `💵 *Valor:* ${money(priceOf(ticket, ticketPrice))} COP\n`;
   msg += `🎯 *Sorteo:* ${mainRaffle.title}${drawDateFormatted ? ` el ${drawDateFormatted}` : ''}\n`;
@@ -1462,10 +1499,10 @@ async function sendReservedReply(ctx, ticket, number, changed) {
     msg += `\nSi algún dato cambió, envíanos el dato corregido. Si todo está bien, no necesitas hacer nada más.`;
   } else {
     if (profileLines(profile).length) msg += `\n✅ *Datos ya registrados:*\n${profileLines(profile).join('\n')}\n`;
-    msg += `\n📋 *Para completar tu Soporte Digital de Compra, indícanos:*\n${missing.map((m, i) => `${i + 1}️⃣ *${m}*`).join('\n')}\n`;
-    msg += `\n✍️ *Envíalos en tu siguiente mensaje.*`;
+    msg += `\n📋 Para tu soporte de compra me faltan estos datos:\n${missing.map((m, i) => `${i + 1}️⃣ *${m}*`).join('\n')}\n`;
+    msg += `\nPuedes mandármelos todos en un solo mensaje 😊`;
   }
-  msg += `\n\n💳 Escribe *PAGOS* para ver las cuentas. Cuando pagues, envíame la *foto del comprobante* y yo lo asocio a tu boleta.`;
+  msg += `\n\n💳 Para pagar, escribe *PAGOS* y te muestro las cuentas. Cuando pagues, mándame la *foto del comprobante* y la asocio a tu boleta.`;
   if (askAdvisorRef) msg += `\n\n${ADVISOR_REF_QUESTION}`;
   else if (askHowHeard) msg += `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
 
@@ -1512,8 +1549,8 @@ async function offerReservation(ctx, ticket, number) {
   const others = ticket.numbers.filter(n => n !== number);
   const assignedAdv = getAssignedAdvisorForTicket(ticket, mainRaffle, db) || ctx.advisor;
 
-  let head = `✅ *¡EL NÚMERO ${number} ESTÁ DISPONIBLE!* 🎉\n\n`;
-  head += `🔢 *Juegas con:* *${number}* ${others.length ? `(y también con *${others.join(', ')}*)` : ''}\n`;
+  let head = `¡Buena elección! El *${number}* está libre 🎉\n\n`;
+  head += `🔢 *Juegas con:* *${number}*${others.length ? ` y también con *${others.join(', ')}*` : ''}\n`;
   head += `💵 *Valor Boleta:* ${money(ticketPrice)} COP\n`;
   if (mainRaffle.minAbono) head += `💰 *Abono Mínimo:* ${money(mainRaffle.minAbono)} COP\n`;
   head += `🎯 *Sorteo:* ${mainRaffle.title}\n🏆 *Juega con:* ${lotteryName} el ${drawDateFormatted}`;
@@ -1521,7 +1558,7 @@ async function offerReservation(ctx, ticket, number) {
 
   if (mine.length === 0) {
     setPending(senderPhone, { type: 'RESERVE', ticketId: ticket.id, number }, db, saveDBCallback, mainRaffle.id);
-    await sendTextMessage(instance, senderPhone, `${head}\n\n✍️ *¿Confirmas que deseas apartarla?*\nResponde *SÍ* para apartarla o *NO* para cancelar.`);
+    await sendTextMessage(instance, senderPhone, `${head}\n\n¿La aparto a tu nombre? Respóndeme *SÍ* y la aparto, o *NO* si prefieres dejarlo así.`);
     return;
   }
 
@@ -1706,11 +1743,62 @@ const planCarry = plan => ({
   proofTotal: plan.proofTotal || 0, proofUnreadable: !!plan.proofUnreadable, accountIds: plan.accountIds || []
 });
 
+/** Pregunta cuál de los asesores que coinciden es el correcto (siempre con la opción de "ninguno de estos" y "compra directa"). */
+async function offerAdvisorChoices(ctx, ticket, advisors) {
+  const { instance, senderPhone, db, saveDBCallback, mainRaffle } = ctx;
+  let msg = advisors.length === 1 ? 'Encontré a este asesor, ¿es él/ella?\n\n' : 'Encontré estos asesores, ¿cuál es?\n\n';
+  advisors.forEach((a, i) => { msg += `${i + 1}️⃣ ${a.name}\n`; });
+  msg += `${advisors.length + 1}️⃣ Ninguno de estos (busco otro nombre)\n`;
+  msg += `${advisors.length + 2}️⃣ Compré directo, sin asesor\n\n`;
+  msg += 'Responde con el número de la opción.';
+  setPending(senderPhone, { type: 'ADVISOR_PICK', ticketId: ticket.id, advisorIds: advisors.map(a => a.id) }, db, saveDBCallback, mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, msg);
+}
+
+/** Pregunta (una sola vez) por qué medio se enteró, si aplica, después de resolver el asesor. */
+function advisorFollowUp(ctx, ticket) {
+  const { senderPhone, db, saveDBCallback, mainRaffle, cfg } = ctx;
+  const sess = getSession(senderPhone, db);
+  if (cfg.howHeard.enabled && !ticket.howHeard && !(sess && sess.howHeard)) {
+    updateSession(senderPhone, { awaitingAdvisorRef: false, awaitingHowHeard: true, awaitingHowHeardAt: Date.now() }, db, saveDBCallback, mainRaffle.id);
+    return `\n\n${buildHowHeardQuestion(cfg.howHeard.options)}`;
+  }
+  updateSession(senderPhone, { awaitingAdvisorRef: false }, db, saveDBCallback, mainRaffle.id);
+  return '';
+}
+
+async function markDirectPurchase(ctx, ticket) {
+  const { instance, senderPhone, saveDBCallback, mainRaffle } = ctx;
+  setPending(senderPhone, null, ctx.db, saveDBCallback, mainRaffle.id);
+  ticket.advisorId = null;
+  ticket.advisorName = 'Venta Directa WhatsApp';
+  if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, `Perfecto 🤝 Tu boleta (${numbersOf(ticket)}) quedó registrada como *compra directa*.${advisorFollowUp(ctx, ticket)}`);
+}
+
+async function linkAdvisor(ctx, ticket, adv) {
+  const { instance, senderPhone, saveDBCallback, mainRaffle } = ctx;
+  // Un asesor solo pertenece a una empresa: nunca se asigna uno de otra
+  if (adv.companyId !== mainRaffle.companyId) { await markDirectPurchase(ctx, ticket); return; }
+  setPending(senderPhone, null, ctx.db, saveDBCallback, mainRaffle.id);
+  ticket.advisorId = adv.id;
+  ticket.advisorName = adv.name;
+  (ticket.abonos || []).forEach(ab => { ab.sellerId = adv.id; ab.sellerName = adv.name; });
+  if (typeof saveDBCallback === 'function') saveDBCallback(mainRaffle.id);
+  await sendTextMessage(instance, senderPhone, `¡Genial! 🤝 Dejé tu boleta (${numbersOf(ticket)}) vinculada con *${adv.name}*.${advisorFollowUp(ctx, ticket)}`);
+}
+
 async function startReceiptFlow(ctx, info) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, session } = ctx;
   const soporte = await storeReceiptMedia(ctx, info.media);
   const mine = myTickets(db, mainRaffle.id, senderPhone);
   const payable = mine.filter(t => balanceOf(t, ticketPrice) > 0);
+
+  // Sin la imagen del soporte no se registra nada: se pide de nuevo
+  if (!soporte || !soporte.hash) {
+    await sendTextMessage(instance, senderPhone, 'Me llegó el mensaje pero no pude abrir la imagen del comprobante 😕 ¿Me la mandas de nuevo como foto o captura? Mientras no la tenga, no registro el pago.');
+    return;
+  }
 
   if (mine.length === 0) {
     await sendTextMessage(instance, senderPhone,
@@ -1902,6 +1990,11 @@ async function receiptConfirm(ctx, ticket, plan) {
 
 async function receiptRegister(ctx, pending, opts = {}) {
   const { instance, senderPhone, db, saveDBCallback, mainRaffle, ticketPrice, advisor, cfg, session } = ctx;
+  if (!pending.soporte || !pending.soporte.hash) {
+    setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
+    await sendTextMessage(instance, senderPhone, 'Para registrar un pago necesito la foto del comprobante. Mándamela y seguimos 🙏');
+    return;
+  }
   const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
   if (!ticket || ticket.buyerPhone !== senderPhone) {
     setPending(senderPhone, null, db, saveDBCallback, mainRaffle.id);
@@ -2154,6 +2247,33 @@ async function handlePendingFlow(ctx) {
     }
     if (wantsHuman) { clear(); return false; }
     return remind(`Responde *SÍ* para registrar este pago o *NO* para cancelar.`);
+  }
+
+  if (pending.type === 'ADVISOR_PICK') {
+    if (wantsHuman) { clear(); return false; }
+    const ticket = (db.tickets || []).find(t => t.id === pending.ticketId);
+    if (!ticket) { clear(); return false; }
+    const ids = pending.advisorIds || [];
+    const n = ids.length;
+    if (DIRECT_WORDS.includes(norm) || hasPhrase(norm, ['compre directo', 'sin asesor'])) { await markDirectPurchase(ctx, ticket); return true; }
+    if (/^\d{1,2}$/.test(norm)) {
+      const pick = parseInt(norm, 10);
+      if (pick >= 1 && pick <= n) {
+        const adv = (db.advisors || []).find(a => a.id === ids[pick - 1]);
+        if (adv) { await linkAdvisor(ctx, ticket, adv); return true; }
+      }
+      if (pick === n + 1) {
+        clear();
+        await sendTextMessage(instance, senderPhone, 'Listo, escríbeme otro nombre (o apellido) y lo busco. Si prefieres dejarla sin asesor, escribe *NINGUNO*.');
+        return true;
+      }
+      if (pick === n + 2) { await markDirectPurchase(ctx, ticket); return true; }
+      return remind(`Responde con el número de la lista (de 1 a ${n + 2}).`);
+    }
+    // Escribió otro nombre en vez de un número: se busca de nuevo
+    const again = findAdvisorMatches(db, mainRaffle.companyId || (ctx.company && ctx.company.id), userText);
+    if (again.length) { await offerAdvisorChoices(ctx, ticket, again); return true; }
+    return remind(`No encontré a nadie con ese nombre 🤔 Responde con el número de la lista (de 1 a ${n + 2}) o escribe otro nombre.`);
   }
 
   // Reserva / cambio de boleta

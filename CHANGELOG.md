@@ -8,6 +8,15 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.6] - 2026-11-09
+
+- Bot de WhatsApp, tono más natural en el menú, la rifa, la transferencia a una persona, el apartado y las preguntas.
+- Bot: al preguntar por el asesor que lo atendió, si el cliente no se acuerda busca por nombre o código (solo asesores de la misma empresa), muestra los que coinciden para elegir y da las opciones «ninguno de estos» y «compré directo».
+- Bot: el pago contado por texto NO se registra; se exige la foto del comprobante (si la imagen no llega o no se puede abrir, se pide de nuevo) y la confirmación del cliente. Lo anotado por texto vence a las 2 horas.
+- Bot: «DISPONIBLES» muestra 50 boletas ordenadas, cada una con sus números juntos (en pareja o más), y cuántas quedan.
+- Bot: el número que escribe el cliente se valida con las cifras de la rifa (completa con ceros si faltan, rechaza si sobran) y acepta varios números en un mensaje.
+- Bot: ya no confunde cédulas, celulares, horas o valores con un número de boleta; las palabras clave (premio, pagos, fecha…) se buscan como palabras completas («soy mayor de edad» ya no abre el plan de premios); audios, stickers y reacciones ya no cuentan como «no entendido» ni pasan el chat a un humano.
+
 ## [3.4.5] - 2026-11-09
 
 - Proyección: sección informativa (solo administrador) con las boletas del chatbot apartadas, abonadas y pagadas, y el detalle de qué asesores quedaron referenciados y cuántas no tienen asesor.
