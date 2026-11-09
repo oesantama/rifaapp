@@ -15,7 +15,7 @@ import 'package:rifaapp/ui/features/advisors/view_models/advisor_view_model.dart
 /// Cómo se le paga al asesor, dicho claro: "10% de lo recaudado" o "$10 por boleta vendida".
 String commissionPayText(String rateType, double value) {
   final v = value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(1);
-  return rateType == 'VALOR_FIJO' ? '\$$v por boleta vendida' : '$v% de lo recaudado';
+  return rateType == 'VALOR_FIJO' ? '\$$v por boleta vendida' : '$v% de lo pagado (${(value / 2) % 1 == 0 ? (value / 2).toStringAsFixed(0) : (value / 2).toStringAsFixed(1)}% de lo abonado)';
 }
 
 class CommissionDashboardView extends StatefulWidget {
@@ -515,7 +515,7 @@ class _CommissionDashboardViewState extends State<CommissionDashboardView> {
                                   border: Border.all(color: Colors.amber, width: 0.8),
                                 ),
                                 child: Text(
-                                  '${tier.min}${tier.max != null ? "-${tier.max}" : "+"} boletas ➔ ${tier.type == "PORCENTAJE" ? "${tier.rate.toStringAsFixed(0)}% de lo recaudado" : "\$${tier.rate.toStringAsFixed(0)} por boleta"}',
+                                  '${tier.min}${tier.max != null ? "-${tier.max}" : "+"} boletas ➔ ${tier.type == "PORCENTAJE" ? "${tier.rate.toStringAsFixed(0)}% de lo pagado" : "\$${tier.rate.toStringAsFixed(0)} por boleta"}',
                                   style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                               ),

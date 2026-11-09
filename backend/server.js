@@ -8022,6 +8022,13 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
   const officeSold = office.filter(counts).length;
   const officeCollected = office.reduce((sum, t) => sum + (t.totalPaid || 0), 0);
 
+  // En comisión por PORCENTAJE: el porcentaje del rango completo se gana sobre lo recaudado en boletas PAGADAS; sobre lo recaudado en boletas
+  // solo ABONADAS se gana la MITAD del porcentaje (pasa al completo cuando la boleta se paga).
+  const isPaidT = t => t.status === 'PAGADA' || t.status === 'CONFIRMADA';
+  const streetPaidCollected = street.filter(isPaidT).reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+  const streetPartialCollected = street.filter(t => t.status === 'ABONO_PARCIAL').reduce((sum, t) => sum + (t.totalPaid || 0), 0);
+  const percentEarned = rate => (streetPaidCollected * rate + streetPartialCollected * rate / 2) / 100;
+
   let commissionEarned = 0;
   let activeTier = null;
   let tierDescription = '';
@@ -8048,19 +8055,19 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
         commissionEarned = streetHeld * rate;
         tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
       } else {
-        commissionEarned = (streetCollected * rate) / 100;
-        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de recaudado`;
+        commissionEarned = percentEarned(rate);
+        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de lo pagado (${rate / 2}% de lo abonado)`;
       }
     } else {
-      commissionEarned = (streetCollected * commVal) / 100;
+      commissionEarned = percentEarned(commVal);
       tierDescription = `${commVal}% base`;
     }
   } else if (commType === 'VALOR_FIJO') {
     commissionEarned = streetSold * commVal;
     tierDescription = `$${commVal.toLocaleString('es-CO')} COP por boleta`;
   } else {
-    commissionEarned = (streetCollected * commVal) / 100;
-    tierDescription = `${commVal}% del dinero recaudado`;
+    commissionEarned = percentEarned(commVal);
+    tierDescription = `${commVal}% de lo pagado (${commVal / 2}% de lo abonado)`;
   }
   if (type === 'INTEGRAL' && officeSold > 0) tierDescription += ` • ${officeSold} de oficina sin comisión`;
 
@@ -8077,7 +8084,8 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
       if (balance <= 0) continue;
       pendingTicketsCount++;
       pendingBalance += balance;
-      if (rateType === 'PORCENTAJE') pendingToEarn += balance * rateValue / 100;
+      // Cuando la boleta se pague gana el porcentaje completo sobre su precio; lo que ya gana por el abono es la mitad
+      if (rateType === 'PORCENTAJE') pendingToEarn += ((Number(t.price) || 0) * rateValue - (t.status === 'ABONO_PARCIAL' ? (Number(t.totalPaid) || 0) * rateValue / 2 : 0)) / 100;
       else if (t.status === 'RESERVADA') pendingToEarn += rateValue;
     }
   }
@@ -8086,7 +8094,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
     pendingToEarn, pendingBalance, pendingTicketsCount, rateType, rateValue,
     ticketsReserved, ticketsPartial, ticketsPaid, ticketsHeld: ticketsReserved + ticketsPartial + ticketsPaid,
     type, advTickets, totalTicketsSold, totalCollected, commissionEarned, activeTier, tierDescription,
-    streetSold, streetCollected, officeSold, officeCollected,
+    streetSold, streetCollected, streetPaidCollected, streetPartialCollected, officeSold, officeCollected,
     zoneUndefined: type === 'INTEGRAL' ? advTickets.filter(t => !SALE_ZONES.includes(t.saleZone)).length : 0
   };
 }
