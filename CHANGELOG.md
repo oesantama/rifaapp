@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.3.8] - 2026-11-08
+
+- Panel de ganancias: explica la comisión así: "X% si la boleta está pagada completa • X/2% si está abonada" (también en los rangos).
+
 ## [3.3.7] - 2026-11-08
 
 - Comisión por porcentaje: el porcentaje del rango completo se gana sobre lo recaudado en boletas PAGADAS; sobre las solo ABONADAS se gana la mitad.

@@ -8056,7 +8056,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
         tierDescription = `Rango (${activeTier.min}${maxStr} boletas): $${rate.toLocaleString('es-CO')} COP/boleta`;
       } else {
         commissionEarned = percentEarned(rate);
-        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% de lo pagado (${rate / 2}% de lo abonado)`;
+        tierDescription = `Rango (${activeTier.min}${maxStr} boletas): ${rate}% si está pagada completa • ${rate / 2}% si está abonada`;
       }
     } else {
       commissionEarned = percentEarned(commVal);
@@ -8067,7 +8067,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
     tierDescription = `$${commVal.toLocaleString('es-CO')} COP por boleta`;
   } else {
     commissionEarned = percentEarned(commVal);
-    tierDescription = `${commVal}% de lo pagado (${commVal / 2}% de lo abonado)`;
+    tierDescription = `${commVal}% si está pagada completa • ${commVal / 2}% si está abonada`;
   }
   if (type === 'INTEGRAL' && officeSold > 0) tierDescription += ` • ${officeSold} de oficina sin comisión`;
 
