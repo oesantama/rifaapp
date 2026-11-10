@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.15] - 2026-11-10
+
+- Modo oscuro: el estado DISPONIBLE y los textos de las tarjetas de boletas se leen bien (texto claro y fondo reforzado); los estados usan tonos más claros en oscuro.
+- Modo oscuro: fichas de filtro, menú lateral, menú inferior y pestañas con colores de mayor contraste y estado seleccionado más claro.
+
 ## [3.4.14] - 2026-11-10
 
 - Tipo de venta: al iniciar el servidor se completa el tipo (oficina/calle) de las boletas vendidas que no lo tenían: sin asesor o asesor de punto = OFICINA, asesor de calle = CALLE (el integral no se adivina). Queda registro en la auditoría.

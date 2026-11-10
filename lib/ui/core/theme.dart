@@ -115,13 +115,9 @@ class AppTheme {
         foregroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: surface,
-        selectedItemColor: primaryBlue,
+        selectedItemColor: isDark ? const Color(0xFF60A5FA) : primaryBlue,
         unselectedItemColor: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
         selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         unselectedLabelStyle: const TextStyle(fontSize: 11),
@@ -129,17 +125,37 @@ class AppTheme {
         elevation: 12,
       ),
       navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: surface,
-        indicatorColor: primaryBlue.withValues(alpha: 0.14),
-        selectedIconTheme: const IconThemeData(color: primaryBlue),
-        selectedLabelTextStyle: const TextStyle(color: primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
+        backgroundColor: isDark ? const Color(0xFF0F172A) : surface,
+        indicatorColor: isDark ? primaryBlue.withValues(alpha: 0.28) : primaryBlue.withValues(alpha: 0.14),
+        selectedIconTheme: IconThemeData(color: isDark ? const Color(0xFFBFDBFE) : primaryBlue),
+        unselectedIconTheme: IconThemeData(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+        selectedLabelTextStyle: TextStyle(color: isDark ? const Color(0xFF93C5FD) : primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
+        unselectedLabelTextStyle: TextStyle(color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B), fontSize: 12),
       ),
-      tabBarTheme: const TabBarThemeData(
-        labelColor: primaryBlue,
-        indicatorColor: primaryBlue,
+      chipTheme: ChipThemeData(
+        backgroundColor: isDark ? const Color(0xFF1E293B) : null,
+        selectedColor: primaryBlue.withValues(alpha: isDark ? 0.32 : 0.2),
+        side: BorderSide(color: isDark ? const Color(0xFF475569) : border),
+        labelStyle: TextStyle(color: isDark ? const Color(0xFFE2E8F0) : null, fontWeight: FontWeight.w600),
+        checkmarkColor: isDark ? Colors.white : primaryBlue,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelColor: isDark ? const Color(0xFF60A5FA) : primaryBlue,
+        unselectedLabelColor: isDark ? const Color(0xFF94A3B8) : null,
+        indicatorColor: isDark ? const Color(0xFF60A5FA) : primaryBlue,
         labelStyle: TextStyle(fontWeight: FontWeight.w700),
       ),
     );
+  }
+
+  /// Color de texto legible según el modo: en oscuro aclara los tonos que son oscuros en el modo claro.
+  static Color readable(BuildContext context, Color color) {
+    if (Theme.of(context).brightness != Brightness.dark) return color;
+    final hsl = HSLColor.fromColor(color);
+    if (hsl.lightness >= 0.7) return color;
+    return hsl.withLightness(0.75).withSaturation((hsl.saturation * 0.9).clamp(0.0, 1.0)).toColor();
   }
 
   static Color getStatusColor(String status) {

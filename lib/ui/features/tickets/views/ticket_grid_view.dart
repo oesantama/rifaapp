@@ -391,12 +391,12 @@ class _TicketGridViewState extends State<TicketGridView> {
     return FilterChip(
       materialTapTargetSize: MaterialTapTargetSize.padded,
       visualDensity: VisualDensity.standard,
-      avatar: isPorValidar ? Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade900) : null,
+      avatar: isPorValidar ? Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.readable(context, Colors.amber.shade900)) : null,
       label: Text(
         '$label ($count)',
         style: TextStyle(
           fontWeight: isPorValidar ? FontWeight.bold : FontWeight.normal,
-          color: isPorValidar ? Colors.amber.shade900 : null,
+          color: isPorValidar ? AppTheme.readable(context, Colors.amber.shade900) : null,
         ),
       ),
       selected: isSelected,
@@ -406,7 +406,7 @@ class _TicketGridViewState extends State<TicketGridView> {
       backgroundColor: isPorValidar ? Colors.amber.shade50 : null,
       side: isPorValidar ? BorderSide(color: Colors.amber.shade800, width: 1.2) : null,
       selectedColor: isPorValidar ? Colors.amber.shade200 : AppTheme.primaryBlue.withValues(alpha: 0.2),
-      checkmarkColor: isPorValidar ? Colors.amber.shade900 : AppTheme.primaryBlue,
+      checkmarkColor: isPorValidar ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.primaryBlue,
     );
   }
 
@@ -519,9 +519,9 @@ class _TicketGridViewState extends State<TicketGridView> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.warning_amber_rounded, size: 12, color: Colors.amber.shade900),
+                              Icon(Icons.warning_amber_rounded, size: 12, color: AppTheme.readable(context, Colors.amber.shade900)),
                               const SizedBox(width: 2),
-                              Text('Validar', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                              Text('Validar', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.readable(context, Colors.amber.shade900))),
                             ],
                           ),
                         ),
@@ -576,7 +576,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                             size: 13,
                             color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
                                 ? AppTheme.secondaryEmerald
-                                : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade700),
+                                : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade700)),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -586,8 +586,8 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
-                                    ? Colors.green.shade900
-                                    : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade900),
+                                    ? AppTheme.readable(context, Colors.green.shade900)
+                                    : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade900)),
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -608,7 +608,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.badge_outlined, size: 12, color: Colors.blue.shade800),
+                            Icon(Icons.badge_outlined, size: 12, color: AppTheme.readable(context, Colors.blue.shade800)),
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
@@ -616,7 +616,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade900,
+                                  color: AppTheme.readable(context, Colors.blue.shade900),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -626,7 +626,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ),
                       )
                     else
-                      const Text('Disponible para venta', style: TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold)),
+                      Text('Disponible para venta', style: TextStyle(fontSize: 12, color: AppTheme.readable(context, Colors.black87), fontWeight: FontWeight.bold)),
                   ],
                   const SizedBox(height: 4),
                   Row(
@@ -660,7 +660,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 10.5,
-                                color: ticket.status == 'DISPONIBLE' ? Colors.blue.shade800 : Colors.grey[700],
+                                color: ticket.status == 'DISPONIBLE' ? AppTheme.readable(context, Colors.blue.shade800) : Colors.grey[700],
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -781,7 +781,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 size: 13,
                                 color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
                                     ? AppTheme.secondaryEmerald
-                                    : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade700),
+                                    : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade700)),
                               ),
                               const SizedBox(width: 4),
                               Text(
@@ -790,8 +790,8 @@ class _TicketGridViewState extends State<TicketGridView> {
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
-                                      ? Colors.green.shade900
-                                      : (ticket.status == 'ABONO_PARCIAL' ? Colors.amber.shade900 : Colors.purple.shade900),
+                                      ? AppTheme.readable(context, Colors.green.shade900)
+                                      : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade900)),
                                 ),
                               ),
                             ],
@@ -801,7 +801,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                           const SizedBox(width: 6),
                           Text(
                             '• Tel: ${ticket.buyerPhone}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
                           ),
                         ]
                       ],
