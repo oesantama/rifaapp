@@ -8010,6 +8010,17 @@ const advisorTypeOf = adv => (adv && ADVISOR_TYPES.includes(adv.type) ? adv.type
 const isOfficeAdvisorType = type => type === 'PUNTO' || type === 'INTEGRAL';
 const SALE_ZONES = ['OFICINA', 'CALLE'];
 
+// Tipo de venta de una boleta que no lo tiene guardado: sin asesor o asesor de punto = OFICINA, asesor de calle = CALLE;
+// el integral elige en cada venta, así que sin dato no se adivina (null)
+function inferredSaleZone(ticket, advisor) {
+  if (SALE_ZONES.includes(ticket.saleZone)) return ticket.saleZone;
+  if (!advisor) return 'OFICINA';
+  const type = advisorTypeOf(advisor);
+  if (type === 'PUNTO') return 'OFICINA';
+  if (type === 'CALLE') return 'CALLE';
+  return null;
+}
+
 function ticketZoneOf(ticket, advisor) {
   if (SALE_ZONES.includes(ticket.saleZone)) return ticket.saleZone;
   return advisorTypeOf(advisor) === 'PUNTO' ? 'OFICINA' : 'CALLE';
@@ -8175,7 +8186,7 @@ app.get('/api/analytics/sales', adminOnly, (req, res) => {
   const byAdvisor = new Map();
   (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, { name: a.name, tickets: 0, money: 0 }));
   // Solo cuentan las ventas de calle (saleZone CALLE) y su valor
-  sold.filter(t => t.saleZone === 'CALLE').forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
+  sold.filter(t => inferredSaleZone(t, t.advisorId ? (db.advisors || []).find(a => a.id === t.advisorId) : null) === 'CALLE').forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
 
   // Boletas que vendió el chatbot (solo informativo): apartadas, abonadas y pagadas, y por cuál asesor quedaron referenciadas
   const botStatus = t => t.status === 'RESERVADA' ? 'reserved' : t.status === 'ABONO_PARCIAL' ? 'partial' : (t.status === 'PAGADA' || t.status === 'CONFIRMADA') ? 'paid' : null;
@@ -8463,6 +8474,24 @@ async function startServer() {
     if (fixed > 0) { console.log(`🖼️ Normalizados ${fixed} enlaces de fotos de rifas.`); saveDB(); }
   } catch (err) {
     console.error('⚠️ No se pudieron normalizar las fotos de rifas:', err.message);
+  }
+  try {
+    // Boletas vendidas sin tipo de venta (oficina / calle): se completa según el vendedor
+    let zoned = 0;
+    for (const t of db.tickets || []) {
+      if (!t.status || t.status === 'DISPONIBLE' || SALE_ZONES.includes(t.saleZone)) continue;
+      const adv = t.advisorId ? (db.advisors || []).find(a => a.id === t.advisorId) : null;
+      const zone = inferredSaleZone(t, adv);
+      if (zone) { t.saleZone = zone; zoned++; }
+    }
+    if (zoned > 0) {
+      console.log(`🛠️ Completado el tipo de venta de ${zoned} boletas que no lo tenían.`);
+      if (!db.auditLogs) db.auditLogs = [];
+      db.auditLogs.push({ id: `audit-${Date.now()}`, type: 'SALE_ZONE', companyId: '', targetId: 'migracion', targetName: 'Tipo de venta', detail: `Se completó el tipo de venta (oficina/calle) de ${zoned} boletas que no lo tenían`, by: 'Sistema', date: new Date().toISOString() });
+      saveDB();
+    }
+  } catch (err) {
+    console.error('⚠️ No se pudo completar el tipo de venta:', err.message);
   }
   try {
     const repair = repairCrossCompanyAdvisors();

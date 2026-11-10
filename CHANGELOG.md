@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.14] - 2026-11-10
+
+- Tipo de venta: al iniciar el servidor se completa el tipo (oficina/calle) de las boletas vendidas que no lo tenían: sin asesor o asesor de punto = OFICINA, asesor de calle = CALLE (el integral no se adivina). Queda registro en la auditoría.
+- Proyección: el ranking de calle también cuenta las boletas sin tipo guardado cuando el vendedor es de calle.
+
 ## [3.4.13] - 2026-11-09
 
 - Proyección: el ranking de asesores cuenta solo las ventas de calle y su valor.
