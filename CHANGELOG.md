@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.17] - 2026-11-10
+
+- Pagos por transferencia: el banco de origen ya no es obligatorio. Se toma del comprobante cuando se reconoce y, si no, se registra vacío (antes el servidor rechazaba el pago con «Indique el banco desde el que se hizo la transferencia»).
+
 ## [3.4.16] - 2026-11-10
 
 - Modo claro: los íconos del encabezado (avisos, modo oscuro, crear sorteo, etc.) se ven en blanco sobre la barra oscura.

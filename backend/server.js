@@ -5938,9 +5938,9 @@ function validateTransfer(body, raffle) {
   }
   const approvalNumber = String(body.approvalNumber || '').trim().slice(0, 40);
   if (approvalKey(approvalNumber).length < 3) return { error: 'Ingrese el número de aprobación de la transferencia.' };
-  const originBank = String(body.originBank || '').trim().slice(0, 60);
-  if (!originBank) return { error: 'Indique el banco desde el que se hizo la transferencia.' };
-  if (!isActiveBank(originBank)) return { error: `El banco "${originBank}" no está en la lista de bancos activos.` };
+  // El banco de origen es opcional: lo toma el lector del comprobante y, si no se reconoce o no es un banco activo, queda vacío
+  const bankRaw = String(body.originBank || '').trim().slice(0, 60);
+  const originBank = bankRaw && isActiveBank(bankRaw) ? bankRaw : '';
 
   const accounts = (raffle && raffle.transferAccounts) || [];
   let cuentaDestino = String(body.cuentaDestino || '').trim().slice(0, 200);
