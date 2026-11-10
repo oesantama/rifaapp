@@ -520,10 +520,13 @@ class _MainShellScreenState extends State<MainShellScreen>
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Theme(
+                    // Los íconos del encabezado van en blanco (el fondo es siempre oscuro, también en modo claro)
                     data: screenWidth < 420
                         ? Theme.of(context).copyWith(
                             iconButtonTheme: IconButtonThemeData(
                               style: IconButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                disabledForegroundColor: Colors.white38,
                                 minimumSize: const Size(38, 44),
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 4),
@@ -533,7 +536,14 @@ class _MainShellScreenState extends State<MainShellScreen>
                               ),
                             ),
                           )
-                        : Theme.of(context),
+                        : Theme.of(context).copyWith(
+                            iconButtonTheme: IconButtonThemeData(
+                              style: IconButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                disabledForegroundColor: Colors.white38,
+                              ),
+                            ),
+                          ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

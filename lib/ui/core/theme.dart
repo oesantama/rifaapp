@@ -136,7 +136,7 @@ class AppTheme {
         backgroundColor: isDark ? const Color(0xFF1E293B) : null,
         selectedColor: primaryBlue.withValues(alpha: isDark ? 0.32 : 0.2),
         side: BorderSide(color: isDark ? const Color(0xFF475569) : border),
-        labelStyle: TextStyle(color: isDark ? const Color(0xFFE2E8F0) : null, fontWeight: FontWeight.w600),
+        labelStyle: TextStyle(color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B), fontWeight: FontWeight.w600),
         checkmarkColor: isDark ? Colors.white : primaryBlue,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

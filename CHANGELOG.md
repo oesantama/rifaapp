@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.16] - 2026-11-10
+
+- Modo claro: los íconos del encabezado (avisos, modo oscuro, crear sorteo, etc.) se ven en blanco sobre la barra oscura.
+- Modo claro: las fichas de filtro de estado tienen texto oscuro explícito y el desvanecido lateral se dibuja como capa aparte (en el teléfono no se veía el texto).
+
 ## [3.4.15] - 2026-11-10
 
 - Modo oscuro: el estado DISPONIBLE y los textos de las tarjetas de boletas se leen bien (texto claro y fondo reforzado); los estados usan tonos más claros en oscuro.

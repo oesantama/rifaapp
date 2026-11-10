@@ -59,17 +59,23 @@ class _TicketGridViewState extends State<TicketGridView> {
   }
 
   /// Reloads the raffle's tickets from the server so sold / available reflect other users' sales.
-  Future<void> _refreshTickets(TicketViewModel ticketVM, String? raffleId, {bool showSummary = true}) async {
+  Future<void> _refreshTickets(TicketViewModel ticketVM, String? raffleId,
+      {bool showSummary = true}) async {
     setState(() => _isRefreshing = true);
     // Also reloads the advisor's numbers, in case the admin assigned more
-    await Future.wait([ticketVM.loadTickets(raffleId: raffleId), context.read<AuthViewModel>().refreshActiveAdvisor()]);
+    await Future.wait([
+      ticketVM.loadTickets(raffleId: raffleId),
+      context.read<AuthViewModel>().refreshActiveAdvisor()
+    ]);
     if (!mounted) return;
     setState(() => _isRefreshing = false);
     if (!showSummary) return;
     final sold = ticketVM.tickets.where((t) => t.status != 'DISPONIBLE').length;
     final available = ticketVM.tickets.length - sold;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Lista actualizada: $sold vendidas • $available disponibles')),
+      SnackBar(
+          content: Text(
+              'Lista actualizada: $sold vendidas • $available disponibles')),
     );
   }
 
@@ -95,13 +101,16 @@ class _TicketGridViewState extends State<TicketGridView> {
             ticketVM.tickets.isNotEmpty &&
             ticketVM.tickets.any((t) => t.raffleId != currentRaffle.id)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted) ticketVM.loadTickets(raffleId: currentRaffle.id);
+            if (context.mounted)
+              ticketVM.loadTickets(raffleId: currentRaffle.id);
           });
         }
 
         List<Ticket> displayTickets = ticketVM.searchedTickets;
         if (currentRaffle != null) {
-          displayTickets = displayTickets.where((t) => t.raffleId == currentRaffle.id).toList();
+          displayTickets = displayTickets
+              .where((t) => t.raffleId == currentRaffle.id)
+              .toList();
         }
 
         if (authVM.isAsesor && authVM.activeAdvisor != null) {
@@ -110,16 +119,21 @@ class _TicketGridViewState extends State<TicketGridView> {
             if (t.status != 'DISPONIBLE') {
               // Only see tickets sold by themselves!
               return t.advisorId == adv.id ||
-                  t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
+                  t.advisorName.trim().toLowerCase() ==
+                      adv.name.trim().toLowerCase() ||
                   (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
             }
-            return adv.coversTicket(t, independent: currentRaffle?.isIndependentBook ?? true);
+            return adv.coversTicket(t,
+                independent: currentRaffle?.isIndependentBook ?? true);
           }).toList();
         }
 
         // Counts per status reflect exactly what this user can see (before the status filter)
         final statusCounts = TicketViewModel.countByStatus(displayTickets);
-        displayTickets = displayTickets.where((t) => TicketViewModel.matchesStatus(t, ticketVM.selectedStatusFilter)).toList()
+        displayTickets = displayTickets
+            .where((t) =>
+                TicketViewModel.matchesStatus(t, ticketVM.selectedStatusFilter))
+            .toList()
           ..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
 
         return Column(
@@ -127,7 +141,8 @@ class _TicketGridViewState extends State<TicketGridView> {
             const CurrentRaffleBanner(),
             const AdvisorNumbersBar(),
             Container(
-              padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 16),
+              padding: EdgeInsets.all(
+                  MediaQuery.of(context).size.width < 600 ? 12 : 16),
               color: Theme.of(context).cardColor,
               child: Column(
                 children: [
@@ -137,30 +152,43 @@ class _TicketGridViewState extends State<TicketGridView> {
                       final searchField = TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: authVM.isAsesor ? 'Buscar en mis boletas...' : 'Buscar oportunidad, comprador, celular, cédula, correo o asesor...',
+                          hintText: authVM.isAsesor
+                              ? 'Buscar en mis boletas...'
+                              : 'Buscar oportunidad, comprador, celular, cédula, correo o asesor...',
                           prefixIcon: const Icon(Icons.search),
                           suffixIcon: _searchController.text.isNotEmpty
                               ? IconButton(
                                   icon: const Icon(Icons.clear),
                                   onPressed: () {
                                     _searchController.clear();
-                                    ticketVM.setSearchQuery('', raffleId: currentRaffle?.id);
+                                    ticketVM.setSearchQuery('',
+                                        raffleId: currentRaffle?.id);
                                   },
                                 )
                               : null,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 16),
                         ),
                         onChanged: (val) {
-                          ticketVM.setSearchQuery(val, raffleId: currentRaffle?.id);
+                          ticketVM.setSearchQuery(val,
+                              raffleId: currentRaffle?.id);
                         },
                       );
                       final actionButtons = <Widget>[
                         IconButton.filledTonal(
                           icon: _isRefreshing
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.refresh_rounded),
-                          onPressed: _isRefreshing ? null : () => _refreshTickets(ticketVM, currentRaffle?.id),
+                          onPressed: _isRefreshing
+                              ? null
+                              : () =>
+                                  _refreshTickets(ticketVM, currentRaffle?.id),
                           tooltip: 'Actualizar lista (vendidas y disponibles)',
                         ),
                         const SizedBox(width: 8),
@@ -169,9 +197,11 @@ class _TicketGridViewState extends State<TicketGridView> {
                             icon: const Icon(Icons.settings),
                             onPressed: () => showDialog(
                               context: context,
-                              builder: (_) => RaffleEditDialog(raffle: currentRaffle),
+                              builder: (_) =>
+                                  RaffleEditDialog(raffle: currentRaffle),
                             ),
-                            tooltip: 'Gestionar Sorteo (Asesores, Estado, Importar)',
+                            tooltip:
+                                'Gestionar Sorteo (Asesores, Estado, Importar)',
                           ),
                           const SizedBox(width: 8),
                           IconButton.filledTonal(
@@ -183,7 +213,8 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 raffleTitle: currentRaffle.title,
                               ),
                             ),
-                            tooltip: 'Importar Boletas Vendidas desde Excel (.xlsx)',
+                            tooltip:
+                                'Importar Boletas Vendidas desde Excel (.xlsx)',
                           ),
                           const SizedBox(width: 8),
                         ],
@@ -191,10 +222,16 @@ class _TicketGridViewState extends State<TicketGridView> {
                         if (currentRaffle != null &&
                             (authVM.isAdmin
                                 ? raffleVM.raffles.length > 1
-                                : raffleVM.raffles.where((r) => r.status != 'INACTIVA' && !r.isClosed).length > 1)) ...[
+                                : raffleVM.raffles
+                                        .where((r) =>
+                                            r.status != 'INACTIVA' &&
+                                            !r.isClosed)
+                                        .length >
+                                    1)) ...[
                           IconButton.filledTonal(
                             icon: const Icon(Icons.swap_horiz_rounded),
-                            onPressed: () => CurrentRaffleBanner.showPicker(context, raffleVM, authVM.isAdmin),
+                            onPressed: () => CurrentRaffleBanner.showPicker(
+                                context, raffleVM, authVM.isAdmin),
                             tooltip: 'Cambiar de rifa',
                           ),
                           const SizedBox(width: 8),
@@ -202,60 +239,76 @@ class _TicketGridViewState extends State<TicketGridView> {
                         if (currentRaffle != null) ...[
                           // La plantilla 2D es de 100 números: solo con rifas de 2 dígitos
                           if (currentRaffle.digits <= 2) ...[
-                          IconButton.filledTonal(
-                            icon: const Icon(Icons.grid_on_rounded, color: AppTheme.accentAmber),
-                            onPressed: () => showDialog(
-                              context: context,
-                              builder: (_) => RafflePoster2dDialog(raffle: currentRaffle),
+                            IconButton.filledTonal(
+                              icon: const Icon(Icons.grid_on_rounded,
+                                  color: AppTheme.accentAmber),
+                              onPressed: () => showDialog(
+                                context: context,
+                                builder: (_) =>
+                                    RafflePoster2dDialog(raffle: currentRaffle),
+                              ),
+                              tooltip:
+                                  'Plantilla / Afiche Rifa 2D (100 Números)',
                             ),
-                            tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
-                          ),
-                          const SizedBox(width: 8),
+                            const SizedBox(width: 8),
                           ],
                           IconButton.filledTonal(
-                            icon: const Icon(Icons.mark_chat_read_outlined, color: AppTheme.secondaryEmerald),
+                            icon: const Icon(Icons.mark_chat_read_outlined,
+                                color: AppTheme.secondaryEmerald),
                             onPressed: () => AvailableNumbersDialog.show(
                               context,
                               raffle: currentRaffle,
-                              initialAdvisor: authVM.isAsesor ? authVM.activeAdvisor : null,
+                              initialAdvisor:
+                                  authVM.isAsesor ? authVM.activeAdvisor : null,
                             ),
-                            tooltip: 'Números Disponibles (Ver / Descargar en Imagen o Excel)',
+                            tooltip:
+                                'Números Disponibles (Ver / Descargar en Imagen o Excel)',
                           ),
                           const SizedBox(width: 8),
                         ],
                         IconButton.filledTonal(
-                          icon: const Icon(Icons.file_download_outlined, color: Colors.green),
+                          icon: const Icon(Icons.file_download_outlined,
+                              color: Colors.green),
                           onPressed: () {
                             final ticketsToExport = displayTickets;
                             if (ticketsToExport.isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('No hay boletas disponibles para exportar.')),
+                                const SnackBar(
+                                    content: Text(
+                                        'No hay boletas disponibles para exportar.')),
                               );
                               return;
                             }
                             ExcelCsvHelper.exportTicketsToExcel(
                               ticketsToExport,
-                              title: 'Boletas_${currentRaffle?.title ?? "Rifa"}',
+                              title:
+                                  'Boletas_${currentRaffle?.title ?? "Rifa"}',
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 backgroundColor: AppTheme.secondaryEmerald,
-                                content: Text('✓ Descargando ${ticketsToExport.length} boletas en Excel (.xlsx)...'),
+                                content: Text(
+                                    '✓ Descargando ${ticketsToExport.length} boletas en Excel (.xlsx)...'),
                               ),
                             );
                           },
-                          tooltip: 'Descargar Información de Boletas a Excel (.xlsx)',
+                          tooltip:
+                              'Descargar Información de Boletas a Excel (.xlsx)',
                         ),
                         const SizedBox(width: 8),
                         IconButton.filledTonal(
-                          icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
-                          onPressed: () => setState(() => _isGridView = !_isGridView),
+                          icon: Icon(
+                              _isGridView ? Icons.view_list : Icons.grid_view),
+                          onPressed: () =>
+                              setState(() => _isGridView = !_isGridView),
                           tooltip: _isGridView ? 'Ver Lista' : 'Ver Cuadrícula',
                         ),
                       ];
                       // Áreas táctiles mínimas de 44x44 en todos los botones de acción
                       final touchTheme = Theme.of(context).copyWith(
-                        iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(minimumSize: const Size(44, 44))),
+                        iconButtonTheme: IconButtonThemeData(
+                            style: IconButton.styleFrom(
+                                minimumSize: const Size(44, 44))),
                       );
                       if (isNarrow) {
                         return Theme(
@@ -271,7 +324,9 @@ class _TicketGridViewState extends State<TicketGridView> {
                                   spacing: 8,
                                   runSpacing: 8,
                                   alignment: WrapAlignment.end,
-                                  children: actionButtons.where((w) => w is! SizedBox).toList(),
+                                  children: actionButtons
+                                      .where((w) => w is! SizedBox)
+                                      .toList(),
                                 ),
                               ),
                             ],
@@ -291,37 +346,61 @@ class _TicketGridViewState extends State<TicketGridView> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  ShaderMask(
-                    // Desvanece el borde derecho para indicar que hay más fichas al deslizar
-                    shaderCallback: (rect) => const LinearGradient(
-                      colors: [Colors.white, Colors.white, Colors.transparent],
-                      stops: [0.0, 0.88, 1.0],
-                    ).createShader(rect),
-                    blendMode: BlendMode.dstIn,
-                    child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(right: 32),
-                    child: Row(
-                      children: [
-                        _buildFilterChip(context, ticketVM, 'TODOS', statusCounts['TODOS'] ?? 0),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'DISPONIBLE', statusCounts['DISPONIBLE'] ?? 0),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'RESERVADA', statusCounts['RESERVADA'] ?? 0),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL', statusCounts['ABONO_PARCIAL'] ?? 0),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'PAGADA', statusCounts['PAGADA'] ?? 0),
-                        // Pagadas que el administrador ya validó (legalizadas): antes solo se veían en "Todas"
-                        const SizedBox(width: 8),
-                        _buildFilterChip(context, ticketVM, 'CONFIRMADA', statusCounts['CONFIRMADA'] ?? 0),
-                        if ((statusCounts['POR_VALIDAR'] ?? 0) > 0) ...[
-                          const SizedBox(width: 8),
-                          _buildFilterChip(context, ticketVM, 'POR_VALIDAR', statusCounts['POR_VALIDAR'] ?? 0),
-                        ],
-                      ],
-                    ),
-                  ),
+                  Stack(
+                    children: [
+                      // Desvanecido en el borde derecho: indica que hay más fichas al deslizar
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.only(right: 32),
+                        child: Row(
+                          children: [
+                            _buildFilterChip(context, ticketVM, 'TODOS',
+                                statusCounts['TODOS'] ?? 0),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(context, ticketVM, 'DISPONIBLE',
+                                statusCounts['DISPONIBLE'] ?? 0),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(context, ticketVM, 'RESERVADA',
+                                statusCounts['RESERVADA'] ?? 0),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(context, ticketVM, 'ABONO_PARCIAL',
+                                statusCounts['ABONO_PARCIAL'] ?? 0),
+                            const SizedBox(width: 8),
+                            _buildFilterChip(context, ticketVM, 'PAGADA',
+                                statusCounts['PAGADA'] ?? 0),
+                            // Pagadas que el administrador ya validó (legalizadas): antes solo se veían en "Todas"
+                            const SizedBox(width: 8),
+                            _buildFilterChip(context, ticketVM, 'CONFIRMADA',
+                                statusCounts['CONFIRMADA'] ?? 0),
+                            if ((statusCounts['POR_VALIDAR'] ?? 0) > 0) ...[
+                              const SizedBox(width: 8),
+                              _buildFilterChip(context, ticketVM, 'POR_VALIDAR',
+                                  statusCounts['POR_VALIDAR'] ?? 0),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 36,
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Theme.of(context)
+                                      .cardColor
+                                      .withValues(alpha: 0),
+                                  Theme.of(context).cardColor
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -337,20 +416,29 @@ class _TicketGridViewState extends State<TicketGridView> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.confirmation_number_outlined, size: 64, color: Colors.grey.shade400),
+                                Icon(Icons.confirmation_number_outlined,
+                                    size: 64, color: Colors.grey.shade400),
                                 const SizedBox(height: 12),
                                 Text(
                                   raffleVM.raffles.isEmpty
                                       ? '¡Aún no has creado ninguna rifa!'
-                                      : (authVM.isAsesor ? 'No tienes boletas en este filtro' : 'No se encontraron boletas'),
-                                  style: TextStyle(fontSize: 16, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                                      : (authVM.isAsesor
+                                          ? 'No tienes boletas en este filtro'
+                                          : 'No se encontraron boletas'),
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.bold),
                                   textAlign: TextAlign.center,
                                 ),
-                                if (raffleVM.raffles.isEmpty && authVM.isAdmin) ...[
+                                if (raffleVM.raffles.isEmpty &&
+                                    authVM.isAdmin) ...[
                                   const SizedBox(height: 8),
                                   Text(
                                     'Crea tu primer sorteo para comenzar a vender boletas y asignar números a tus asesores.',
-                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600),
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 16),
@@ -359,7 +447,8 @@ class _TicketGridViewState extends State<TicketGridView> {
                                     label: const Text('Crear Primer Sorteo'),
                                     onPressed: () => showDialog(
                                       context: context,
-                                      builder: (_) => const RaffleCreateDialog(),
+                                      builder: (_) =>
+                                          const RaffleCreateDialog(),
                                     ),
                                   ),
                                 ],
@@ -369,10 +458,14 @@ class _TicketGridViewState extends State<TicketGridView> {
                         )
                       : RefreshIndicator(
                           // Pull down to reload sold / available tickets from the server
-                          onRefresh: () => _refreshTickets(ticketVM, currentRaffle?.id, showSummary: false),
+                          onRefresh: () => _refreshTickets(
+                              ticketVM, currentRaffle?.id,
+                              showSummary: false),
                           child: _isGridView
-                              ? _buildGrid(context, displayTickets, currentRaffle?.title, currency)
-                              : _buildList(context, displayTickets, currentRaffle?.title, currency),
+                              ? _buildGrid(context, displayTickets,
+                                  currentRaffle?.title, currency)
+                              : _buildList(context, displayTickets,
+                                  currentRaffle?.title, currency),
                         ),
             ),
           ],
@@ -381,22 +474,31 @@ class _TicketGridViewState extends State<TicketGridView> {
     );
   }
 
-  Widget _buildFilterChip(BuildContext context, TicketViewModel ticketVM, String status, int count) {
+  Widget _buildFilterChip(BuildContext context, TicketViewModel ticketVM,
+      String status, int count) {
     bool isSelected = ticketVM.selectedStatusFilter == status;
     bool isPorValidar = status == 'POR_VALIDAR';
     String label = status == 'TODOS'
         ? 'Todas'
-        : (isPorValidar ? '⚠️ Transferencias por Validar' : AppTheme.getStatusLabel(status));
+        : (isPorValidar
+            ? '⚠️ Transferencias por Validar'
+            : AppTheme.getStatusLabel(status));
 
     return FilterChip(
       materialTapTargetSize: MaterialTapTargetSize.padded,
       visualDensity: VisualDensity.standard,
-      avatar: isPorValidar ? Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.readable(context, Colors.amber.shade900)) : null,
+      avatar: isPorValidar
+          ? Icon(Icons.warning_amber_rounded,
+              size: 16,
+              color: AppTheme.readable(context, Colors.amber.shade900))
+          : null,
       label: Text(
         '$label ($count)',
         style: TextStyle(
           fontWeight: isPorValidar ? FontWeight.bold : FontWeight.normal,
-          color: isPorValidar ? AppTheme.readable(context, Colors.amber.shade900) : null,
+          color: isPorValidar
+              ? AppTheme.readable(context, Colors.amber.shade900)
+              : null,
         ),
       ),
       selected: isSelected,
@@ -404,13 +506,20 @@ class _TicketGridViewState extends State<TicketGridView> {
         ticketVM.setStatusFilter(status);
       },
       backgroundColor: isPorValidar ? Colors.amber.shade50 : null,
-      side: isPorValidar ? BorderSide(color: Colors.amber.shade800, width: 1.2) : null,
-      selectedColor: isPorValidar ? Colors.amber.shade200 : AppTheme.primaryBlue.withValues(alpha: 0.2),
-      checkmarkColor: isPorValidar ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.primaryBlue,
+      side: isPorValidar
+          ? BorderSide(color: Colors.amber.shade800, width: 1.2)
+          : null,
+      selectedColor: isPorValidar
+          ? Colors.amber.shade200
+          : AppTheme.primaryBlue.withValues(alpha: 0.2),
+      checkmarkColor: isPorValidar
+          ? AppTheme.readable(context, Colors.amber.shade900)
+          : AppTheme.primaryBlue,
     );
   }
 
-  Widget _buildGrid(BuildContext context, List<Ticket> tickets, String? raffleTitle, NumberFormat currency) {
+  Widget _buildGrid(BuildContext context, List<Ticket> tickets,
+      String? raffleTitle, NumberFormat currency) {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return GridView.builder(
@@ -418,7 +527,8 @@ class _TicketGridViewState extends State<TicketGridView> {
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 260,
-        mainAxisExtent: (isMobile ? 268 : 246) + (MediaQuery.textScalerOf(context).scale(1) - 1) * 160,
+        mainAxisExtent: (isMobile ? 268 : 246) +
+            (MediaQuery.textScalerOf(context).scale(1) - 1) * 160,
         crossAxisSpacing: isMobile ? 8 : 12,
         mainAxisSpacing: isMobile ? 8 : 12,
       ),
@@ -430,20 +540,27 @@ class _TicketGridViewState extends State<TicketGridView> {
         return Card(
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
-            side: BorderSide(color: borderCol.withValues(alpha: 0.4), width: 1.5),
+            side:
+                BorderSide(color: borderCol.withValues(alpha: 0.4), width: 1.5),
             borderRadius: BorderRadius.circular(14),
           ),
           child: InkWell(
             onTap: () {
               // Rifa cerrada, inactiva o con el sorteo final vencido: no se vende, ni el administrador ni el asesor
-              final blocked = ticket.status == 'DISPONIBLE' ? context.read<RaffleViewModel>().selectedRaffle?.salesBlockedReason : null;
+              final blocked = ticket.status == 'DISPONIBLE'
+                  ? context
+                      .read<RaffleViewModel>()
+                      .selectedRaffle
+                      ?.salesBlockedReason
+                  : null;
               if (blocked != null) {
                 showSalesBlockedDialog(context, blocked);
                 return;
               }
               showDialog(
                 context: context,
-                builder: (_) => TicketDetailDialog(ticket: ticket, raffleTitle: raffleTitle),
+                builder: (_) => TicketDetailDialog(
+                    ticket: ticket, raffleTitle: raffleTitle),
               );
             },
             child: Padding(
@@ -457,7 +574,10 @@ class _TicketGridViewState extends State<TicketGridView> {
                       Expanded(
                         child: Text(
                           'N° ${ticket.displayNumber}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primaryBlue),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppTheme.primaryBlue),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -468,8 +588,11 @@ class _TicketGridViewState extends State<TicketGridView> {
                           IconButton(
                             icon: const Icon(Icons.print_outlined, size: 18),
                             padding: EdgeInsets.zero,
-                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                            style: IconButton.styleFrom(
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap),
+                            constraints: const BoxConstraints(
+                                minWidth: 44, minHeight: 44),
                             tooltip: 'Imprimir Boleta',
                             onPressed: () {
                               showDialog(
@@ -484,14 +607,25 @@ class _TicketGridViewState extends State<TicketGridView> {
                           if (WhatsAppHelper.canRemind(ticket)) ...[
                             const SizedBox(height: 0),
                             IconButton(
-                              icon: const Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFF128C7E)),
+                              icon: const Icon(
+                                  Icons.notifications_active_outlined,
+                                  size: 18,
+                                  color: Color(0xFF128C7E)),
                               padding: EdgeInsets.zero,
-                              style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                              style: IconButton.styleFrom(
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap),
+                              constraints: const BoxConstraints(
+                                  minWidth: 44, minHeight: 44),
                               tooltip: 'Recordar pago por WhatsApp',
-                              onPressed: () => WhatsAppHelper.sendPaymentReminder(
+                              onPressed: () =>
+                                  WhatsAppHelper.sendPaymentReminder(
                                 ticket: ticket,
-                                raffle: context.read<RaffleViewModel>().raffles.where((r) => r.id == ticket.raffleId).firstOrNull,
+                                raffle: context
+                                    .read<RaffleViewModel>()
+                                    .raffles
+                                    .where((r) => r.id == ticket.raffleId)
+                                    .firstOrNull,
                                 raffleTitle: raffleTitle ?? 'RIFA',
                                 context: context,
                               ),
@@ -508,9 +642,11 @@ class _TicketGridViewState extends State<TicketGridView> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       StatusBadge(status: ticket.status, isSmall: true),
-                      if (ticket.abonos.any((a) => a.isTransfer && a.cashState == 'POR_VALIDAR')) ...[
+                      if (ticket.abonos.any((a) =>
+                          a.isTransfer && a.cashState == 'POR_VALIDAR')) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
                             color: Colors.amber.shade100,
                             borderRadius: BorderRadius.circular(4),
@@ -519,32 +655,51 @@ class _TicketGridViewState extends State<TicketGridView> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.warning_amber_rounded, size: 12, color: AppTheme.readable(context, Colors.amber.shade900)),
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 12,
+                                  color: AppTheme.readable(
+                                      context, Colors.amber.shade900)),
                               const SizedBox(width: 2),
-                              Text('Validar', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.readable(context, Colors.amber.shade900))),
+                              Text('Validar',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.readable(
+                                          context, Colors.amber.shade900))),
                             ],
                           ),
                         ),
                       ],
-                      if (ticket.isSoldByBot || ticket.saleChannel.toLowerCase().contains('bot')) ...[
+                      if (ticket.isSoldByBot ||
+                          ticket.saleChannel.toLowerCase().contains('bot')) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEEF2FF),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: const Color(0xFF6366F1), width: 0.8),
+                            border: Border.all(
+                                color: const Color(0xFF6366F1), width: 0.8),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.smart_toy_rounded, size: 11, color: Color(0xFF4F46E5)),
+                              Icon(Icons.smart_toy_rounded,
+                                  size: 11, color: Color(0xFF4F46E5)),
                               SizedBox(width: 2),
-                              Text('Bot', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Color(0xFF4F46E5))),
+                              Text('Bot',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF4F46E5))),
                             ],
                           ),
                         ),
                       ],
-                      if (ticket.saleChannel.isNotEmpty && !ticket.saleChannel.toLowerCase().contains('bot')) ...[
+                      if (ticket.saleChannel.isNotEmpty &&
+                          !ticket.saleChannel
+                              .toLowerCase()
+                              .contains('bot')) ...[
                         _buildChannelChip(ticket.saleChannel),
                       ],
                     ],
@@ -552,16 +707,19 @@ class _TicketGridViewState extends State<TicketGridView> {
                   const SizedBox(height: 6),
                   if (ticket.buyerName.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
                       decoration: BoxDecoration(
-                        color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                        color: (ticket.status == 'PAGADA' ||
+                                ticket.status == 'CONFIRMADA')
                             ? AppTheme.secondaryEmerald.withValues(alpha: 0.12)
                             : (ticket.status == 'ABONO_PARCIAL'
                                 ? AppTheme.accentAmber.withValues(alpha: 0.15)
                                 : Colors.purple.withValues(alpha: 0.12)),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                          color: (ticket.status == 'PAGADA' ||
+                                  ticket.status == 'CONFIRMADA')
                               ? AppTheme.secondaryEmerald.withValues(alpha: 0.4)
                               : (ticket.status == 'ABONO_PARCIAL'
                                   ? AppTheme.accentAmber.withValues(alpha: 0.5)
@@ -574,9 +732,14 @@ class _TicketGridViewState extends State<TicketGridView> {
                           Icon(
                             Icons.person_rounded,
                             size: 13,
-                            color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                            color: (ticket.status == 'PAGADA' ||
+                                    ticket.status == 'CONFIRMADA')
                                 ? AppTheme.secondaryEmerald
-                                : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade700)),
+                                : (ticket.status == 'ABONO_PARCIAL'
+                                    ? AppTheme.readable(
+                                        context, Colors.amber.shade900)
+                                    : AppTheme.readable(
+                                        context, Colors.purple.shade700)),
                           ),
                           const SizedBox(width: 4),
                           Expanded(
@@ -585,9 +748,15 @@ class _TicketGridViewState extends State<TicketGridView> {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
-                                    ? AppTheme.readable(context, Colors.green.shade900)
-                                    : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade900)),
+                                color: (ticket.status == 'PAGADA' ||
+                                        ticket.status == 'CONFIRMADA')
+                                    ? AppTheme.readable(
+                                        context, Colors.green.shade900)
+                                    : (ticket.status == 'ABONO_PARCIAL'
+                                        ? AppTheme.readable(
+                                            context, Colors.amber.shade900)
+                                        : AppTheme.readable(
+                                            context, Colors.purple.shade900)),
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -599,16 +768,21 @@ class _TicketGridViewState extends State<TicketGridView> {
                   else ...[
                     if (ticket.advisorName.trim().isNotEmpty)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.blue.shade300, width: 0.8),
+                          border: Border.all(
+                              color: Colors.blue.shade300, width: 0.8),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.badge_outlined, size: 12, color: AppTheme.readable(context, Colors.blue.shade800)),
+                            Icon(Icons.badge_outlined,
+                                size: 12,
+                                color: AppTheme.readable(
+                                    context, Colors.blue.shade800)),
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
@@ -616,7 +790,8 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.readable(context, Colors.blue.shade900),
+                                  color: AppTheme.readable(
+                                      context, Colors.blue.shade900),
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -626,24 +801,33 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ),
                       )
                     else
-                      Text('Disponible para venta', style: TextStyle(fontSize: 12, color: AppTheme.readable(context, Colors.black87), fontWeight: FontWeight.bold)),
+                      Text('Disponible para venta',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.readable(context, Colors.black87),
+                              fontWeight: FontWeight.bold)),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Flexible(child: Column(
+                      Flexible(
+                          child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             currency.format(ticket.price),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 12),
                           ),
                           if (ticket.balancePending > 0 && ticket.totalPaid > 0)
                             Text(
                               'Abonado: ${currency.format(ticket.totalPaid)}',
-                              style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppTheme.accentAmber,
+                                  fontWeight: FontWeight.bold),
                             ),
                         ],
                       )),
@@ -660,7 +844,10 @@ class _TicketGridViewState extends State<TicketGridView> {
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 10.5,
-                                color: ticket.status == 'DISPONIBLE' ? AppTheme.readable(context, Colors.blue.shade800) : Colors.grey[700],
+                                color: ticket.status == 'DISPONIBLE'
+                                    ? AppTheme.readable(
+                                        context, Colors.blue.shade800)
+                                    : Colors.grey[700],
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -692,7 +879,8 @@ class _TicketGridViewState extends State<TicketGridView> {
             return Container(
               width: 20,
               height: 20,
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
               child: Icon(icon, size: 12, color: color),
             );
           }
@@ -713,7 +901,10 @@ class _TicketGridViewState extends State<TicketGridView> {
                     channel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: color),
+                    style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: color),
                   ),
                 ),
               ],
@@ -724,10 +915,12 @@ class _TicketGridViewState extends State<TicketGridView> {
     );
   }
 
-  Widget _buildList(BuildContext context, List<Ticket> tickets, String? raffleTitle, NumberFormat currency) {
+  Widget _buildList(BuildContext context, List<Ticket> tickets,
+      String? raffleTitle, NumberFormat currency) {
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
+      padding:
+          EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
       itemCount: tickets.length,
       itemBuilder: (context, i) {
         final ticket = tickets[i];
@@ -736,20 +929,29 @@ class _TicketGridViewState extends State<TicketGridView> {
           child: ListTile(
             onTap: () {
               // Rifa cerrada, inactiva o con el sorteo final vencido: no se vende, ni el administrador ni el asesor
-              final blocked = ticket.status == 'DISPONIBLE' ? context.read<RaffleViewModel>().selectedRaffle?.salesBlockedReason : null;
+              final blocked = ticket.status == 'DISPONIBLE'
+                  ? context
+                      .read<RaffleViewModel>()
+                      .selectedRaffle
+                      ?.salesBlockedReason
+                  : null;
               if (blocked != null) {
                 showSalesBlockedDialog(context, blocked);
                 return;
               }
               showDialog(
                 context: context,
-                builder: (_) => TicketDetailDialog(ticket: ticket, raffleTitle: raffleTitle),
+                builder: (_) => TicketDetailDialog(
+                    ticket: ticket, raffleTitle: raffleTitle),
               );
             },
             leading: CircleAvatar(
-              backgroundColor: AppTheme.getStatusColor(ticket.status).withValues(alpha: 0.2),
+              backgroundColor:
+                  AppTheme.getStatusColor(ticket.status).withValues(alpha: 0.2),
               child: Text(
-                ticket.numbers.length == 1 ? ticket.displayNumber : '${ticket.numbers.length}',
+                ticket.numbers.length == 1
+                    ? ticket.displayNumber
+                    : '${ticket.numbers.length}',
                 style: TextStyle(
                   color: AppTheme.getStatusColor(ticket.status),
                   fontWeight: FontWeight.bold,
@@ -757,19 +959,24 @@ class _TicketGridViewState extends State<TicketGridView> {
                 ),
               ),
             ),
-            title: Text('N° ${ticket.displayNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text('N° ${ticket.displayNumber}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: ticket.buyerName.isNotEmpty
                   ? Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
-                                ? AppTheme.secondaryEmerald.withValues(alpha: 0.12)
+                            color: (ticket.status == 'PAGADA' ||
+                                    ticket.status == 'CONFIRMADA')
+                                ? AppTheme.secondaryEmerald
+                                    .withValues(alpha: 0.12)
                                 : (ticket.status == 'ABONO_PARCIAL'
-                                    ? AppTheme.accentAmber.withValues(alpha: 0.15)
+                                    ? AppTheme.accentAmber
+                                        .withValues(alpha: 0.15)
                                     : Colors.purple.withValues(alpha: 0.12)),
                             borderRadius: BorderRadius.circular(6),
                           ),
@@ -779,9 +986,14 @@ class _TicketGridViewState extends State<TicketGridView> {
                               Icon(
                                 Icons.person_rounded,
                                 size: 13,
-                                color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
+                                color: (ticket.status == 'PAGADA' ||
+                                        ticket.status == 'CONFIRMADA')
                                     ? AppTheme.secondaryEmerald
-                                    : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade700)),
+                                    : (ticket.status == 'ABONO_PARCIAL'
+                                        ? AppTheme.readable(
+                                            context, Colors.amber.shade900)
+                                        : AppTheme.readable(
+                                            context, Colors.purple.shade700)),
                               ),
                               const SizedBox(width: 4),
                               Text(
@@ -789,9 +1001,15 @@ class _TicketGridViewState extends State<TicketGridView> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: (ticket.status == 'PAGADA' || ticket.status == 'CONFIRMADA')
-                                      ? AppTheme.readable(context, Colors.green.shade900)
-                                      : (ticket.status == 'ABONO_PARCIAL' ? AppTheme.readable(context, Colors.amber.shade900) : AppTheme.readable(context, Colors.purple.shade900)),
+                                  color: (ticket.status == 'PAGADA' ||
+                                          ticket.status == 'CONFIRMADA')
+                                      ? AppTheme.readable(
+                                          context, Colors.green.shade900)
+                                      : (ticket.status == 'ABONO_PARCIAL'
+                                          ? AppTheme.readable(
+                                              context, Colors.amber.shade900)
+                                          : AppTheme.readable(
+                                              context, Colors.purple.shade900)),
                                 ),
                               ),
                             ],
@@ -801,7 +1019,13 @@ class _TicketGridViewState extends State<TicketGridView> {
                           const SizedBox(width: 6),
                           Text(
                             '• Tel: ${ticket.buyerPhone}',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black87),
                           ),
                         ]
                       ],
@@ -817,7 +1041,8 @@ class _TicketGridViewState extends State<TicketGridView> {
               children: [
                 StatusBadge(status: ticket.status, isSmall: true),
                 const SizedBox(height: 4),
-                Text(currency.format(ticket.price), style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(currency.format(ticket.price),
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             ),
           ),
