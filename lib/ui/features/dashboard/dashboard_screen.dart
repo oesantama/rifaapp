@@ -183,8 +183,12 @@ class DashboardScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        // En escritorio el nombre de la rifa ya está en la barra superior: no se repite aquí
+                        if (!(MediaQuery.of(context).size.width >= 700 && !authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty))
                         Text(
                           currentRaffle.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: isMobile ? 20 : 22,
@@ -194,6 +198,8 @@ class DashboardScreen extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(
                           currentRaffle.description,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.white70, fontSize: 13),
                         ),
                         const SizedBox(height: 16),
@@ -247,7 +253,9 @@ class DashboardScreen extends StatelessWidget {
                 LayoutBuilder(
                   builder: (context, constraints) {
                     const spacing = 12.0;
-                    int crossAxisCount = constraints.maxWidth > 1000 ? 3 : (constraints.maxWidth > 340 ? 2 : 1);
+                    // 1 columna en móvil (<600), 2 en tablet (600-1000), 3 en escritorio (>1000), medido sobre el ancho real del contenido
+                    final screenW = MediaQuery.of(context).size.width;
+                    int crossAxisCount = screenW > 1000 && constraints.maxWidth > 700 ? 3 : (screenW >= 600 && constraints.maxWidth > 340 ? 2 : 1);
                     final itemWidth = (constraints.maxWidth - spacing * (crossAxisCount - 1)) / crossAxisCount;
                     final cards = <Widget>[
                       StatCard(
@@ -308,11 +316,24 @@ class DashboardScreen extends StatelessWidget {
                         iconColor: AppTheme.dangerRose,
                       ),
                     ];
-                    return Wrap(
-                      spacing: spacing,
-                      runSpacing: spacing,
-                      children: cards.map((c) => SizedBox(width: itemWidth, child: c)).toList(),
-                    );
+                    // Filas con la misma altura y sin huecos: la última fila se completa con espacios vacíos
+                    final rows = <Widget>[];
+                    for (var i = 0; i < cards.length; i += crossAxisCount) {
+                      final chunk = cards.skip(i).take(crossAxisCount).toList();
+                      rows.add(IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (var j = 0; j < crossAxisCount; j++) ...[
+                              if (j > 0) const SizedBox(width: spacing),
+                              SizedBox(width: itemWidth, child: j < chunk.length ? chunk[j] : const SizedBox.shrink()),
+                            ],
+                          ],
+                        ),
+                      ));
+                      if (i + crossAxisCount < cards.length) rows.add(const SizedBox(height: spacing));
+                    }
+                    return Column(children: rows);
                   },
                 ),
                 SizedBox(height: isMobile ? 16 : 24),

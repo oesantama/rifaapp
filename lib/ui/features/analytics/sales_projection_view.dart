@@ -146,7 +146,7 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
           _section('Boletas del chatbot (informativo)'),
           _chatbot(d),
           const SizedBox(height: 20),
-          _section('Asesores: de la mayor venta a la menor'),
+          _section('Asesores: ventas de calle, de la mayor a la menor'),
           _advisors(d),
           const SizedBox(height: 30),
         ],

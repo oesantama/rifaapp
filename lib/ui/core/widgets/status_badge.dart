@@ -25,9 +25,10 @@ class StatusBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          color: color,
-          fontSize: isSmall ? 10 : 12,
-          fontWeight: FontWeight.bold,
+          // DISPONIBLE usa gris claro: el texto va en gris oscuro y más grueso para que se lea bien
+          color: status == 'DISPONIBLE' ? Colors.grey.shade800 : color,
+          fontSize: isSmall ? 10.5 : 12,
+          fontWeight: status == 'DISPONIBLE' ? FontWeight.w900 : FontWeight.bold,
         ),
       ),
     );

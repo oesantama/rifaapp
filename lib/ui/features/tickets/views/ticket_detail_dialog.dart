@@ -24,6 +24,7 @@ import 'ticket_print_dialog.dart';
 import 'transfer_widgets.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart' show showSoporte, askReason;
 import 'package:rifaapp/ui/features/admin_cash/view_models/cash_view_model.dart';
+import 'package:rifaapp/ui/core/utils/form_focus.dart';
 
 class TicketDetailDialog extends StatefulWidget {
   final Ticket ticket;
@@ -204,6 +205,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       final read = await context.read<TicketViewModel>().readTransferProof(dataUri);
       if (!mounted || _soporteBase64 != dataUri) return;
       setState(() => _proofRead = read);
+      if (read['readable'] == true) _applyProofData(read);
       if (read['readable'] == true && _readReferences.isNotEmpty && _approvalController.text.trim().isEmpty) {
         setState(() {
           _approvalController.text = _readReferences.first;
@@ -217,6 +219,30 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
     } finally {
       if (mounted) setState(() => _readingProof = false);
     }
+  }
+
+  /// Rellena con lo leído del comprobante la fecha, el banco de origen y la cuenta destino (si se reconoce); todo se puede corregir.
+  void _applyProofData(Map<String, dynamic> read) {
+    final dateText = '${read['date'] ?? ''}';
+    final parsed = DateTime.tryParse(dateText);
+    if (parsed != null) {
+      final day = DateTime(parsed.year, parsed.month, parsed.day);
+      final ok = !day.isAfter(ColombiaTime.today()) && !day.isBefore(ColombiaTime.oldestTransferDay());
+      if (ok) {
+        _transferDate = day;
+        _transferDateController.text = DateFormat('dd/MM/yyyy').format(day);
+      }
+    }
+    final bank = '${read['bank'] ?? ''}'.trim();
+    if (bank.isNotEmpty) _originBankController.text = bank;
+    final runs = ((read['accountNumbers'] as List?) ?? []).map((e) => '$e').toList();
+    String digits(String v) => v.replaceAll(RegExp(r'\D'), '');
+    final matches = _transferAccounts.where((a) {
+      final n = digits(a.accountNumber.isNotEmpty ? a.accountNumber : a.key);
+      return n.length >= 6 && runs.any((r) => r.contains(n) || n.contains(r));
+    }).toList();
+    // Solo se elige sola si hay una única coincidencia; si no, el usuario la selecciona
+    if (matches.length == 1) _transferAccountId = matches.first.id;
   }
 
   /// Looks for the approval number in other payments. Returns true when it is free or the user
@@ -1224,7 +1250,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
 
     /// Validates and registers the sale / payment. Returns true when it was saved.
     Future<bool> saveSale() async {
-      if (!_formKey.currentState!.validate()) return false;
+      if (!validateAndFocus(context, _formKey)) return false;
       final newSellerId = authVM.isAsesor
           ? authVM.activeAdvisor?.id
           : (authVM.isIndependent
@@ -1818,73 +1844,6 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       ],
                       if (_metodoPago == 'transferencia' && amt > 0) ...[
                         const SizedBox(height: 12),
-                        _transferAccountField(),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _transferDateController,
-                          readOnly: true,
-                          onTap: _pickTransferDate,
-                          decoration: const InputDecoration(
-                            labelText: 'Fecha de la transferencia *',
-                            helperText: 'Máximo 15 días atrás',
-                            helperMaxLines: 2,
-                            prefixIcon: Icon(Icons.event),
-                            suffixIcon: Icon(Icons.edit_calendar_outlined),
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateTransferDate,
-                        ),
-                        const SizedBox(height: 10),
-                        BankField(
-                          controller: _originBankController,
-                          label: 'Banco origen *',
-                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Indique el banco' : null,
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _approvalController,
-                          focusNode: _approvalFocus,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: InputDecoration(
-                            labelText: 'N° de aprobación *',
-                            helperMaxLines: 2,
-                            prefixIcon: const Icon(Icons.confirmation_number_outlined),
-                            border: const OutlineInputBorder(),
-                            helperText: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
-                                ? 'No se puede usar: $_approvalBlockedReason'
-                                : _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
-                                    ? 'Número repetido: usted decidió continuar'
-                                    : _referenceMatchesProof == true
-                                        ? '✓ Coincide con el comprobante'
-                                        : _referenceMatchesProof == false
-                                            ? '✗ No coincide con el comprobante (leí: ${_readReferences.take(2).join(', ')}). Corríjala.'
-                                            : 'Se verifica que no esté registrado y que sea la del comprobante',
-                            helperStyle: TextStyle(
-                                color: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
-                                    ? Colors.red.shade800
-                                    : _referenceMatchesProof == false
-                                        ? Colors.red.shade700
-                                        : _referenceMatchesProof == true
-                                            ? AppTheme.secondaryEmerald
-                                            : (_approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
-                                                ? Colors.orange.shade900
-                                                : null)),
-                            suffixIcon: _checkingApproval
-                                ? const Padding(
-                                    padding: EdgeInsets.all(14),
-                                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                                  )
-                                : _approvalCheckedKey != null && _approvalCheckedKey == approvalKey(_approvalController.text)
-                                    ? (_approvalDuplicateConfirmed
-                                        ? Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800)
-                                        : const Icon(Icons.verified, color: AppTheme.secondaryEmerald))
-                                    : null,
-                          ),
-                          onChanged: (_) => setState(() => _referenceMismatchConfirmed = false),
-                          onFieldSubmitted: (_) => _checkApproval(),
-                          validator: (v) => approvalKey(v ?? '').length < 3 ? 'Ingrese el número de aprobación' : null,
-                        ),
-                        const SizedBox(height: 10),
                         Row(
                           children: [
                             Expanded(
@@ -1981,6 +1940,67 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                 : const Text('No pude leer el comprobante (imagen borrosa o con poca luz). Escriba la referencia a mano: el administrador la revisará.',
                                     style: TextStyle(fontSize: 12.5)),
                           ),
+                        const SizedBox(height: 10),
+                        _transferAccountField(),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _transferDateController,
+                          readOnly: true,
+                          onTap: _pickTransferDate,
+                          decoration: const InputDecoration(
+                            labelText: 'Fecha de la transferencia *',
+                            helperText: 'Máximo 15 días atrás',
+                            helperMaxLines: 2,
+                            prefixIcon: Icon(Icons.event),
+                            suffixIcon: Icon(Icons.edit_calendar_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: _validateTransferDate,
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _approvalController,
+                          focusNode: _approvalFocus,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: InputDecoration(
+                            labelText: 'N° de aprobación *',
+                            helperMaxLines: 2,
+                            prefixIcon: const Icon(Icons.confirmation_number_outlined),
+                            border: const OutlineInputBorder(),
+                            helperText: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
+                                ? 'No se puede usar: $_approvalBlockedReason'
+                                : _approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                    ? 'Número repetido: usted decidió continuar'
+                                    : _referenceMatchesProof == true
+                                        ? '✓ Coincide con el comprobante'
+                                        : _referenceMatchesProof == false
+                                            ? '✗ No coincide con el comprobante (leí: ${_readReferences.take(2).join(', ')}). Corríjala.'
+                                            : 'Se verifica que no esté registrado y que sea la del comprobante',
+                            helperStyle: TextStyle(
+                                color: _approvalBlockedKey != null && _approvalBlockedKey == approvalKey(_approvalController.text)
+                                    ? Colors.red.shade800
+                                    : _referenceMatchesProof == false
+                                        ? Colors.red.shade700
+                                        : _referenceMatchesProof == true
+                                            ? AppTheme.secondaryEmerald
+                                            : (_approvalDuplicateConfirmed && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                                ? Colors.orange.shade900
+                                                : null)),
+                            suffixIcon: _checkingApproval
+                                ? const Padding(
+                                    padding: EdgeInsets.all(14),
+                                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                                  )
+                                : _approvalCheckedKey != null && _approvalCheckedKey == approvalKey(_approvalController.text)
+                                    ? (_approvalDuplicateConfirmed
+                                        ? Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800)
+                                        : const Icon(Icons.verified, color: AppTheme.secondaryEmerald))
+                                    : null,
+                          ),
+                          onChanged: (_) => setState(() => _referenceMismatchConfirmed = false),
+                          onFieldSubmitted: (_) => _checkApproval(),
+                          validator: (v) => approvalKey(v ?? '').length < 3 ? 'Ingrese el número de aprobación' : null,
+                        ),
                         const SizedBox(height: 6),
                       ],
                     ] else ...[

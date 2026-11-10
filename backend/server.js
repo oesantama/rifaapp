@@ -6110,7 +6110,7 @@ app.post('/api/transfers/read-proof', async (req, res) => {
   const buffer = Buffer.from(raw.replace(/^data:image\/\w+;base64,/, ''), 'base64');
   if (buffer.length < 2000) return res.status(400).json({ error: 'La imagen es demasiado pequeña.' });
   const read = await ocrService.readProof(buffer);
-  res.json({ available: read.available, readable: read.readable, references: read.references, amounts: read.amounts, bank: read.bank });
+  res.json({ available: read.available, readable: read.readable, references: read.references, amounts: read.amounts, bank: read.bank, date: read.date || '', accountNumbers: read.accountNumbers || [] });
 });
 
 // Administrador: corrige si una venta de un asesor INTEGRAL fue en oficina o en calle (cambia su comisión)
@@ -8174,7 +8174,8 @@ app.get('/api/analytics/sales', adminOnly, (req, res) => {
   // Todos los asesores de la empresa (también los que aún no venden), de la mayor venta a la menor
   const byAdvisor = new Map();
   (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, { name: a.name, tickets: 0, money: 0 }));
-  sold.forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
+  // Solo cuentan las ventas de calle (saleZone CALLE) y su valor
+  sold.filter(t => t.saleZone === 'CALLE').forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
 
   // Boletas que vendió el chatbot (solo informativo): apartadas, abonadas y pagadas, y por cuál asesor quedaron referenciadas
   const botStatus = t => t.status === 'RESERVADA' ? 'reserved' : t.status === 'ABONO_PARCIAL' ? 'partial' : (t.status === 'PAGADA' || t.status === 'CONFIRMADA') ? 'paid' : null;

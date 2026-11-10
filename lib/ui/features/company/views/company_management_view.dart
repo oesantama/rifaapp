@@ -139,14 +139,16 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                       children: [
                                         Icon(Icons.business_rounded, size: 18, color: !isInd ? Colors.white : Colors.grey[700]),
                                         const SizedBox(width: 8),
-                                        Text(
+                                        Flexible(child: Text(
                                           'Empresa / Grupo',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,
                                             color: !isInd ? Colors.white : Colors.grey[700],
                                           ),
-                                        ),
+                                        )),
                                       ],
                                     ),
                                   ),
@@ -167,14 +169,16 @@ class _CompanyManagementViewState extends State<CompanyManagementView> {
                                       children: [
                                         Icon(Icons.badge_rounded, size: 18, color: isInd ? Colors.white : Colors.grey[700]),
                                         const SizedBox(width: 8),
-                                        Text(
+                                        Flexible(child: Text(
                                           'Asesor Independiente',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,
                                             color: isInd ? Colors.white : Colors.grey[700],
                                           ),
-                                        ),
+                                        )),
                                       ],
                                     ),
                                   ),

@@ -195,7 +195,9 @@ Future<void> login(WidgetTester tester, {required bool asesor, required String u
   final fields = find.byType(TextField);
   await tester.enterText(fields.at(0), user);
   await tester.enterText(fields.at(1), pass);
-  await tester.tap(find.byType(ElevatedButton).last);
+  final submit = find.widgetWithText(ElevatedButton, asesor ? 'INGRESAR COMO ASESOR' : 'INGRESAR COMO ADMINISTRADOR');
+  await tester.ensureVisible(submit);
+  await tester.tap(submit);
   await settle(tester);
 }
 
@@ -330,6 +332,48 @@ void main() {
       }
       expect(_problemsSince(start), isEmpty);
     });
+  }
+
+  // Matriz de anchos (320-1366) con texto al 130 %: Inicio y Boletas de admin y asesor sin desbordes
+  for (final w in [320, 360, 412, 768, 1024, 1366]) {
+    for (final role in [('admin', 'william', false), ('asesor', 'carlos', true)]) {
+      testWidgets('ancho $w ${role.$1} texto 1.3x', (tester) async {
+        final original = FlutterError.onError;
+        final start = overflows.length;
+        setup(tester);
+        tester.view.physicalSize = Size(w * 2.0, 800 * 2.0);
+        tester.view.devicePixelRatio = 2;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        try {
+          await http.runWithClient(() async {
+            overflows.add('--- W$w ${role.$1}');
+            await login(tester, asesor: role.$3, user: role.$2, pass: '1234');
+            final wide = w >= 700;
+            for (final tab in ['Inicio', 'Boletas']) {
+              if (wide) {
+                final rail = find.byType(NavigationRail);
+                final idx = tab == 'Inicio' ? 0 : 1;
+                await tester.tap(find.descendant(of: rail, matching: find.byType(Icon)).at(idx));
+                await settle(tester, 600);
+              } else {
+                await goTab(tester, tab);
+              }
+              final scrollables = find.byType(Scrollable);
+              if (scrollables.evaluate().isNotEmpty) {
+                for (int i = 0; i < 4; i++) {
+                  await tester.drag(scrollables.first, const Offset(0, -500), warnIfMissed: false);
+                  await tester.pump(const Duration(milliseconds: 150));
+                }
+              }
+            }
+          }, () => mockClient);
+        } finally {
+          FlutterError.onError = original;
+          tester.platformDispatcher.clearAllTestValues();
+        }
+        expect(_problemsSince(start), isEmpty);
+      });
+    }
   }
 
   tearDownAll(() {

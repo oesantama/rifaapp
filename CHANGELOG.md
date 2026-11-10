@@ -8,6 +8,23 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.13] - 2026-11-09
+
+- Proyección: el ranking de asesores cuenta solo las ventas de calle y su valor.
+- Boletas: se oculta el bloque grande «Rifa actual» (la rifa y su selector ya están en la barra superior); solo reaparece si hay un aviso (rifa cerrada, inactiva o con ventas bloqueadas).
+- Boletas: nuevo botón «Cambiar de rifa» (el asesor lo ve solo con más de una rifa activa; el administrador, con más de una, activa o inactiva).
+- Boletas: la plantilla / afiche 2D solo se muestra en rifas de 2 dígitos.
+- Pago por transferencia: ahora se adjunta primero el soporte; se oculta «Banco origen» (se toma del comprobante) y el lector rellena la fecha de la transferencia, el número de aprobación y la cuenta destino cuando la reconoce (si no, se selecciona a mano).
+- Impresión de boleta: en el recuadro de firma se imprime el sello CANCELADO (con el nombre de la empresa) cuando la boleta está pagada al asesor o con pago confirmado, y ABONADO cuando tiene abonos.
+- Asesores: buscador para filtrar el listado por nombre, usuario, código, correo o teléfono.
+
+## [3.4.12] - 2026-11-09
+
+- Boletas: el estado «DISPONIBLE» se ve en negrilla y gris oscuro.
+- Formularios de apartar, abonar y pagar: al validar, la pantalla se desplaza al primer campo obligatorio faltante, le da el foco y avisa cuál es.
+- Comprobantes: el lector reconoce «Aprob» (corresponsal bancario Bancolombia/Wompi) como número de aprobación.
+- Responsive: contenido centrado a 1200 px máx., tarjetas del Inicio en 1/2/3 columnas con altura uniforme, botones táctiles de 44 px en Boletas, fichas de filtro con desvanecido lateral, encabezado sin desbordes desde 320 px, textos de tarjetas de 12 px y escala de texto limitada a 1.3x.
+
 ## [3.4.11] - 2026-11-09
 
 - Bot de WhatsApp: ya no pregunta por el asesor que atendió al cliente; la venta queda directa con el administrador (solo se asigna asesor si el número pertenece al rango asignado de uno).

@@ -36,7 +36,7 @@ class CurrentRaffleBanner extends StatelessWidget {
     Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: raffle.id);
   }
 
-  void _showPicker(BuildContext context, RaffleViewModel raffleVM, bool isAdmin) {
+  static void showPicker(BuildContext context, RaffleViewModel raffleVM, bool isAdmin) {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -79,6 +79,14 @@ class CurrentRaffleBanner extends StatelessWidget {
     final isAdmin = Provider.of<AuthViewModel>(context, listen: false).isAdmin;
     final raffle = raffleVM.selectedRaffle;
     if (raffle == null) return const SizedBox.shrink();
+
+    // El bloque grande ya no se muestra: la rifa y su selector están en la barra superior.
+    // Solo aparece cuando hay un aviso que el usuario debe ver (rifa cerrada, inactiva o con ventas bloqueadas).
+    final hasAlert = raffle.isClosed ||
+        (raffle.status == 'INACTIVA' && isAdmin) ||
+        raffle.salesBlockedReason != null ||
+        (!isAdmin && raffle.advisorSalesBlock != null);
+    if (!hasAlert) return const SizedBox.shrink();
 
     final color = colorFor(raffle.id);
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
@@ -144,7 +152,7 @@ class CurrentRaffleBanner extends StatelessWidget {
                   style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, height: 1.2),
                 ),
                 const SizedBox(height: 2),
-                Text(details, style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
+                Text(details, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 // Aviso permanente: sin ventas para nadie (administrador ni asesores)
                 if (raffle.salesBlockedReason != null) ...[
                   const SizedBox(height: 6),
@@ -166,14 +174,14 @@ class CurrentRaffleBanner extends StatelessWidget {
             // Phones: icon only, so the raffle name keeps the space
             if (MediaQuery.of(context).size.width < 600)
               IconButton.outlined(
-                onPressed: () => _showPicker(context, raffleVM, isAdmin),
+                onPressed: () => showPicker(context, raffleVM, isAdmin),
                 icon: Icon(Icons.swap_horiz, color: color),
                 tooltip: 'Cambiar rifa',
                 style: IconButton.styleFrom(side: BorderSide(color: color.withValues(alpha: 0.6))),
               )
             else
               OutlinedButton.icon(
-                onPressed: () => _showPicker(context, raffleVM, isAdmin),
+                onPressed: () => showPicker(context, raffleVM, isAdmin),
                 icon: Icon(Icons.swap_horiz, size: 18, color: color),
                 label: Text('Cambiar rifa', style: TextStyle(color: color)),
                 style: OutlinedButton.styleFrom(

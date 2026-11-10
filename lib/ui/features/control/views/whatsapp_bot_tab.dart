@@ -495,8 +495,9 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            SizedBox(
-                              width: 250,
+                            Flexible(
+                              child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 250),
                               child: TextField(
                                 controller: _phoneController,
                                 decoration: const InputDecoration(
@@ -507,6 +508,7 @@ class _WhatsAppBotTabState extends State<WhatsAppBotTab> {
                                   prefixIcon: Icon(Icons.phone_android),
                                 ),
                                 keyboardType: TextInputType.phone,
+                              ),
                               ),
                             ),
                             const SizedBox(width: 12),

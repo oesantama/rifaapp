@@ -652,12 +652,14 @@ class _LoginViewState extends State<LoginView> {
                           children: [
                             Icon(Icons.devices, size: 16, color: Color(0xFF38BDF8)),
                             SizedBox(width: 8),
-                            Text(
-                              'Disponible para tu celular o PC:',
-                              style: TextStyle(
-                                color: Color(0xFFCBD5E1),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                            Expanded(
+                              child: Text(
+                                'Disponible para tu celular o PC:',
+                                style: TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],

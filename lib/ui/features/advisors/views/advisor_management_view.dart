@@ -786,12 +786,9 @@ class AdvisorManagementView extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
 
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: advVM.advisors.length,
-                        itemBuilder: (context, i) {
-                          final adv = advVM.advisors[i];
+                      _SearchableAdvisors(
+                        advisors: advVM.advisors,
+                        itemBuilder: (context, adv) {
                           int rankIndex = rankedAdvisors.indexWhere((a) => a.id == adv.id) + 1;
                           String rankBadge = rankIndex == 1
                               ? '🥇 #1'
@@ -1096,6 +1093,65 @@ class AdvisorManagementView extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// Listado de asesores con un buscador (nombre, usuario, código, correo o teléfono).
+class _SearchableAdvisors extends StatefulWidget {
+  final List<Advisor> advisors;
+  final Widget Function(BuildContext context, Advisor advisor) itemBuilder;
+  const _SearchableAdvisors({required this.advisors, required this.itemBuilder});
+
+  @override
+  State<_SearchableAdvisors> createState() => _SearchableAdvisorsState();
+}
+
+class _SearchableAdvisorsState extends State<_SearchableAdvisors> {
+  final _ctrl = TextEditingController();
+  String _q = '';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = _q.trim().toLowerCase();
+    final list = q.isEmpty
+        ? widget.advisors
+        : widget.advisors.where((a) => [a.name, a.username, a.code, a.email, a.phone].any((v) => v.toLowerCase().contains(q))).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _ctrl,
+          onChanged: (v) => setState(() => _q = v),
+          decoration: InputDecoration(
+            hintText: 'Buscar asesor por nombre, usuario, código o teléfono...',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _q.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _ctrl.clear();
+                      setState(() => _q = '');
+                    },
+                  ),
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (list.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('Ningún asesor coincide con la búsqueda.')))
+        else
+          for (final adv in list) widget.itemBuilder(context, adv),
+      ],
     );
   }
 }

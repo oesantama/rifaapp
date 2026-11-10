@@ -136,6 +136,54 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
     }
   }
 
+  /// Sello de la boleta: CANCELADO cuando está pagada completa (al asesor o confirmada por el administrador) y ABONADO cuando tiene abonos.
+  /// Devuelve null si no aplica (queda el recuadro de firma).
+  Widget? _receivedStamp() {
+    final status = widget.ticket.status;
+    final String word;
+    final Color color;
+    if (status == 'PAGADA' || status == 'CONFIRMADA') {
+      word = 'CANCELADO';
+      color = const Color(0xFF2B2B2B);
+    } else if (status == 'ABONO_PARCIAL') {
+      word = 'ABONADO';
+      color = const Color(0xFFB45309);
+    } else {
+      return null;
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 3, 8, 3),
+      decoration: BoxDecoration(border: Border.all(color: color, width: 1.6)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              word,
+              maxLines: 1,
+              style: TextStyle(fontFamily: 'serif', fontSize: 22, height: 1.05, color: color, letterSpacing: 0.5),
+            ),
+          ),
+          Row(children: [
+            Expanded(child: Container(height: 1.2, color: color)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                _companyName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, letterSpacing: 2, color: color),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(child: Container(height: 1.2, color: color)),
+          ]),
+        ],
+      ),
+    );
+  }
+
   String get _companyName {
     final name = Provider.of<AuthViewModel>(context, listen: false).companyName;
     return name.startsWith('🏢') ? 'RIFA MASTER' : name.toUpperCase();
@@ -529,18 +577,19 @@ class _TicketPrintDialogState extends State<TicketPrintDialog> {
                                           crossAxisAlignment: CrossAxisAlignment.stretch,
                                           children: [
                                             const SizedBox(height: 12),
-                                            Container(
-                                              height: 35,
-                                              decoration: BoxDecoration(
-                                                border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                'Firma / Sello Recibido',
-                                                style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                                              ),
-                                            ),
+                                            _receivedStamp() ??
+                                                Container(
+                                                  height: 35,
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey.shade400, style: BorderStyle.solid),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  alignment: Alignment.center,
+                                                  child: Text(
+                                                    'Firma / Sello Recibido',
+                                                    style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                                                  ),
+                                                ),
                                           ],
                                         )
                                       ],

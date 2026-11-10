@@ -61,7 +61,7 @@ function recognize(buffer) {
 // ---------------------------------------------------------------------------
 // Interpretación del texto
 // ---------------------------------------------------------------------------
-const REF_LABEL = /(referencia|\bref\b\.?|comprobante|aprobaci[oó]n|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
+const REF_LABEL = /(referencia|\bref\b\.?|comprobante|aprob\w*|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
 
 const normRef = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 // El OCR confunde letras y números parecidos: se comparan con la misma equivalencia en ambos lados
@@ -91,6 +91,41 @@ function extractReferences(text) {
     got.forEach((tok, k) => add(tok, 10 - k));
   });
   return found.sort((a, b) => b.score - a.score).map(f => f.value);
+}
+
+
+const MONTHS = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+const monthOf = word => MONTHS[String(word || '').toLowerCase().replace(/[^a-z]/g, '').slice(0, 3)] || null;
+
+// Fecha de la transferencia (AAAA-MM-DD). Acepta 09/11/2026, 2026-11-09, "9 de noviembre de 2026" y "NOV 09 2026"
+function extractDate(text, now = new Date()) {
+  const t = String(text || '');
+  const found = [];
+  const push = (index, y, m, d) => {
+    y = Number(y); m = Number(m); d = Number(d);
+    if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 2000)) return;
+    const when = Date.UTC(y, m - 1, d);
+    if (new Date(when).getUTCDate() !== d) return;
+    const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    if (when > today + 86400000 || when < today - 400 * 86400000) return;
+    found.push({ index, value: `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` });
+  };
+  for (const m of t.matchAll(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/g)) push(m.index, m[1], m[2], m[3]);
+  for (const m of t.matchAll(/(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/g)) push(m.index, m[3], m[2], m[1]);
+  for (const m of t.matchAll(/(?<!\d)(\d{1,2})\s*(?:de\s+)?([A-Za-záéíóúÁÉÍÓÚ]{3,10})\.?,?\s*(?:de\s+)?(\d{4})/g)) { const mo = monthOf(m[2]); if (mo) push(m.index, m[3], mo, m[1]); }
+  for (const m of t.matchAll(/([A-Za-z]{3,10})\.?\s+(\d{1,2}),?\s+(\d{4})/g)) { const mo = monthOf(m[1]); if (mo) push(m.index, m[3], mo, m[2]); }
+  found.sort((a, b) => a.index - b.index);
+  return found.length ? found[0].value : '';
+}
+
+// Secuencias numéricas largas del comprobante (posibles cuentas destino), sin espacios ni guiones
+function extractAccountNumbers(text) {
+  const out = new Set();
+  for (const m of String(text || '').matchAll(/\d[\d \-.]{4,24}\d/g)) {
+    const digits = m[0].replace(/\D/g, '');
+    if (digits.length >= 6 && digits.length <= 22) out.add(digits);
+  }
+  return [...out];
 }
 
 function parseAmount(raw) {
@@ -143,6 +178,8 @@ async function readProof(buffer) {
       references: extractReferences(text),
       amounts: extractAmounts(text),
       bank: guessBank(text),
+      date: extractDate(text),
+      accountNumbers: extractAccountNumbers(text),
       confidence: Math.round(data.confidence || 0),
       hash,
       text
@@ -172,4 +209,4 @@ function verifyReference(proof, typed) {
   return { status: 'MISMATCH', read };
 }
 
-module.exports = { available, readProof, verifyReference, extractReferences, extractAmounts, guessBank, normRef };
+module.exports = { available, readProof, verifyReference, extractDate, extractAccountNumbers, extractReferences, extractAmounts, guessBank, normRef };

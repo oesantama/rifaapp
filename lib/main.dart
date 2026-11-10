@@ -69,17 +69,27 @@ class _RifaAppState extends State<RifaApp> {
 
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => AuthViewModel(repository: repository)),
         // Data is loaded after login (MainShellScreen): before that the API rejects requests
-        ChangeNotifierProvider(create: (_) => RaffleViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => TicketViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => AdvisorViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => WinnerViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => SaleChannelViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => BankViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => LotteryViewModel(repository: repository)),
-        ChangeNotifierProvider(create: (_) => AppConfigViewModel(repository: repository)..load()),
-        ChangeNotifierProvider(create: (_) => CashViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => RaffleViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => TicketViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => AdvisorViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => WinnerViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => SaleChannelViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => BankViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => LotteryViewModel(repository: repository)),
+        ChangeNotifierProvider(
+            create: (_) => AppConfigViewModel(repository: repository)..load()),
+        ChangeNotifierProvider(
+            create: (_) => CashViewModel(repository: repository)),
       ],
       child: MaterialApp(
         title: 'Rifa Master',
@@ -87,6 +97,13 @@ class _RifaAppState extends State<RifaApp> {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+        // El texto respeta el tamaño del sistema hasta 1.3x para que el diseño no se rompa
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+              textScaler:
+                  MediaQuery.of(context).textScaler.clamp(maxScaleFactor: 1.3)),
+          child: child ?? const SizedBox.shrink(),
+        ),
         home: Consumer<AuthViewModel>(
           builder: (context, authVM, _) {
             if (authVM.isRestoringSession) {
@@ -102,7 +119,8 @@ class _RifaAppState extends State<RifaApp> {
             }
             return MainShellScreen(
               isDarkMode: _isDarkMode,
-              onToggleDarkMode: () => setState(() => _isDarkMode = !_isDarkMode),
+              onToggleDarkMode: () =>
+                  setState(() => _isDarkMode = !_isDarkMode),
             );
           },
         ),
@@ -125,7 +143,8 @@ class MainShellScreen extends StatefulWidget {
   State<MainShellScreen> createState() => _MainShellScreenState();
 }
 
-class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingObserver {
+class _MainShellScreenState extends State<MainShellScreen>
+    with WidgetsBindingObserver {
   Timer? _updateTimer;
   Timer? _versionTimer;
   bool _updateBannerShown = false;
@@ -146,7 +165,10 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
 
   /// True when [server] is a newer semantic version than [current] (e.g. 2.1.0 > 2.0.3).
   static bool _isNewer(String server, String current) {
-    List<int> parts(String v) => v.split('.').map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0).toList();
+    List<int> parts(String v) => v
+        .split('.')
+        .map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
+        .toList();
     final a = parts(server), b = parts(current);
     for (int i = 0; i < 3; i++) {
       final x = i < a.length ? a[i] : 0, y = i < b.length ? b[i] : 0;
@@ -161,9 +183,13 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
       final info = await RaffleRepository().fetchServerInfo();
       final serverVersion = '${info['version'] ?? ''}';
       final serverBuild = '${info['build'] ?? ''}';
-      final newerVersion = serverVersion.isNotEmpty && _isNewer(serverVersion, appVersion);
+      final newerVersion =
+          serverVersion.isNotEmpty && _isNewer(serverVersion, appVersion);
       // Cada despliegue de la web trae un build distinto, aunque el número de versión sea el mismo
-      final newerBuild = kIsWeb && appBuild.isNotEmpty && serverBuild.isNotEmpty && serverBuild != appBuild;
+      final newerBuild = kIsWeb &&
+          appBuild.isNotEmpty &&
+          serverBuild.isNotEmpty &&
+          serverBuild != appBuild;
       if (!mounted || (!newerVersion && !newerBuild)) return;
       _updateBannerShown = true;
       ScaffoldMessenger.of(context).showMaterialBanner(
@@ -184,18 +210,24 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
               onPressed: () {
                 ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
                 // Si lo pospone, el aviso vuelve a salir en 15 minutos
-                Future.delayed(const Duration(minutes: 15), () => _updateBannerShown = false);
+                Future.delayed(const Duration(minutes: 15),
+                    () => _updateBannerShown = false);
               },
               child: const Text('Más tarde'),
             ),
             if (kIsWeb)
-              ElevatedButton.icon(onPressed: web_launcher.reloadPage, icon: const Icon(Icons.refresh), label: const Text('Actualizar ahora'))
+              ElevatedButton.icon(
+                  onPressed: web_launcher.reloadPage,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Actualizar ahora'))
             else
               ElevatedButton.icon(
                 onPressed: () {
                   ScaffoldMessenger.of(context).hideCurrentMaterialBanner();
                   // El APK se baja del MISMO servidor al que está conectada la app (siempre la versión publicada ahí) y se instala encima
-                  ApkUpdateDialog.show(context, '${ApiService.publicBaseUrl}/descargar-apk').then((_) {
+                  ApkUpdateDialog.show(
+                          context, '${ApiService.publicBaseUrl}/descargar-apk')
+                      .then((_) {
                     // Si no se instaló, el aviso vuelve a salir en el próximo chequeo
                     _updateBannerShown = false;
                   });
@@ -233,7 +265,8 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
     // Detects when the server was updated while this app/browser keeps an older version open
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
     WidgetsBinding.instance.addObserver(this);
-    _versionTimer = Timer.periodic(const Duration(minutes: 3), (_) => _checkForUpdate());
+    _versionTimer =
+        Timer.periodic(const Duration(minutes: 3), (_) => _checkForUpdate());
     _updateTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       if (mounted) {
         final auth = Provider.of<AuthViewModel>(context, listen: false);
@@ -257,9 +290,11 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
     ticketVM.reset();
     advisorVM.reset();
     winnerVM.reset();
-    final saleChannelVM = Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
+    final saleChannelVM =
+        Provider.of<SaleChannelViewModel>(context, listen: false)..reset();
     final bankVM = Provider.of<BankViewModel>(context, listen: false)..reset();
-    final lotteryVM = Provider.of<LotteryViewModel>(context, listen: false)..reset();
+    final lotteryVM = Provider.of<LotteryViewModel>(context, listen: false)
+      ..reset();
 
     // Advisors and winners do not depend on the selected raffle: load them in parallel
     final independent = Future.wait([
@@ -268,9 +303,11 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
       saleChannelVM.load(),
       bankVM.load(),
       lotteryVM.load(),
-      authVM.refreshActiveAdvisor(), // numbers assigned since the session was saved
+      authVM
+          .refreshActiveAdvisor(), // numbers assigned since the session was saved
     ]);
-    await raffleVM.loadRaffles(advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
+    await raffleVM.loadRaffles(
+        advisorId: authVM.activeAdvisor?.id, isAsesor: authVM.isAsesor);
     await Future.wait([
       ticketVM.loadTickets(raffleId: raffleVM.selectedRaffle?.id),
       independent,
@@ -297,7 +334,9 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
         : authVM.isAdmin
             ? (authVM.isIndependent
                 ? [
-                    DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                    DashboardScreen(
+                        onNavigateTab: (idx) =>
+                            setState(() => _selectedIndex = idx)),
                     const TicketGridView(),
                     const IndependentDeliveriesView(),
                     const WinnerRegistrationView(),
@@ -306,7 +345,9 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                     const SalesProjectionTab(),
                   ]
                 : [
-                    DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                    DashboardScreen(
+                        onNavigateTab: (idx) =>
+                            setState(() => _selectedIndex = idx)),
                     const TicketGridView(),
                     const AdvisorManagementView(),
                     const AdminCashView(),
@@ -316,13 +357,18 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                     const SalesProjectionTab(),
                   ])
             : [
-                DashboardScreen(onNavigateTab: (idx) => setState(() => _selectedIndex = idx)),
+                DashboardScreen(
+                    onNavigateTab: (idx) =>
+                        setState(() => _selectedIndex = idx)),
                 const TicketGridView(),
                 const AdvisorCashView(),
                 const WinnerRegistrationView(),
                 // Asesor de punto/integral con permiso de ver la caja (se agrega al final: no mueve las demás opciones)
                 if (authVM.activeAdvisor?.canViewCash == true)
-                  AgilPaymentsView(advisorMode: true, canRegisterExpenses: authVM.activeAdvisor?.canRegisterExpenses == true),
+                  AgilPaymentsView(
+                      advisorMode: true,
+                      canRegisterExpenses:
+                          authVM.activeAdvisor?.canRegisterExpenses == true),
               ];
 
     // Ensure selected index is valid
@@ -335,55 +381,87 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 8,
-        bottom: showMobileContextBar ? _buildMobileContextBar(context, authVM, raffleVM) : null,
+        titleSpacing: screenWidth < 360 ? 0 : 8,
+        actionsPadding: EdgeInsets.zero,
+        bottom: showMobileContextBar
+            ? _buildMobileContextBar(context, authVM, raffleVM)
+            : null,
         title: LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 700;
             final isMedium = constraints.maxWidth >= 480;
 
+            // Si los íconos de la derecha dejan casi sin espacio (admin en 320-360 px), el logo se oculta antes que desbordar
+            if (constraints.maxWidth < 40) return const SizedBox.shrink();
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const AppLogo(size: 28),
-                const SizedBox(width: 8),
-                Text(
-                  isWide ? 'RIFA MASTER' : 'RIFA',
-                  style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5, fontSize: 16),
-                ),
-                if (isWide && !authVM.isSuperAdmin && raffleVM.raffles.isNotEmpty) ...[
+                AppLogo(
+                    size: MediaQuery.of(context).size.width < 360 ? 24 : 28),
+                if (MediaQuery.of(context).size.width >= 360 &&
+                    constraints.maxWidth >= 140) ...[
                   const SizedBox(width: 8),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+                  Flexible(
+                    child: Text(
+                      isWide ? 'RIFA MASTER' : 'RIFA',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                          fontSize: 16),
+                    ),
+                  ),
+                ],
+                if (isWide &&
+                    !authVM.isSuperAdmin &&
+                    raffleVM.raffles.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                      child: ConstrainedBox(
+                    constraints:
+                        BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         isExpanded: true,
                         dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12),
                         value: raffleVM.selectedRaffle?.id,
-                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 18),
+                        icon: const Icon(Icons.arrow_drop_down,
+                            color: Colors.white, size: 18),
                         items: raffleVM.raffles.map((r) {
-                          String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴]' : '';
+                          String statusTag =
+                              (authVM.isAdmin && r.status == 'INACTIVA')
+                                  ? ' [🔴]'
+                                  : '';
                           return DropdownMenuItem(
                             value: r.id,
-                            child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
+                            child: Text('${r.title}$statusTag',
+                                overflow: TextOverflow.ellipsis),
                           );
                         }).toList(),
                         onChanged: (val) {
                           if (val != null) {
-                            final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
+                            final selected =
+                                raffleVM.raffles.firstWhere((r) => r.id == val);
                             raffleVM.selectRaffle(selected);
-                            Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
+                            Provider.of<TicketViewModel>(context, listen: false)
+                                .loadTickets(raffleId: val);
                           }
                         },
                       ),
                     ),
-                  ),
+                  )),
                 ],
                 if (isWide) const Spacer(),
                 if (isMedium && (isWide || authVM.isSuperAdmin)) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  Flexible(
+                      child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: authVM.isSuperAdmin
@@ -392,7 +470,9 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                       ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: authVM.isSuperAdmin ? Colors.purpleAccent : Colors.lightBlueAccent,
+                        color: authVM.isSuperAdmin
+                            ? Colors.purpleAccent
+                            : Colors.lightBlueAccent,
                         width: 1,
                       ),
                     ),
@@ -400,22 +480,28 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          authVM.isSuperAdmin ? Icons.domain_rounded : Icons.apartment_rounded,
+                          authVM.isSuperAdmin
+                              ? Icons.domain_rounded
+                              : Icons.apartment_rounded,
                           color: Colors.amber.shade300,
                           size: 14,
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          authVM.companyName.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                        Flexible(
+                          child: Text(
+                            authVM.companyName.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  )),
                 ],
                 if (isWide) const Spacer(),
               ],
@@ -428,213 +514,308 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
               final screenWidth = MediaQuery.of(context).size.width;
               final isMobile = screenWidth < 600;
 
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () => showAccountSheet(
-                      context,
-                      name: authVM.currentUserName,
-                      isSuperAdmin: authVM.isSuperAdmin,
-                      onProfile: () {
-                        if (authVM.isAdmin || authVM.isSuperAdmin) {
-                          showDialog(context: context, builder: (_) => const AdminProfileDialog());
-                        } else {
-                          ChangePasswordDialog.show(context);
-                        }
-                      },
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: authVM.isSuperAdmin
-                            ? Colors.purple.withValues(alpha: 0.2)
-                            : (authVM.isAdmin ? Colors.amber.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2)),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.blue),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            authVM.isSuperAdmin ? Icons.verified_user : (authVM.isAdmin ? Icons.admin_panel_settings : Icons.person),
-                            size: 14,
-                            color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.blue),
-                          ),
-                          if (!isMobile) ...[
-                            const SizedBox(width: 4),
-                            Text(
-                              authVM.isSuperAdmin
-                                  ? authVM.currentUserName
-                                  : (authVM.isAdmin ? authVM.currentUserName : authVM.currentUserName),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: authVM.isSuperAdmin ? Colors.purpleAccent : (authVM.isAdmin ? Colors.amber : Colors.white),
+              // En teléfonos angostos los íconos del encabezado se acercan (alto táctil 44, ancho 38) para que quepan junto al logo
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: screenWidth - 16),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Theme(
+                    data: screenWidth < 420
+                        ? Theme.of(context).copyWith(
+                            iconButtonTheme: IconButtonThemeData(
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(38, 44),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                visualDensity:
+                                    const VisualDensity(horizontal: -4),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  // Avisos: sorteo cerca con boletas sin completar y efectivo sin legalizar (solo administradores y asesores)
-                  if (!authVM.isSuperAdmin) const AlertsBell(),
-                  IconButton(
-                    icon: const Icon(Icons.cleaning_services_rounded, size: 20, color: Colors.amber),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('🧹 Limpiando caché y recargando aplicación...')),
-                      );
-                      Future.delayed(const Duration(milliseconds: 300), () {
-                        clearAppCacheAndReload();
-                      });
-                    },
-                    tooltip: 'Limpiar caché de la aplicación y recargar',
-                  ),
-                  IconButton(
-                    icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode, size: 20),
-                    onPressed: widget.onToggleDarkMode,
-                    tooltip: 'Modo Oscuro/Claro',
-                  ),
-                  if (authVM.isAdmin && !authVM.isSuperAdmin)
-                    authVM.isIndependent
-                        ? Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal.shade700,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                              icon: const Icon(Icons.post_add_rounded, size: 18),
-                              label: Text(
-                                isMobile ? 'Talonario' : 'Cargar Talonario',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => const IndependentBookDialog(),
-                                );
-                              },
                             ),
                           )
-                        : IconButton(
-                            icon: const Icon(Icons.add_circle_outline, size: 20),
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) => const RaffleCreateDialog(),
-                              );
+                        : Theme.of(context),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        InkWell(
+                          onTap: () => showAccountSheet(
+                            context,
+                            name: authVM.currentUserName,
+                            isSuperAdmin: authVM.isSuperAdmin,
+                            onProfile: () {
+                              if (authVM.isAdmin || authVM.isSuperAdmin) {
+                                showDialog(
+                                    context: context,
+                                    builder: (_) => const AdminProfileDialog());
+                              } else {
+                                ChangePasswordDialog.show(context);
+                              }
                             },
-                            tooltip: 'Crear Nuevo Sorteo',
                           ),
-                  IconButton(
-                    icon: const Icon(Icons.get_app_rounded, color: Color(0xFF38BDF8), size: 21),
-                    tooltip: 'Descargar APK o Instalar App',
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: const Color(0xFF0F172A),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                        ),
-                        builder: (ctx) => Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.devices, color: Color(0xFF38BDF8), size: 22),
-                                  SizedBox(width: 8),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 8 : 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: authVM.isSuperAdmin
+                                  ? Colors.purple.withValues(alpha: 0.2)
+                                  : (authVM.isAdmin
+                                      ? Colors.amber.withValues(alpha: 0.2)
+                                      : Colors.blue.withValues(alpha: 0.2)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: authVM.isSuperAdmin
+                                    ? Colors.purpleAccent
+                                    : (authVM.isAdmin
+                                        ? Colors.amber
+                                        : Colors.blue),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  authVM.isSuperAdmin
+                                      ? Icons.verified_user
+                                      : (authVM.isAdmin
+                                          ? Icons.admin_panel_settings
+                                          : Icons.person),
+                                  size: 14,
+                                  color: authVM.isSuperAdmin
+                                      ? Colors.purpleAccent
+                                      : (authVM.isAdmin
+                                          ? Colors.amber
+                                          : Colors.blue),
+                                ),
+                                if (!isMobile) ...[
+                                  const SizedBox(width: 4),
                                   Text(
-                                    'Instalar o Descargar Rifa Master',
-                                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                    authVM.isSuperAdmin
+                                        ? authVM.currentUserName
+                                        : (authVM.isAdmin
+                                            ? authVM.currentUserName
+                                            : authVM.currentUserName),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: authVM.isSuperAdmin
+                                          ? Colors.purpleAccent
+                                          : (authVM.isAdmin
+                                              ? Colors.amber
+                                              : Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        // Avisos: sorteo cerca con boletas sin completar y efectivo sin legalizar (solo administradores y asesores)
+                        if (!authVM.isSuperAdmin) const AlertsBell(),
+                        IconButton(
+                          icon: const Icon(Icons.cleaning_services_rounded,
+                              size: 20, color: Colors.amber),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      '🧹 Limpiando caché y recargando aplicación...')),
+                            );
+                            Future.delayed(const Duration(milliseconds: 300),
+                                () {
+                              clearAppCacheAndReload();
+                            });
+                          },
+                          tooltip: 'Limpiar caché de la aplicación y recargar',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                              widget.isDarkMode
+                                  ? Icons.light_mode
+                                  : Icons.dark_mode,
+                              size: 20),
+                          onPressed: widget.onToggleDarkMode,
+                          tooltip: 'Modo Oscuro/Claro',
+                        ),
+                        if (authVM.isAdmin && !authVM.isSuperAdmin)
+                          authVM.isIndependent
+                              ? Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.teal.shade700,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 6),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(16)),
+                                    ),
+                                    icon: const Icon(Icons.post_add_rounded,
+                                        size: 18),
+                                    label: Text(
+                                      isMobile
+                                          ? 'Talonario'
+                                          : 'Cargar Talonario',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (_) =>
+                                            const IndependentBookDialog(),
+                                      );
+                                    },
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(Icons.add_circle_outline,
+                                      size: 20),
+                                  onPressed: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (_) =>
+                                          const RaffleCreateDialog(),
+                                    );
+                                  },
+                                  tooltip: 'Crear Nuevo Sorteo',
+                                ),
+                        IconButton(
+                          icon: const Icon(Icons.get_app_rounded,
+                              color: Color(0xFF38BDF8), size: 21),
+                          tooltip: 'Descargar APK o Instalar App',
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: const Color(0xFF0F172A),
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(20)),
+                              ),
+                              builder: (ctx) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 20, vertical: 24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    const Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.devices,
+                                            color: Color(0xFF38BDF8), size: 22),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Instalar o Descargar Rifa Master',
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Úsala como aplicación nativa en tu celular Android o instálala como PWA en tu navegador.',
+                                      style: TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 13),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 20),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        web_launcher.downloadApk();
+                                      },
+                                      icon: const Icon(Icons.android,
+                                          color: Colors.white),
+                                      label: const Text(
+                                        'Descargar APK para Android',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF10B981),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        web_launcher.promptPwaInstall();
+                                      },
+                                      icon: const Icon(Icons.install_mobile,
+                                          color: Colors.white),
+                                      label: const Text(
+                                        'Instalar como App Web (PWA)',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF2563EB),
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 14),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.logout,
+                              color: AppTheme.dangerRose, size: 20),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Cerrar Sesión'),
+                                content: const Text(
+                                    '¿Está seguro de que desea salir del sistema?'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Cancelar')),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.dangerRose),
+                                    onPressed: () {
+                                      Navigator.pop(ctx);
+                                      authVM.logout();
+                                    },
+                                    child: const Text('Salir'),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Úsala como aplicación nativa en tu celular Android o instálala como PWA en tu navegador.',
-                                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 20),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(ctx);
-                                  web_launcher.downloadApk();
-                                },
-                                icon: const Icon(Icons.android, color: Colors.white),
-                                label: const Text(
-                                  'Descargar APK para Android',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF10B981),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              ElevatedButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(ctx);
-                                  web_launcher.promptPwaInstall();
-                                },
-                                icon: const Icon(Icons.install_mobile, color: Colors.white),
-                                label: const Text(
-                                  'Instalar como App Web (PWA)',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF2563EB),
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                              ),
-                            ],
-                          ),
+                            );
+                          },
+                          tooltip: 'Cerrar Sesión',
                         ),
-                      );
-                    },
+                        const SizedBox(width: 4),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.logout, color: AppTheme.dangerRose, size: 20),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Cerrar Sesión'),
-                          content: const Text('¿Está seguro de que desea salir del sistema?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRose),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                authVM.logout();
-                              },
-                              child: const Text('Salir'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    tooltip: 'Cerrar Sesión',
-                  ),
-                  const SizedBox(width: 4),
-                ],
+                ),
               );
             },
           ),
@@ -646,14 +827,17 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
           if (MediaQuery.of(context).size.width >= 700)
             NavigationRail(
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
+              onDestinationSelected: (idx) =>
+                  setState(() => _selectedIndex = idx),
               labelType: NavigationRailLabelType.all,
               trailing: Expanded(
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Text('v$appVersion', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                    child: Text('v$appVersion',
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.grey[500])),
                   ),
                 ),
               ),
@@ -709,8 +893,10 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                                 label: Text('Mis Boletas'),
                               ),
                               NavigationRailDestination(
-                                icon: Icon(Icons.account_balance_wallet_outlined),
-                                selectedIcon: Icon(Icons.account_balance_wallet),
+                                icon:
+                                    Icon(Icons.account_balance_wallet_outlined),
+                                selectedIcon:
+                                    Icon(Icons.account_balance_wallet),
                                 label: Text('Entregas / Caja'),
                               ),
                               NavigationRailDestination(
@@ -811,7 +997,15 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
             child: Column(
               children: [
                 const DemoBannerWidget(),
-                Expanded(child: pages[_selectedIndex]),
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    // En escritorio el contenido no se estira más allá de ~1200 px
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1200),
+                        child: pages[_selectedIndex]),
+                  ),
+                ),
                 const AdBannerWidget(),
               ],
             ),
@@ -824,41 +1018,81 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
               onTap: (idx) => setState(() => _selectedIndex = idx),
               items: authVM.isSuperAdmin
                   ? const [
-                      BottomNavigationBarItem(icon: Icon(Icons.apartment), label: 'Empresas'),
-                      BottomNavigationBarItem(icon: Icon(Icons.backup), label: 'Backup BD'),
-                      BottomNavigationBarItem(icon: Icon(Icons.campaign), label: 'Medios'),
-                      BottomNavigationBarItem(icon: Icon(Icons.account_balance), label: 'Bancos'),
-                      BottomNavigationBarItem(icon: Icon(Icons.confirmation_number), label: 'Loterías'),
-                      BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: 'Planes'),
-                      BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'Bot Ventas'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.apartment), label: 'Empresas'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.backup), label: 'Backup BD'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.campaign), label: 'Medios'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.account_balance), label: 'Bancos'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.confirmation_number),
+                          label: 'Loterías'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.workspace_premium), label: 'Planes'),
+                      BottomNavigationBarItem(
+                          icon: Icon(Icons.smart_toy), label: 'Bot Ventas'),
                     ]
                   : authVM.isAdmin
                       ? (authVM.isIndependent
                           ? const [
-                              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                              BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                              BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Entregas'),
-                              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
-                              BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
-                              BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
-                              BottomNavigationBarItem(icon: Icon(Icons.insights), label: 'Proyección'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.dashboard), label: 'Inicio'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.grid_on), label: 'Boletas'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.account_balance_wallet),
+                                  label: 'Entregas'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.emoji_events),
+                                  label: 'Premios'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.fact_check),
+                                  label: 'Control'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.receipt_long),
+                                  label: 'Pagos'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.insights),
+                                  label: 'Proyección'),
                             ]
                           : const [
-                              BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                              BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                              BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Asesores'),
-                              BottomNavigationBarItem(icon: Icon(Icons.point_of_sale), label: 'Caja'),
-                              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
-                              BottomNavigationBarItem(icon: Icon(Icons.fact_check), label: 'Control'),
-                              BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Pagos'),
-                              BottomNavigationBarItem(icon: Icon(Icons.insights), label: 'Proyección'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.dashboard), label: 'Inicio'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.grid_on), label: 'Boletas'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.people), label: 'Asesores'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.point_of_sale),
+                                  label: 'Caja'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.emoji_events),
+                                  label: 'Premios'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.fact_check),
+                                  label: 'Control'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.receipt_long),
+                                  label: 'Pagos'),
+                              BottomNavigationBarItem(
+                                  icon: Icon(Icons.insights),
+                                  label: 'Proyección'),
                             ])
                       : [
-                          const BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Inicio'),
-                          const BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Boletas'),
-                          const BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Mi Caja'),
-                          const BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Premios'),
-                          if (authVM.activeAdvisor?.canViewCash == true) const BottomNavigationBarItem(icon: Icon(Icons.savings), label: 'Caja'),
+                          const BottomNavigationBarItem(
+                              icon: Icon(Icons.dashboard), label: 'Inicio'),
+                          const BottomNavigationBarItem(
+                              icon: Icon(Icons.grid_on), label: 'Boletas'),
+                          const BottomNavigationBarItem(
+                              icon: Icon(Icons.account_balance_wallet),
+                              label: 'Mi Caja'),
+                          const BottomNavigationBarItem(
+                              icon: Icon(Icons.emoji_events), label: 'Premios'),
+                          if (authVM.activeAdvisor?.canViewCash == true)
+                            const BottomNavigationBarItem(
+                                icon: Icon(Icons.savings), label: 'Caja'),
                         ],
             )
           : null,
@@ -867,25 +1101,32 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
 
   /// Compact bar shown under the AppBar on phones so the company and the
   /// active raffle selector stay reachable (on wide screens they live in the title).
-  PreferredSizeWidget _buildMobileContextBar(BuildContext context, AuthViewModel authVM, RaffleViewModel raffleVM) {
+  PreferredSizeWidget _buildMobileContextBar(
+      BuildContext context, AuthViewModel authVM, RaffleViewModel raffleVM) {
     return PreferredSize(
       preferredSize: const Size.fromHeight(44),
       child: Container(
         height: 44,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+          border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
         ),
         child: Row(
           children: [
-            Icon(Icons.apartment_rounded, color: Colors.amber.shade300, size: 16),
+            Icon(Icons.apartment_rounded,
+                color: Colors.amber.shade300, size: 16),
             const SizedBox(width: 6),
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.3),
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.3),
               child: Text(
                 authVM.companyName.toUpperCase(),
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
               ),
             ),
             Container(
@@ -894,7 +1135,8 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
               margin: const EdgeInsets.symmetric(horizontal: 10),
               color: Colors.white24,
             ),
-            const Icon(Icons.confirmation_number_outlined, color: Colors.white70, size: 16),
+            const Icon(Icons.confirmation_number_outlined,
+                color: Colors.white70, size: 16),
             const SizedBox(width: 6),
             Expanded(
               child: raffleVM.raffles.isEmpty
@@ -906,21 +1148,31 @@ class _MainShellScreenState extends State<MainShellScreen> with WidgetsBindingOb
                       child: DropdownButton<String>(
                         isExpanded: true,
                         dropdownColor: const Color(0xFF1E293B),
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12),
                         value: raffleVM.selectedRaffle?.id,
-                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white, size: 20),
+                        icon: const Icon(Icons.arrow_drop_down,
+                            color: Colors.white, size: 20),
                         items: raffleVM.raffles.map((r) {
-                          String statusTag = (authVM.isAdmin && r.status == 'INACTIVA') ? ' [🔴]' : '';
+                          String statusTag =
+                              (authVM.isAdmin && r.status == 'INACTIVA')
+                                  ? ' [🔴]'
+                                  : '';
                           return DropdownMenuItem(
                             value: r.id,
-                            child: Text('${r.title}$statusTag', overflow: TextOverflow.ellipsis),
+                            child: Text('${r.title}$statusTag',
+                                overflow: TextOverflow.ellipsis),
                           );
                         }).toList(),
                         onChanged: (val) {
                           if (val != null) {
-                            final selected = raffleVM.raffles.firstWhere((r) => r.id == val);
+                            final selected =
+                                raffleVM.raffles.firstWhere((r) => r.id == val);
                             raffleVM.selectRaffle(selected);
-                            Provider.of<TicketViewModel>(context, listen: false).loadTickets(raffleId: val);
+                            Provider.of<TicketViewModel>(context, listen: false)
+                                .loadTickets(raffleId: val);
                           }
                         },
                       ),

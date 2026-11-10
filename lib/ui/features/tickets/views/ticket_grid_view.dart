@@ -187,7 +187,21 @@ class _TicketGridViewState extends State<TicketGridView> {
                           ),
                           const SizedBox(width: 8),
                         ],
+                        // Cambiar de rifa: el asesor solo si tiene más de una activa; el administrador si hay más de una (activa o inactiva)
+                        if (currentRaffle != null &&
+                            (authVM.isAdmin
+                                ? raffleVM.raffles.length > 1
+                                : raffleVM.raffles.where((r) => r.status != 'INACTIVA' && !r.isClosed).length > 1)) ...[
+                          IconButton.filledTonal(
+                            icon: const Icon(Icons.swap_horiz_rounded),
+                            onPressed: () => CurrentRaffleBanner.showPicker(context, raffleVM, authVM.isAdmin),
+                            tooltip: 'Cambiar de rifa',
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         if (currentRaffle != null) ...[
+                          // La plantilla 2D es de 100 números: solo con rifas de 2 dígitos
+                          if (currentRaffle.digits <= 2) ...[
                           IconButton.filledTonal(
                             icon: const Icon(Icons.grid_on_rounded, color: AppTheme.accentAmber),
                             onPressed: () => showDialog(
@@ -197,6 +211,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                             tooltip: 'Plantilla / Afiche Rifa 2D (100 Números)',
                           ),
                           const SizedBox(width: 8),
+                          ],
                           IconButton.filledTonal(
                             icon: const Icon(Icons.mark_chat_read_outlined, color: AppTheme.secondaryEmerald),
                             onPressed: () => AvailableNumbersDialog.show(
@@ -238,30 +253,54 @@ class _TicketGridViewState extends State<TicketGridView> {
                           tooltip: _isGridView ? 'Ver Lista' : 'Ver Cuadrícula',
                         ),
                       ];
+                      // Áreas táctiles mínimas de 44x44 en todos los botones de acción
+                      final touchTheme = Theme.of(context).copyWith(
+                        iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(minimumSize: const Size(44, 44))),
+                      );
                       if (isNarrow) {
-                        return Column(
-                          children: [
-                            searchField,
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Row(mainAxisSize: MainAxisSize.min, children: actionButtons),
-                            ),
-                          ],
+                        return Theme(
+                          data: touchTheme,
+                          child: Column(
+                            children: [
+                              searchField,
+                              const SizedBox(height: 10),
+                              // Wrap: con 7 botones de 44 px no caben en una sola fila a 320-412 px
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.end,
+                                  children: actionButtons.where((w) => w is! SizedBox).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       }
-                      return Row(
-                        children: [
-                          Expanded(child: searchField),
-                          const SizedBox(width: 8),
-                          ...actionButtons,
-                        ],
+                      return Theme(
+                        data: touchTheme,
+                        child: Row(
+                          children: [
+                            Expanded(child: searchField),
+                            const SizedBox(width: 8),
+                            ...actionButtons,
+                          ],
+                        ),
                       );
                     },
                   ),
                   const SizedBox(height: 12),
-                  SingleChildScrollView(
+                  ShaderMask(
+                    // Desvanece el borde derecho para indicar que hay más fichas al deslizar
+                    shaderCallback: (rect) => const LinearGradient(
+                      colors: [Colors.white, Colors.white, Colors.transparent],
+                      stops: [0.0, 0.88, 1.0],
+                    ).createShader(rect),
+                    blendMode: BlendMode.dstIn,
+                    child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(right: 32),
                     child: Row(
                       children: [
                         _buildFilterChip(context, ticketVM, 'TODOS', statusCounts['TODOS'] ?? 0),
@@ -282,6 +321,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ],
                       ],
                     ),
+                  ),
                   ),
                 ],
               ),
@@ -349,6 +389,8 @@ class _TicketGridViewState extends State<TicketGridView> {
         : (isPorValidar ? '⚠️ Transferencias por Validar' : AppTheme.getStatusLabel(status));
 
     return FilterChip(
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      visualDensity: VisualDensity.standard,
       avatar: isPorValidar ? Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade900) : null,
       label: Text(
         '$label ($count)',
@@ -376,7 +418,7 @@ class _TicketGridViewState extends State<TicketGridView> {
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 260,
-        mainAxisExtent: 186,
+        mainAxisExtent: (isMobile ? 268 : 246) + (MediaQuery.textScalerOf(context).scale(1) - 1) * 160,
         crossAxisSpacing: isMobile ? 8 : 12,
         mainAxisSpacing: isMobile ? 8 : 12,
       ),
@@ -427,7 +469,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                             icon: const Icon(Icons.print_outlined, size: 18),
                             padding: EdgeInsets.zero,
                             style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                            constraints: const BoxConstraints(),
+                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                             tooltip: 'Imprimir Boleta',
                             onPressed: () {
                               showDialog(
@@ -440,12 +482,12 @@ class _TicketGridViewState extends State<TicketGridView> {
                             },
                           ),
                           if (WhatsAppHelper.canRemind(ticket)) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 0),
                             IconButton(
                               icon: const Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFF128C7E)),
                               padding: EdgeInsets.zero,
                               style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                               tooltip: 'Recordar pago por WhatsApp',
                               onPressed: () => WhatsAppHelper.sendPaymentReminder(
                                 ticket: ticket,
@@ -460,11 +502,13 @@ class _TicketGridViewState extends State<TicketGridView> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  Wrap(
+                    spacing: 4,
+                    runSpacing: 3,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       StatusBadge(status: ticket.status, isSmall: true),
                       if (ticket.abonos.any((a) => a.isTransfer && a.cashState == 'POR_VALIDAR')) ...[
-                        const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
@@ -483,7 +527,6 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ),
                       ],
                       if (ticket.isSoldByBot || ticket.saleChannel.toLowerCase().contains('bot')) ...[
-                        const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
@@ -502,8 +545,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ),
                       ],
                       if (ticket.saleChannel.isNotEmpty && !ticket.saleChannel.toLowerCase().contains('bot')) ...[
-                        const SizedBox(width: 6),
-                        Flexible(child: _buildChannelChip(ticket.saleChannel)),
+                        _buildChannelChip(ticket.saleChannel),
                       ],
                     ],
                   ),
@@ -584,13 +626,13 @@ class _TicketGridViewState extends State<TicketGridView> {
                         ),
                       )
                     else
-                      const Text('Disponible para venta', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Disponible para venta', style: TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold)),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Column(
+                      Flexible(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -604,7 +646,7 @@ class _TicketGridViewState extends State<TicketGridView> {
                               style: const TextStyle(fontSize: 10, color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
                             ),
                         ],
-                      ),
+                      )),
                       const SizedBox(width: 6),
                       // Who handled or owns the ticket: ALWAYS SHOW IF ASSIGNED
                       if (ticket.advisorName.trim().isNotEmpty)
