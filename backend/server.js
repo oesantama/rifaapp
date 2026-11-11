@@ -5966,6 +5966,58 @@ function validateTransfer(body, raffle) {
  * Every payment of the company registered with this approval number: current payments,
  * voided payments and payments of voided sales, so the user can judge whether it is a repeat.
  */
+/**
+ * Corrige los números de aprobación que el lector de comprobantes tomó mal: antes de la 3.4.18 leía la fecha y la hora
+ * ("10 nov 2026 - 2:54 p.m." daba "20262"). Vuelve a leer el soporte guardado en Drive y, si encuentra la referencia real,
+ * la cambia (se conserva la anterior y queda en la auditoría). Si no la encuentra, no toca nada.
+ */
+async function repairMisreadApprovals() {
+  if (!ocrService.available()) return;
+  const suspects = [];
+  for (const t of db.tickets || []) {
+    for (const a of t.abonos || []) {
+      if (a.metodoPago !== 'transferencia' || !a.soporteDriveId || a.approvalRereadTried) continue;
+      if (/^20[2-3]\d\d{1,2}$/.test(approvalKey(a.approvalNumber))) suspects.push({ t, a });
+    }
+  }
+  if (!suspects.length) return;
+  let fixed = 0;
+  for (const { t, a } of suspects.slice(0, 40)) {
+    try {
+      const file = await driveService.downloadDriveFile(a.soporteDriveId);
+      const proof = await ocrService.readProof(file.buffer);
+      const current = (db.tickets || []).find(x => x.id === t.id);
+      const ab = current && (current.abonos || []).find(x => x.id === a.id);
+      if (!ab) continue;
+      ab.approvalRereadTried = true;
+      const oldKey = approvalKey(ab.approvalNumber);
+      const refs = proof.readable ? (proof.references || []).filter(r => approvalKey(r) !== oldKey) : [];
+      if (!refs.length) continue;
+      const raffle = (db.raffles || []).find(r => r.id === current.raffleId);
+      ab.approvalNumberPrevious = ab.approvalNumber;
+      ab.approvalNumber = refs[0];
+      ab.approvalCorrectedAt = new Date().toISOString();
+      const others = findApprovalMatches(approvalKey(refs[0]), raffle && raffle.companyId, false).filter(m => !(m.ticketId === current.id && m.registeredAt === ab.date));
+      if (others.length) {
+        ab.riskFlags = [...(ab.riskFlags || []), { code: 'APROBACION_REPETIDA', level: 'MEDIA', detail: `Tras releer el comprobante, la referencia ${refs[0]} ya estaba en ${others.length} pago(s). Compare los soportes.` }];
+        ab.riskReview = { status: 'PENDIENTE' };
+      }
+      if (!db.auditLogs) db.auditLogs = [];
+      db.auditLogs.push({
+        id: `audit-${Date.now()}-${fixed}`, type: 'APPROVAL_FIX', companyId: raffle ? raffle.companyId : '', targetId: current.id, targetName: raffle ? raffle.title : '',
+        detail: `Referencia de la boleta ${(current.numbers || []).join('-')} corregida al releer el comprobante: ${ab.approvalNumberPrevious} → ${ab.approvalNumber}`, by: 'Sistema', date: new Date().toISOString()
+      });
+      fixed++;
+    } catch (err) {
+      console.warn('⚠️ No se pudo releer un comprobante:', err.message);
+    }
+  }
+  if (suspects.length) {
+    console.log(`🛠️ Referencias revisadas: ${suspects.length}, corregidas: ${fixed}.`);
+    saveDB();
+  }
+}
+
 function findApprovalMatches(key, companyId, maskContact) {
   if (!key) return [];
   return findPaymentMatches(ab => approvalKey(ab.approvalNumber) === key, companyId, maskContact);
@@ -6110,7 +6162,7 @@ app.post('/api/transfers/read-proof', async (req, res) => {
   const buffer = Buffer.from(raw.replace(/^data:image\/\w+;base64,/, ''), 'base64');
   if (buffer.length < 2000) return res.status(400).json({ error: 'La imagen es demasiado pequeña.' });
   const read = await ocrService.readProof(buffer);
-  res.json({ available: read.available, readable: read.readable, references: read.references, amounts: read.amounts, bank: read.bank, date: read.date || '', accountNumbers: read.accountNumbers || [] });
+  res.json({ available: read.available, readable: read.readable, references: read.references, referenceGuesses: read.referenceGuesses || [], amounts: read.amounts, bank: read.bank, date: read.date || '', accountNumbers: read.accountNumbers || [] });
 });
 
 // Administrador: corrige si una venta de un asesor INTEGRAL fue en oficina o en calle (cambia su comisión)
@@ -8528,6 +8580,8 @@ async function startServer() {
     console.log(`Backend API Servidor ejecutándose en http://0.0.0.0:${PORT}`);
     // Vigila la conexión de WhatsApp: si una instancia queda atascada, la reinicia sola
     if (!process.env.NO_BOT_WATCHDOG) whatsappService.startWatchdog();
+    // Corrige referencias mal leídas por versiones anteriores del lector (una sola vez por pago)
+    setTimeout(() => repairMisreadApprovals().catch(err => console.warn('⚠️ Revisión de referencias:', err.message)), 20000);
     alertService.start();
 
     // Keep-Alive Self-Ping: solo en Render (en el VPS no hace falta y pegaba a un servidor ajeno)

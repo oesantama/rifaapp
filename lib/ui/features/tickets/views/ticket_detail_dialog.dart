@@ -191,6 +191,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
       .replaceAll('S', '5')
       .replaceAll('B', '8');
 
+  List<String> get _referenceGuesses => ((_proofRead?['referenceGuesses'] as List?) ?? []).map((e) => '$e').toList();
   List<String> get _readReferences => ((_proofRead?['references'] as List?) ?? []).map((e) => '$e').toList();
 
   /// null = no se puede validar (comprobante ilegible o aún sin leer); true = coincide; false = no coincide.
@@ -1941,7 +1942,28 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                           ),
                                       ])
                                     else
-                                      const Text('No encontré una referencia clara: verifíquela a mano.', style: TextStyle(fontSize: 12.5)),
+                                      const Text('No encontré una referencia con etiqueta (aprobación, comprobante, referencia…): verifíquela a mano.', style: TextStyle(fontSize: 12.5)),
+                                    // Códigos sin etiqueta: solo se sugieren, nunca se rellenan solos
+                                    if (_referenceGuesses.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                                          const Text('Posibles:', style: TextStyle(fontSize: 12.5)),
+                                          for (final g in _referenceGuesses.take(3))
+                                            ActionChip(
+                                              label: Text(g, style: const TextStyle(fontSize: 12)),
+                                              visualDensity: VisualDensity.compact,
+                                              tooltip: 'Usar este código como referencia',
+                                              onPressed: () => setState(() {
+                                                _approvalController.text = g;
+                                                _approvalCheckedKey = null;
+                                                _approvalDuplicateConfirmed = false;
+                                                _referenceMismatchConfirmed = false;
+                                                _approvalBlockedKey = null;
+                                              }),
+                                            ),
+                                        ]),
+                                      ),
                                     if (((_proofRead!['amounts'] as List?) ?? []).isNotEmpty)
                                       Text('Valor en el comprobante: ${((_proofRead!['amounts'] as List).take(2)).map((a) => NumberFormat.currency(symbol: '\$', decimalDigits: 0).format(a)).join(' / ')}',
                                           style: const TextStyle(fontSize: 12.5)),

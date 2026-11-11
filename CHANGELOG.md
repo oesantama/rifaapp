@@ -11,6 +11,8 @@ Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya c
 ## [3.4.18] - 2026-11-11
 
 - Comprobantes: el lector ya no toma la fecha y la hora como número de aprobación (en los comprobantes Bre-B leía «20262» de «10 nov 2026 - 2:54 p.m.» y dos pagos distintos salían como repetidos). Ahora reconoce el «Comprobante No.» alfanumérico (ej. TRmZEHJAB5EC) y la verificación exige que la referencia aparezca como palabra completa en el comprobante.
+- Comprobantes: el lector reconoce más nombres de la referencia (autorización, confirmación, seguimiento, N° de comprobante o transacción, ID de transacción…). Los códigos sin etiqueta se muestran como «Posibles» para tocarlos, nunca se rellenan solos; fecha, banco y cuenta destino solo se rellenan si se leen.
+- Corrección automática: al iniciar, el servidor vuelve a leer el soporte (en Drive) de los pagos cuya referencia salió de la fecha (ej. 20262), la cambia por la real si la encuentra, conserva la anterior y deja constancia en la auditoría.
 - Asesores: al crear o editar se puede dar acceso, solo de lectura, a partes del menú del administrador (Proyección y Pagos y abonos).
 - Asesores de oficina o integral: nueva opción «Ayuda del administrador con las boletas»: ven las boletas de todos los asesores y reciben pagos en efectivo o transferencia; la boleta y la comisión siguen con quien la vendió y el efectivo queda en la caja de quien lo recibe.
 

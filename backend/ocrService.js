@@ -61,7 +61,7 @@ function recognize(buffer) {
 // ---------------------------------------------------------------------------
 // Interpretación del texto
 // ---------------------------------------------------------------------------
-const REF_LABEL = /(referencia|\bref\b\.?|comprobante|aprob\w*|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
+const REF_LABEL = /(referencia|autorizaci[oó]n|confirmaci[oó]n|seguimiento|n[o°º]\.?\s+de\s+(?:comprobante|referencia|transacci[oó]n|aprobaci[oó]n|autorizaci[oó]n)|id\s+de\s+(?:transacci[oó]n|pago|operaci[oó]n)|\bref\b\.?|comprobante|aprob\w*|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
 
 const normRef = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 // El OCR confunde letras y números parecidos: se comparan con la misma equivalencia en ambos lados
@@ -135,6 +135,20 @@ function extractAccountNumbers(text) {
   return [...out];
 }
 
+// Posibles referencias SIN etiqueta (códigos mezclados de letras y números o números largos). Solo se sugieren: nunca se rellenan solas
+function extractReferenceGuesses(text, exclude = []) {
+  const skip = new Set((exclude || []).map(normRef));
+  const out = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (/\d{1,2}:\d{2}|\b(?:a\.?\s?m|p\.?\s?m)\b|\$/.test(line)) continue; // fechas, horas y valores
+    for (const m of line.matchAll(/\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{8,40}\b|\b\d{8,30}\b/g)) {
+      const v = normRef(m[0]);
+      if (v.length >= 8 && !skip.has(v) && !out.includes(v)) out.push(v);
+    }
+  }
+  return out.slice(0, 5);
+}
+
 function parseAmount(raw) {
   let s = String(raw).replace(/[^\d.,]/g, '');
   if (!s) return null;
@@ -183,6 +197,7 @@ async function readProof(buffer) {
       available: true,
       readable: alnum.length >= 20 && hasDigits,
       references: extractReferences(text),
+      referenceGuesses: extractReferenceGuesses(text, extractReferences(text)),
       amounts: extractAmounts(text),
       bank: guessBank(text),
       date: extractDate(text),
@@ -229,4 +244,4 @@ function verifyReference(proof, typed) {
   return { status: 'MISMATCH', read };
 }
 
-module.exports = { available, readProof, verifyReference, extractDate, extractAccountNumbers, extractReferences, extractAmounts, guessBank, normRef };
+module.exports = { available, readProof, verifyReference, extractReferenceGuesses, extractDate, extractAccountNumbers, extractReferences, extractAmounts, guessBank, normRef };
