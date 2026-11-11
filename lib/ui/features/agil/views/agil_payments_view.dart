@@ -20,9 +20,11 @@ const _xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 class AgilPaymentsView extends StatefulWidget {
   /// true = la ve un asesor de punto/integral con permiso: solo el resumen de la caja (sin AGIL ni Excel).
   final bool advisorMode;
+  /// Solo lectura (asesor con la parte «Pagos» del menú): sin descargas, lotes, marcas ni gastos.
+  final bool readOnly;
   final bool canRegisterExpenses;
 
-  const AgilPaymentsView({super.key, this.advisorMode = false, this.canRegisterExpenses = false});
+  const AgilPaymentsView({super.key, this.advisorMode = false, this.canRegisterExpenses = false, this.readOnly = false});
 
   @override
   State<AgilPaymentsView> createState() => _AgilPaymentsViewState();
@@ -334,7 +336,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(spacing: 8, runSpacing: 4, children: [
-          if (!widget.advisorMode || widget.canRegisterExpenses)
+          if (!widget.readOnly && (!widget.advisorMode || widget.canRegisterExpenses))
             OutlinedButton.icon(
               onPressed: () => _openExpenseDialog(account: account, label: label, balance: balance),
               icon: const Icon(Icons.add, size: 18),
@@ -363,7 +365,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   }
 
   Future<void> _openExpensesList({required String account, required String label}) async {
-    final changed = await showDialog<bool>(context: context, builder: (_) => ExpensesListDialog(api: _api, account: account, label: label, allowVoid: !widget.advisorMode));
+    final changed = await showDialog<bool>(context: context, builder: (_) => ExpensesListDialog(api: _api, account: account, label: label, allowVoid: !widget.advisorMode && !widget.readOnly));
     if (changed == true) await _load();
   }
 
@@ -547,10 +549,12 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
         _filtersBar(),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          if (!widget.readOnly) ...[
           FilledButton.icon(onPressed: _busy ? null : _export, icon: const Icon(Icons.download, size: 18), label: const Text('Descargar Excel')),
           FilledButton.tonalIcon(onPressed: _busy ? null : _createBatch, icon: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Generar lote AGIL')),
           OutlinedButton.icon(onPressed: _busy ? null : _uploadReturned, icon: const Icon(Icons.upload_file, size: 18), label: const Text('Subir Excel devuelto (SUBIDO)')),
-          if (_selected.isNotEmpty) ...[
+          ],
+          if (!widget.readOnly && _selected.isNotEmpty) ...[
             Text('${_selected.length} seleccionados', style: const TextStyle(fontWeight: FontWeight.w600)),
             OutlinedButton(onPressed: _busy ? null : () => _markSelected('SUBIDO'), child: const Text('Marcar SUBIDO')),
             OutlinedButton(onPressed: _busy ? null : () => _markSelected('PENDIENTE'), child: const Text('Marcar PENDIENTE')),

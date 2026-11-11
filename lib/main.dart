@@ -369,6 +369,11 @@ class _MainShellScreenState extends State<MainShellScreen>
                       advisorMode: true,
                       canRegisterExpenses:
                           authVM.activeAdvisor?.canRegisterExpenses == true),
+                // Partes del menú del administrador que se le dieron a este asesor (solo lectura)
+                if (authVM.activeAdvisor?.menuAccess.contains('pagos') == true)
+                  const AgilPaymentsView(readOnly: true),
+                if (authVM.activeAdvisor?.menuAccess.contains('proyeccion') == true)
+                  const SalesProjectionTab(),
               ];
 
     // Ensure selected index is valid
@@ -999,6 +1004,18 @@ class _MainShellScreenState extends State<MainShellScreen>
                               selectedIcon: Icon(Icons.savings),
                               label: Text('Caja'),
                             ),
+                          if (authVM.activeAdvisor?.menuAccess.contains('pagos') == true)
+                            const NavigationRailDestination(
+                              icon: Icon(Icons.receipt_long_outlined),
+                              selectedIcon: Icon(Icons.receipt_long),
+                              label: Text('Pagos'),
+                            ),
+                          if (authVM.activeAdvisor?.menuAccess.contains('proyeccion') == true)
+                            const NavigationRailDestination(
+                              icon: Icon(Icons.insights_outlined),
+                              selectedIcon: Icon(Icons.insights),
+                              label: Text('Proyección'),
+                            ),
                         ],
             ),
           const VerticalDivider(thickness: 1, width: 1),
@@ -1103,6 +1120,12 @@ class _MainShellScreenState extends State<MainShellScreen>
                           if (authVM.activeAdvisor?.canViewCash == true)
                             const BottomNavigationBarItem(
                                 icon: Icon(Icons.savings), label: 'Caja'),
+                          if (authVM.activeAdvisor?.menuAccess.contains('pagos') == true)
+                            const BottomNavigationBarItem(
+                                icon: Icon(Icons.receipt_long), label: 'Pagos'),
+                          if (authVM.activeAdvisor?.menuAccess.contains('proyeccion') == true)
+                            const BottomNavigationBarItem(
+                                icon: Icon(Icons.insights), label: 'Proyección'),
                         ],
             )
           : null,

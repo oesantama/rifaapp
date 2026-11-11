@@ -113,7 +113,8 @@ class _TicketGridViewState extends State<TicketGridView> {
               .toList();
         }
 
-        if (authVM.isAsesor && authVM.activeAdvisor != null) {
+        // El ayudante del administrador (oficina/integral con permiso) ve las boletas de todos los asesores
+        if (authVM.isAsesor && authVM.activeAdvisor != null && authVM.activeAdvisor!.canManageAllTickets != true) {
           final adv = authVM.activeAdvisor!;
           displayTickets = displayTickets.where((t) {
             if (t.status != 'DISPONIBLE') {

@@ -63,6 +63,8 @@ class AdvisorManagementView extends StatelessWidget {
     String? advisorType = advisor?.type;
     bool canExpenses = advisor?.canRegisterExpenses ?? false;
     bool canCash = advisor?.canViewCash ?? false;
+    bool canAllTickets = advisor?.canManageAllTickets ?? false;
+    final Set<String> menuAccess = {...?advisor?.menuAccess};
     // Rifas en las que queda autorizado: al editar, las que ya tiene; al crear, las activas (puede cambiarlas)
     final allRaffles = Provider.of<RaffleViewModel>(context, listen: false).raffles;
     final Set<String> selectedRaffles = isEditing
@@ -243,9 +245,46 @@ class AdvisorManagementView extends StatelessWidget {
                             value: canCash,
                             onChanged: (v) => setState(() => canCash = v),
                           ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            dense: true,
+                            title: const Text('Ayuda del administrador con las boletas'),
+                            subtitle: const Text(
+                                'Ve las boletas apartadas y abonadas de todos los asesores, como el administrador, y recibe pagos en efectivo o transferencia. La boleta y la comisión siguen con quien la vendió; el efectivo queda en su caja para entregarlo.',
+                                style: TextStyle(fontSize: 11.5)),
+                            value: canAllTickets,
+                            onChanged: (v) => setState(() => canAllTickets = v),
+                          ),
                         ]),
                       ),
                     ],
+                    // Partes del menú del administrador que este asesor también puede ver (solo lectura)
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Menú adicional (solo lectura)', style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        const Text('Partes del menú del administrador que este asesor también puede ver.', style: TextStyle(fontSize: 11.5)),
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('Proyección'),
+                          value: menuAccess.contains('proyeccion'),
+                          onChanged: (v) => setState(() => v == true ? menuAccess.add('proyeccion') : menuAccess.remove('proyeccion')),
+                        ),
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('Pagos y abonos'),
+                          value: menuAccess.contains('pagos'),
+                          onChanged: (v) => setState(() => v == true ? menuAccess.add('pagos') : menuAccess.remove('pagos')),
+                        ),
+                      ]),
+                    ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
@@ -382,6 +421,8 @@ class AdvisorManagementView extends StatelessWidget {
                         'type': advisorType,
                         'canRegisterExpenses': (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') && canExpenses,
                         'canViewCash': (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') && canCash,
+        'canManageAllTickets': (advisorType == 'PUNTO' || advisorType == 'INTEGRAL') && canAllTickets,
+        'menuAccess': menuAccess.toList(),
                         'status': status,
                         'assignedTicketRanges': ranges,
                       };

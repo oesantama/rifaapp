@@ -73,13 +73,18 @@ function extractReferences(text) {
   const add = (raw, score) => {
     const value = normRef(raw);
     const digits = (value.match(/\d/g) || []).length;
-    if (value.length < 5 || value.length > 40 || digits < 4) return;
+    const letters = (value.match(/[A-Z]/g) || []).length;
+    // Códigos alfanuméricos de comprobante (ej. Bre-B "TRmZEHJAB5EC"): pocas cifras pero mezclados con letras
+    const mixedCode = value.length >= 8 && digits >= 1 && letters >= 4;
+    if (value.length < 5 || value.length > 40 || (digits < 4 && !mixedCode)) return;
     if (!found.some(f => f.value === value)) found.push({ value, score });
   };
   const tokens = line => {
     const out = [];
     // números con espacios o guiones internos (ej: "1843 852 709") y códigos con letra (ej: "M18437283")
     for (const m of line.matchAll(/[A-Za-z]?\d[\d \-]{3,38}\d|[A-Za-z]\d{5,}/g)) out.push(m[0]);
+    // códigos con letras y números mezclados, de una sola palabra
+    for (const m of line.matchAll(/\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{8,40}\b/g)) out.push(m[0]);
     return out;
   };
   lines.forEach((line, i) => {
@@ -87,7 +92,9 @@ function extractReferences(text) {
     if (!label) return;
     const after = line.slice(label.index + label[0].length);
     let got = tokens(after);
-    if (!got.length && lines[i + 1]) got = tokens(lines[i + 1]);
+    // La línea siguiente solo se usa si no es una fecha u hora (antes "10 nov 2026 - 2:54 p.m." daba la «referencia» 20262)
+    const looksLikeDate = l => /\d{1,2}:\d{2}|\b(?:a\.?\s?m|p\.?\s?m)\b|\b(?:ene|feb|mar|abr|may|jun|jul|ago|sep|sept|oct|nov|dic|jan|apr|aug|dec)[a-z]*\.?\s+\d{1,2}|\d{1,2}\s+(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i.test(l);
+    if (!got.length && lines[i + 1] && !looksLikeDate(lines[i + 1])) got = tokens(lines[i + 1]);
     got.forEach((tok, k) => add(tok, 10 - k));
   });
   return found.sort((a, b) => b.score - a.score).map(f => f.value);
@@ -204,8 +211,21 @@ function verifyReference(proof, typed) {
   if (!proof || !proof.available || !proof.readable || wanted.length < 4) return { status: 'UNREADABLE', read: (proof && proof.references) || [] };
   const read = proof.references || [];
   if (read.some(r => lookalike(r) === wanted)) return { status: 'MATCH', read };
-  // La referencia también vale si aparece en cualquier parte del texto del comprobante
-  if (lookalike(proof.text).includes(wanted)) return { status: 'MATCH', read };
+  // También vale si aparece en el texto del comprobante como una palabra completa (o como un número escrito en grupos,
+  // ej. "1843 852 709"). Antes bastaba con que estuviera dentro del texto pegado, y fragmentos de la fecha o la hora
+  // (ej. "2026 - 2:54") daban por buena una referencia falsa como 20262.
+  for (const line of String(proof.text || '').split(/\r?\n/)) {
+    const words = line.split(/[^0-9A-Za-z]+/).filter(Boolean);
+    if (words.some(w => lookalike(w) === wanted)) return { status: 'MATCH', read };
+    for (let i = 0; i < words.length; i++) {
+      let joined = '';
+      for (let j = i; j < Math.min(words.length, i + 4); j++) {
+        if (!/^\d+$/.test(words[j])) break;
+        joined += words[j];
+        if (j > i && joined.length >= 8 && lookalike(joined) === wanted) return { status: 'MATCH', read };
+      }
+    }
+  }
   return { status: 'MISMATCH', read };
 }
 

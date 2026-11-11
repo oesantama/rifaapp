@@ -15,6 +15,10 @@ class Advisor {
   /// Solo asesores de punto o integral: permisos de la oficina.
   final bool canRegisterExpenses;
   final bool canViewCash;
+  /// Oficina/integral: ve todas las boletas y recibe pagos de las de otros asesores, como ayuda del administrador.
+  final bool canManageAllTickets;
+  /// Partes del menú del administrador que puede ver (solo lectura): 'proyeccion', 'pagos'.
+  final List<String> menuAccess;
   /// Ids de las rifas de su empresa en las que está autorizado a vender.
   final List<String> raffleIds;
   final String status; // ACTIVO or INHABILITADO
@@ -41,6 +45,8 @@ class Advisor {
     this.type = 'CALLE',
     this.canRegisterExpenses = false,
     this.canViewCash = false,
+    this.canManageAllTickets = false,
+    this.menuAccess = const [],
     this.raffleIds = const [],
     this.status = 'ACTIVO',
     this.deletionReason,
@@ -112,6 +118,8 @@ class Advisor {
       type: ['PUNTO', 'CALLE', 'INTEGRAL'].contains(json['type']) ? json['type'] : 'CALLE',
       canRegisterExpenses: json['canRegisterExpenses'] == true,
       canViewCash: json['canViewCash'] == true,
+      canManageAllTickets: json['canManageAllTickets'] == true,
+      menuAccess: (json['menuAccess'] as List? ?? []).map((e) => e.toString()).toList(),
       raffleIds: (json['raffleIds'] as List? ?? []).map((e) => e.toString()).toList(),
       status: json['status'] ?? 'ACTIVO',
       deletionReason: json['deletionReason'],
@@ -139,6 +147,8 @@ class Advisor {
         'type': type,
         'canRegisterExpenses': canRegisterExpenses,
         'canViewCash': canViewCash,
+        'canManageAllTickets': canManageAllTickets,
+        'menuAccess': menuAccess,
         'status': status,
         'deletionReason': deletionReason,
         'assignedTicketRanges': assignedTicketRanges,

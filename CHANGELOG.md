@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.18] - 2026-11-11
+
+- Comprobantes: el lector ya no toma la fecha y la hora como número de aprobación (en los comprobantes Bre-B leía «20262» de «10 nov 2026 - 2:54 p.m.» y dos pagos distintos salían como repetidos). Ahora reconoce el «Comprobante No.» alfanumérico (ej. TRmZEHJAB5EC) y la verificación exige que la referencia aparezca como palabra completa en el comprobante.
+- Asesores: al crear o editar se puede dar acceso, solo de lectura, a partes del menú del administrador (Proyección y Pagos y abonos).
+- Asesores de oficina o integral: nueva opción «Ayuda del administrador con las boletas»: ven las boletas de todos los asesores y reciben pagos en efectivo o transferencia; la boleta y la comisión siguen con quien la vendió y el efectivo queda en la caja de quien lo recibe.
+
 ## [3.4.17] - 2026-11-10
 
 - Pagos por transferencia: el banco de origen ya no es obligatorio. Se toma del comprobante cuando se reconoce y, si no, se registra vacío (antes el servidor rechazaba el pago con «Indique el banco desde el que se hizo la transferencia»).

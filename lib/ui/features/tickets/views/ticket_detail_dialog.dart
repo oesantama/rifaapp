@@ -119,6 +119,13 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
   List<TransferAccount> get _transferAccounts =>
       context.read<RaffleViewModel>().raffles.where((r) => r.id == widget.ticket.raffleId).firstOrNull?.transferAccounts ?? const [];
 
+  /// El ayudante del administrador (oficina/integral con permiso) recibiendo un pago de una boleta que vendió otro:
+  /// la boleta y su comisión siguen con quien la vendió; el pago queda a nombre de quien lo recibe.
+  bool _receivingForOther(AuthViewModel a) {
+    final me = a.activeAdvisor;
+    return a.isAsesor && me != null && me.canManageAllTickets && widget.ticket.status != 'DISPONIBLE' && widget.ticket.advisorId != me.id;
+  }
+
   Future<void> _pickTransferDate() async {
     final today = ColombiaTime.today();
     final date = await showDatePicker(
@@ -1256,10 +1263,11 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
           : (authVM.isIndependent
               ? (authVM.activeAdvisor?.id ?? 'ind_${authVM.currentUserName}')
               : (_selectedSellerId ?? 'admin'));
-      final isChangingSeller = (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
+      final receivingForOther = _receivingForOther(authVM);
+      final isChangingSeller = !receivingForOther && (widget.ticket.status != 'DISPONIBLE') && (newSellerId != null && newSellerId != widget.ticket.advisorId);
       // Asesor integral: cada venta debe indicar si fue en oficina o en calle
       final sellerAdvisor = (authVM.isAsesor ? authVM.activeAdvisor : advisorVM.advisors.where((a) => a.id == newSellerId).firstOrNull);
-      if (sellerAdvisor != null && sellerAdvisor.isIntegral && _saleZone == null) {
+      if (!receivingForOther && sellerAdvisor != null && sellerAdvisor.isIntegral && _saleZone == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(backgroundColor: Colors.red, content: Text('⚠️ Indique si la venta es en OFICINA (no comisiona) o en CALLE (comisiona).')),
         );
@@ -1691,7 +1699,9 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       TextFormField(
                         initialValue: authVM.isIndependent
                             ? '${authVM.currentUserName} (Vendedor Independiente)'
-                            : '${authVM.currentUserName} (${authVM.currentUserCode})',
+                            : (_receivingForOther(authVM)
+                                ? 'Vendió: ${widget.ticket.advisorName.isNotEmpty ? widget.ticket.advisorName : 'Administrador'} • Recibe el pago: ${authVM.currentUserName}'
+                                : '${authVM.currentUserName} (${authVM.currentUserCode})'),
                         readOnly: true,
                         decoration: const InputDecoration(
                           labelText: 'Asesor / Vendedor (Asignado Automáticamente)',
@@ -1707,7 +1717,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                       final sellerAdv = authVM.isAsesor
                           ? authVM.activeAdvisor
                           : advisorVM.advisors.where((a) => a.id == _selectedSellerId).firstOrNull;
-                      if (sellerAdv == null || !sellerAdv.isIntegral) return const SizedBox.shrink();
+                      if (sellerAdv == null || !sellerAdv.isIntegral || _receivingForOther(authVM)) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(top: 10),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

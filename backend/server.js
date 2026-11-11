@@ -5486,7 +5486,7 @@ app.get('/api/tickets', (req, res) => {
 
   // Restricción para asesores: si el administrador le quitó el check en una rifa,
   // no podrá ver números disponibles (DISPONIBLE), solo lo que ya vendió.
-  if (req.auth && req.auth.role === 'asesor') {
+  if (req.auth && req.auth.role === 'asesor' && !isTicketAssistant(advisorRecordOf(req))) {
     const myAdvId = req.auth.record.id;
     const authorizedByRaffle = new Map((db.raffles || []).map(r => [r.id, !r.assignedAdvisorIds || r.assignedAdvisorIds.length === 0 || r.assignedAdvisorIds.includes(myAdvId)]));
     result = result.filter(t => {
@@ -6254,7 +6254,11 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   }
 
   // Si la boleta ya pertenece a otro asesor, un asesor distinto no puede modificarla
-  if (req.auth.role === 'asesor' && ticket.status !== 'DISPONIBLE' && ticket.advisorId && ticket.advisorId !== req.auth.record.id) {
+  // El ayudante del administrador (oficina/integral con permiso) puede recibir pagos de boletas de otros asesores: la boleta y su comisión
+  // siguen con quien la vendió; el pago (y el efectivo) queda a nombre de quien lo recibe
+  const assistantAdv = req.auth.role === 'asesor' && isTicketAssistant(advisorRecordOf(req)) ? advisorRecordOf(req) : null;
+  const keepOwner = !!assistantAdv && ticket.status !== 'DISPONIBLE' && ticket.advisorId !== assistantAdv.id;
+  if (req.auth.role === 'asesor' && !keepOwner && ticket.status !== 'DISPONIBLE' && ticket.advisorId && ticket.advisorId !== req.auth.record.id) {
     return res.status(403).json({
       error: `Esta boleta pertenece a otro asesor (${ticket.advisorName || ticket.advisorId}) y no puede ser modificada.`,
       code: 'TICKET_OWNED_BY_ANOTHER'
@@ -6355,7 +6359,7 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
 
   // Tipo de venta (oficina / calle): lo fija el tipo del asesor; el integral lo indica en cada venta
   let saleZone = SALE_ZONES.includes(ticket.saleZone) ? ticket.saleZone : null;
-  {
+  if (!keepOwner) {
     const isIndependentSale = (req.auth.role === 'admin' && req.auth.record && req.auth.record.isIndependent) || String(sellerId || '').startsWith('ind_');
     const sellerAdvisor = req.auth.role === 'asesor'
       ? req.auth.record
@@ -6392,9 +6396,9 @@ app.post('/api/tickets/:id/abono', async (req, res) => {
   if (typeof saleChannel === 'string' && (isActiveSaleChannel(saleChannel) || saleChannel === ticket.saleChannel)) {
     ticket.saleChannel = saleChannel;
   }
-  if (sellerId) ticket.advisorId = sellerId;
-  if (sellerName) ticket.advisorName = sellerName;
-  if (saleZone) ticket.saleZone = saleZone;
+  if (sellerId && !keepOwner) ticket.advisorId = sellerId;
+  if (sellerName && !keepOwner) ticket.advisorName = sellerName;
+  if (saleZone && !keepOwner) ticket.saleZone = saleZone;
   if (!ticket.assignedDate) ticket.assignedDate = new Date().toISOString();
 
   const payMethod = transfer ? 'transferencia' : (metodoPago === 'transferencia' ? 'efectivo' : (metodoPago || 'efectivo'));
@@ -7457,6 +7461,8 @@ app.post('/api/advisors', adminOnly, async (req, res) => {
     type: advisorType,
     canRegisterExpenses: isOfficeAdvisorType(advisorType) && req.body.canRegisterExpenses === true,
     canViewCash: isOfficeAdvisorType(advisorType) && req.body.canViewCash === true,
+    canManageAllTickets: isOfficeAdvisorType(advisorType) && req.body.canManageAllTickets === true,
+    menuAccess: normalizeMenuAccess(req.body.menuAccess),
     assignedTicketRanges: [],
     createdAt: new Date().toISOString()
   };
@@ -7564,8 +7570,10 @@ app.put('/api/advisors/:id', adminOnly, (req, res) => {
   if (Array.isArray(req.body.raffleIds)) setAdvisorRaffles(advisor, req.body.raffleIds);
   if (req.body.canRegisterExpenses !== undefined) advisor.canRegisterExpenses = req.body.canRegisterExpenses === true;
   if (req.body.canViewCash !== undefined) advisor.canViewCash = req.body.canViewCash === true;
+  if (req.body.canManageAllTickets !== undefined) advisor.canManageAllTickets = req.body.canManageAllTickets === true;
+  if (req.body.menuAccess !== undefined) advisor.menuAccess = normalizeMenuAccess(req.body.menuAccess);
   // El asesor de calle no maneja la caja de la oficina
-  if (!isOfficeAdvisorType(advisorTypeOf(advisor))) { advisor.canRegisterExpenses = false; advisor.canViewCash = false; }
+  if (!isOfficeAdvisorType(advisorTypeOf(advisor))) { advisor.canRegisterExpenses = false; advisor.canViewCash = false; advisor.canManageAllTickets = false; }
   if (newRanges) {
     const size = list => list.map(parseRange).filter(Boolean).reduce((sum, r) => sum + r.end - r.start + 1, 0);
     // Assigning more numbers answers the advisor's pending request
@@ -8008,6 +8016,20 @@ const ADVISOR_TYPES = ['PUNTO', 'CALLE', 'INTEGRAL'];
 const advisorTypeOf = adv => (adv && ADVISOR_TYPES.includes(adv.type) ? adv.type : 'CALLE');
 // Solo el asesor de punto o integral (de oficina) puede tener permiso para registrar gastos y ver la caja
 const isOfficeAdvisorType = type => type === 'PUNTO' || type === 'INTEGRAL';
+// Partes del menú del administrador que se le pueden dar a un asesor (solo lectura)
+const ADVISOR_MENU_KEYS = ['proyeccion', 'pagos'];
+const normalizeMenuAccess = list => [...new Set((Array.isArray(list) ? list : []).map(String).filter(k => ADVISOR_MENU_KEYS.includes(k)))];
+const advisorRecordOf = req => (req.auth && req.auth.role === 'asesor' ? (db.advisors || []).find(a => a.id === req.auth.record.id) : null);
+// Asesor de oficina o integral con permiso de ver todas las boletas y recibir pagos como ayuda del administrador
+const isTicketAssistant = adv => !!(adv && adv.status !== 'INHABILITADO' && adv.canManageAllTickets === true && isOfficeAdvisorType(advisorTypeOf(adv)));
+// Pasa el administrador, o el asesor activo al que se le dio esa parte del menú
+const adminOrAdvisorMenu = key => (req, res, next) => {
+  const role = req.auth && req.auth.role;
+  if (role === 'admin' || role === 'superadmin') return next();
+  const adv = advisorRecordOf(req);
+  if (adv && adv.status !== 'INHABILITADO' && normalizeMenuAccess(adv.menuAccess).includes(key)) return next();
+  return res.status(403).json({ error: 'No tiene permisos para realizar esta acción.' });
+};
 const SALE_ZONES = ['OFICINA', 'CALLE'];
 
 // Tipo de venta de una boleta que no lo tiene guardado: sin asesor o asesor de punto = OFICINA, asesor de calle = CALLE;
@@ -8132,7 +8154,7 @@ function computeAdvisorCommission(rules, adv, raffleTickets) {
 
 // GET Analítica de ventas y proyección de una rifa (solo administrador): ventas por día y por día de la semana, ritmo promedio
 // y cuánto se proyecta vender hasta el sorteo. Días en calendario de Colombia.
-app.get('/api/analytics/sales', adminOnly, (req, res) => {
+app.get('/api/analytics/sales', adminOrAdvisorMenu('proyeccion'), (req, res) => {
   const { raffle } = commissionScope(req, req.query.raffleId);
   if (!raffle) return res.status(404).json({ error: 'Rifa no encontrada' });
   const DAY = 24 * 3600 * 1000;

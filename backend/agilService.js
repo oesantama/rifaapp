@@ -563,8 +563,9 @@ module.exports = function createAgilService(deps) {
       if (role === 'admin' || role === 'superadmin') return next();
       if (role === 'asesor') {
         const adv = (getDb().advisors || []).find(a => a.id === req.auth.record.id);
+        const canSeePayments = adv && Array.isArray(adv.menuAccess) && adv.menuAccess.includes('pagos');
         const ok = adv && adv.status !== 'INHABILITADO' &&
-          ((kind === 'view' && adv.canViewCash) || (kind === 'register' && adv.canRegisterExpenses) || (kind === 'list' && (adv.canViewCash || adv.canRegisterExpenses)));
+          ((kind === 'view' && (adv.canViewCash || canSeePayments)) || (kind === 'register' && adv.canRegisterExpenses) || (kind === 'list' && (adv.canViewCash || adv.canRegisterExpenses || canSeePayments)));
         if (ok) return next();
       }
       return res.status(403).json({ error: 'No tiene permiso para esta acción.' });
@@ -588,7 +589,15 @@ module.exports = function createAgilService(deps) {
       res.send(buffer);
     };
 
-    app.get('/api/agil/payments', adminOnly, (req, res) => {
+    // Solo lectura de «Pagos y abonos»: el administrador o un asesor al que se le dio esa parte del menú
+    const paymentsAccess = (req, res, next) => {
+      const role = req.auth && req.auth.role;
+      if (role === 'admin' || role === 'superadmin') return next();
+      const adv = myAdvisor(req);
+      if (adv && adv.status !== 'INHABILITADO' && Array.isArray(adv.menuAccess) && adv.menuAccess.includes('pagos')) return next();
+      return res.status(403).json({ error: 'No tiene permiso para esta acción.' });
+    };
+    app.get('/api/agil/payments', paymentsAccess, (req, res) => {
       const company = need(req, res);
       if (!company) return;
       const rows = collectRows(getDb(), company, filtersOf(req.query));
