@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.19] - 2026-11-11
+
+- Comprobantes: la lectura es más robusta con fotos torcidas, borrosas o de recibos de papel. Si la primera lectura no encuentra la referencia, se lee de nuevo en otros modos del OCR; la palabra «Aprob» se reconoce aunque el OCR la estropee («Aproa», «Apron»…); en los recibos de corresponsal Wompi/Bancolombia, el número corto que sigue al RRN se toma como aprobación; y los números de 6 dígitos o más sin etiqueta se sugieren como «Posibles».
+
 ## [3.4.18] - 2026-11-11
 
 - Comprobantes: el lector ya no toma la fecha y la hora como número de aprobación (en los comprobantes Bre-B leía «20262» de «10 nov 2026 - 2:54 p.m.» y dos pagos distintos salían como repetidos). Ahora reconoce el «Comprobante No.» alfanumérico (ej. TRmZEHJAB5EC) y la verificación exige que la referencia aparezca como palabra completa en el comprobante.

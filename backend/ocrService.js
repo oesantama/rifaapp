@@ -45,14 +45,19 @@ function touchIdle() {
   if (idleTimer.unref) idleTimer.unref();
 }
 
-/** Texto de la imagen. Las lecturas se hacen de a una para no saturar el servidor. */
-function recognize(buffer) {
+/** Texto de la imagen. Las lecturas se hacen de a una para no saturar el servidor. psm: modo de segmentación de página (opcional). */
+function recognize(buffer, psm) {
   const job = queue.then(async () => {
     const w = await getWorker();
-    const run = w.recognize(buffer);
-    const result = await Promise.race([run, new Promise((_, rej) => setTimeout(() => rej(new Error('OCR demasiado lento')), TIMEOUT_MS))]);
-    touchIdle();
-    return result.data;
+    if (psm) await w.setParameters({ tessedit_pageseg_mode: String(psm) });
+    try {
+      const run = w.recognize(buffer);
+      const result = await Promise.race([run, new Promise((_, rej) => setTimeout(() => rej(new Error('OCR demasiado lento')), TIMEOUT_MS))]);
+      touchIdle();
+      return result.data;
+    } finally {
+      if (psm) { try { await w.setParameters({ tessedit_pageseg_mode: '3' }); } catch (_) {} }
+    }
   });
   queue = job.catch(() => {});
   return job;
@@ -61,7 +66,7 @@ function recognize(buffer) {
 // ---------------------------------------------------------------------------
 // Interpretación del texto
 // ---------------------------------------------------------------------------
-const REF_LABEL = /(referencia|autorizaci[oó]n|confirmaci[oó]n|seguimiento|n[o°º]\.?\s+de\s+(?:comprobante|referencia|transacci[oó]n|aprobaci[oó]n|autorizaci[oó]n)|id\s+de\s+(?:transacci[oó]n|pago|operaci[oó]n)|\bref\b\.?|comprobante|aprob\w*|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
+const REF_LABEL = /(referencia|autorizaci[oó]n|confirmaci[oó]n|seguimiento|n[o°º]\.?\s+de\s+(?:comprobante|referencia|transacci[oó]n|aprobaci[oó]n|autorizaci[oó]n)|id\s+de\s+(?:transacci[oó]n|pago|operaci[oó]n)|\bref\b\.?|comprobante|aprob\w*|\bapr[o0c][a-z0-9]{0,2}\s*[:.]|transacci[oó]n|c[oó]digo\s+de\s+(?:aprobaci[oó]n|confirmaci[oó]n)|\bcus\b|n[uú]mero\s+de\s+(?:aprobaci[oó]n|comprobante|transacci[oó]n|referencia|pago|operaci[oó]n)|n[o°º]\.?\s+de\s+operaci[oó]n|operaci[oó]n\s*(?:n[o°º]\.?|#|:))/i;
 
 const normRef = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 // El OCR confunde letras y números parecidos: se comparan con la misma equivalencia en ambos lados
@@ -87,6 +92,9 @@ function extractReferences(text) {
     for (const m of line.matchAll(/\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{8,40}\b/g)) out.push(m[0]);
     return out;
   };
+  // Recibos de corresponsal bancario (Wompi/Bancolombia): "RRN: 933760239331 Aprob: 722001". Si el OCR estropea la palabra
+  // «Aprob», el número corto que sigue al RRN es la aprobación.
+  for (const m of String(text || '').matchAll(/\brrn\W{0,3}\d{9,}\W+(?:[A-Za-z]{0,8}\W{0,3})?(\d{5,7})\b/gi)) add(m[1], 12);
   lines.forEach((line, i) => {
     const label = REF_LABEL.exec(line);
     if (!label) return;
@@ -189,8 +197,14 @@ async function readProof(buffer) {
   if (!available()) return { available: false, readable: false, references: [], amounts: [], bank: '', hash, text: '' };
   let result;
   try {
+    const started = Date.now();
     const data = await recognize(buffer);
-    const text = data.text || '';
+    let text = data.text || '';
+    // Fotos torcidas o con sombra: si no apareció ninguna referencia, se lee de nuevo en modo de texto disperso (y por bloques)
+    for (const psm of [11, 6]) {
+      if (extractReferences(text).length || Date.now() - started > 25000) break;
+      try { text += '\n' + ((await recognize(buffer, psm)).text || ''); } catch (_) { /* con la primera lectura basta */ }
+    }
     const alnum = text.replace(/[^0-9A-Za-z]/g, '');
     const hasDigits = /\d{4,}/.test(text);
     result = {
