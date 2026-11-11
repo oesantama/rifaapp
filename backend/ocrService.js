@@ -94,7 +94,7 @@ function extractReferences(text) {
   };
   // Recibos de corresponsal bancario (Wompi/Bancolombia): "RRN: 933760239331 Aprob: 722001". Si el OCR estropea la palabra
   // «Aprob», el número corto que sigue al RRN es la aprobación.
-  for (const m of String(text || '').matchAll(/\brrn\W{0,3}\d{9,}\W+(?:[A-Za-z]{0,8}\W{0,3})?(\d{5,7})\b/gi)) add(m[1], 12);
+  for (const m of String(text || '').matchAll(/\brrn\W{0,3}\d{9,}\W+(?:[A-Za-z]{0,8}\W{0,3})?(\d{5,7})\b/gi)) add(m[1], 20);
   lines.forEach((line, i) => {
     const label = REF_LABEL.exec(line);
     if (!label) return;
@@ -103,7 +103,11 @@ function extractReferences(text) {
     // La línea siguiente solo se usa si no es una fecha u hora (antes "10 nov 2026 - 2:54 p.m." daba la «referencia» 20262)
     const looksLikeDate = l => /\d{1,2}:\d{2}|\b(?:a\.?\s?m|p\.?\s?m)\b|\b(?:ene|feb|mar|abr|may|jun|jul|ago|sep|sept|oct|nov|dic|jan|apr|aug|dec)[a-z]*\.?\s+\d{1,2}|\d{1,2}\s+(?:de\s+)?(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)/i.test(l);
     if (!got.length && lines[i + 1] && !looksLikeDate(lines[i + 1])) got = tokens(lines[i + 1]);
-    got.forEach((tok, k) => add(tok, 10 - k));
+    // Prioridad por etiqueta: «aprobación» y «código de autorización» son la referencia de pago; «transacción» u «operación» solo si no hay otra
+    const strength = /aprob|apr[o0c]|autorizaci/i.test(label[0]) ? 6 : (/transacci|operaci|movimiento|seguimiento/i.test(label[0]) ? 0 : 3);
+    // Un fragmento que está dentro de otro código de la misma línea ("O695949" dentro de "M2O695949") no es una referencia aparte
+    got = got.filter(a => !got.some(b => b !== a && normRef(b).length > normRef(a).length && normRef(b).includes(normRef(a))));
+    got.forEach((tok, k) => add(tok, strength + 10 - k));
   });
   return found.sort((a, b) => b.score - a.score).map(f => f.value);
 }
@@ -176,6 +180,8 @@ function extractAmounts(text) {
 
 function guessBank(text) {
   const t = String(text || '').toLowerCase();
+  // Recargas, consignaciones y depósitos en corresponsal: el banco o billetera que aparece es el DESTINO; no hay banco de origen
+  if (/recarga|corresponsal|consignaci[oó]n|dep[oó]sito/.test(t)) return '';
   const banks = [['nequi', 'Nequi'], ['daviplata', 'Daviplata'], ['bancolombia', 'Bancolombia'], ['davivienda', 'Davivienda'], ['bbva', 'BBVA'], ['banco de bogot', 'Banco de Bogotá'], ['occidente', 'Banco de Occidente'], ['agrario', 'Banco Agrario'], ['popular', 'Banco Popular'], ['scotiabank', 'Scotiabank Colpatria'], ['colpatria', 'Scotiabank Colpatria'], ['itau', 'Itaú'], ['av villas', 'AV Villas'], ['caja social', 'Banco Caja Social']];
   // El banco de origen es el primero que aparece en el comprobante (el destino suele ir después)
   let best = null;

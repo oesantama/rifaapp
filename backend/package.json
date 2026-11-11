@@ -1,6 +1,6 @@
 {
   "name": "rifaapp-backend",
-  "version": "3.4.19",
+  "version": "3.4.20",
   "description": "Backend API REST para Gestión de Rifas y Boletas Multiplataforma",
   "main": "server.js",
   "scripts": {

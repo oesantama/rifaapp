@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.20] - 2026-11-11
+
+- Comprobantes: cuando hay varias etiquetas, la referencia es la de «aprobación» o «código de autorización»; «Nro de transacción» u «operación» solo se usa si no hay otra (en los recibos de recarga Nequi se llenaba con el número de transacción).
+- Comprobantes: en recargas, consignaciones y depósitos de corresponsal el banco que aparece es el destino, así que el banco de origen se deja vacío; ya no se confunde un fragmento de un código con otra referencia.
+
 ## [3.4.19] - 2026-11-11
 
 - Comprobantes: la lectura es más robusta con fotos torcidas, borrosas o de recibos de papel. Si la primera lectura no encuentra la referencia, se lee de nuevo en otros modos del OCR; la palabra «Aprob» se reconoce aunque el OCR la estropee («Aproa», «Apron»…); en los recibos de corresponsal Wompi/Bancolombia, el número corto que sigue al RRN se toma como aprobación; y los números de 6 dígitos o más sin etiqueta se sugieren como «Posibles».
