@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.23] - 2026-11-12
+
+- Pagos y abonos (detalle): paginación de la tabla y de las tarjetas del celular, con 10 filas por página (10, 25, 50, 100 o todas), rango «1–10 de 16» y flechas de página; el check de seleccionar todo aplica a la página.
+
 ## [3.4.22] - 2026-11-12
 
 - Pagos y abonos: el título va junto a los totales en la primera línea del bloque expandible; las fechas «Desde / Hasta» y «Actualizar» pasaron adentro del bloque (aplican al resumen y al detalle); los filtros y botones del detalle solo aparecen en esa pestaña. Las pestañas son más bajas (ícono y texto en la misma línea).

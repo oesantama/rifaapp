@@ -1082,6 +1082,15 @@ class _PaymentsList extends StatefulWidget {
 class _PaymentsListState extends State<_PaymentsList> {
   final _h = ScrollController();
   final _v = ScrollController();
+  // Paginación (0 = todos)
+  int _pageSize = 10;
+  int _page = 0;
+
+  int get _pages => _pageSize == 0 ? 1 : math.max(1, (widget.payments.length / _pageSize).ceil());
+  int get _curPage => math.min(_page, _pages - 1);
+  List<Map<String, dynamic>> get _visible => _pageSize == 0
+      ? widget.payments
+      : widget.payments.skip(_curPage * _pageSize).take(_pageSize).toList();
 
   // (título, ancho, alineado a la derecha)
   static const _cols = <(String, double, bool)>[
@@ -1120,7 +1129,7 @@ class _PaymentsListState extends State<_PaymentsList> {
   }
 
   void _toggleAll(bool? v) {
-    for (final p in widget.payments) {
+    for (final p in _visible) {
       v == true
           ? widget.selected.add('${p['id']}')
           : widget.selected.remove('${p['id']}');
@@ -1149,10 +1158,57 @@ class _PaymentsListState extends State<_PaymentsList> {
 
   @override
   Widget build(BuildContext context) {
+    final total = widget.payments.length;
+    final from = total == 0 ? 0 : (_pageSize == 0 ? 1 : _curPage * _pageSize + 1);
+    final to = _pageSize == 0 ? total : math.min(total, (_curPage + 1) * _pageSize);
+    final small = TextStyle(fontSize: 12, color: Colors.grey[700]);
     final footer = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Text(widget.footer,
-          style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 0,
+        children: [
+          Text(widget.footer, style: small),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('Filas:', style: small),
+            const SizedBox(width: 6),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _pageSize,
+                isDense: true,
+                style: TextStyle(fontSize: 12.5, color: Theme.of(context).textTheme.bodyMedium?.color),
+                items: const [
+                  DropdownMenuItem(value: 10, child: Text('10')),
+                  DropdownMenuItem(value: 25, child: Text('25')),
+                  DropdownMenuItem(value: 50, child: Text('50')),
+                  DropdownMenuItem(value: 100, child: Text('100')),
+                  DropdownMenuItem(value: 0, child: Text('Todas')),
+                ],
+                onChanged: (v) => setState(() {
+                  _pageSize = v ?? 10;
+                  _page = 0;
+                }),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('$from–$to de $total', style: small),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Página anterior',
+              icon: const Icon(Icons.chevron_left),
+              onPressed: _curPage > 0 ? () => setState(() => _page = _curPage - 1) : null,
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Página siguiente',
+              icon: const Icon(Icons.chevron_right),
+              onPressed: _curPage < _pages - 1 ? () => setState(() => _page = _curPage + 1) : null,
+            ),
+          ]),
+        ],
+      ),
     );
     return Column(children: [
       Expanded(child: widget.mobile ? _cards() : _grid()),
@@ -1168,9 +1224,9 @@ class _PaymentsListState extends State<_PaymentsList> {
       child: ListView.builder(
         controller: _v,
         padding: const EdgeInsets.only(bottom: 8, right: 6),
-        itemCount: widget.payments.length,
+        itemCount: _visible.length,
         itemBuilder: (context, i) {
-          final p = widget.payments[i];
+          final p = _visible[i];
           final nums = (p['numbers'] as List? ?? []).join(' - ');
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
@@ -1253,9 +1309,9 @@ class _PaymentsListState extends State<_PaymentsList> {
   Widget _grid() {
     return LayoutBuilder(builder: (context, c) {
       final width = math.max(c.maxWidth, _tableW);
-      final allSelected =
-          widget.payments.isNotEmpty && widget.payments.every(_isSel);
-      final someSelected = widget.payments.any(_isSel);
+      final visible = _visible;
+      final allSelected = visible.isNotEmpty && visible.every(_isSel);
+      final someSelected = visible.any(_isSel);
       return Container(
         decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300),
@@ -1312,9 +1368,8 @@ class _PaymentsListState extends State<_PaymentsList> {
                     child: ListView.builder(
                       controller: _v,
                       itemExtent: _rowH,
-                      itemCount: widget.payments.length,
-                      itemBuilder: (context, i) =>
-                          _row(widget.payments[i], i, width),
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) => _row(visible[i], i, width),
                     ),
                   ),
                 ),
