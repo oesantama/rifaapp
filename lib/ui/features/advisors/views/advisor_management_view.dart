@@ -18,6 +18,9 @@ import 'package:rifaapp/ui/features/tickets/views/available_numbers_dialog.dart'
 import 'package:rifaapp/ui/core/theme.dart';
 
 class AdvisorManagementView extends StatelessWidget {
+  /// Con qué ventas se ordena el ranking: 'calle' (por defecto) u 'oficina'. Siempre se muestran las dos.
+  static final ValueNotifier<String> _rankBy = ValueNotifier<String>('calle');
+
   const AdvisorManagementView({super.key});
 
   void _showAdminDialog(BuildContext context) {
@@ -607,7 +610,9 @@ class AdvisorManagementView extends StatelessWidget {
     final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 0);
     final isMobile = MediaQuery.of(context).size.width < 600;
 
-    return Consumer<AdvisorViewModel>(
+    return ValueListenableBuilder<String>(
+      valueListenable: _rankBy,
+      builder: (context, rankBy, _) => Consumer<AdvisorViewModel>(
       builder: (context, advVM, _) {
         if (advVM.isLoading) {
           return const Center(child: CircularProgressIndicator());
@@ -641,7 +646,12 @@ class AdvisorManagementView extends StatelessWidget {
         final sales = context.watch<TicketViewModel>().salesByAdvisor(advisorTypes: {for (final a in advVM.advisors) a.id: a.type});
         AdvisorSales salesOf(String advisorId) => sales[advisorId] ?? AdvisorSales();
         final rankedAdvisors = List.from(advVM.advisors);
-        rankedAdvisors.sort((a, b) => salesOf(b.id).total.compareTo(salesOf(a.id).total));
+        // El ranking cuenta las ventas de calle (o de oficina si se elige); en desempate, el total
+        int rankKey(String id) => rankBy == 'calle' ? salesOf(id).calle : salesOf(id).oficina;
+        rankedAdvisors.sort((a, b) {
+          final byZone = rankKey(b.id).compareTo(rankKey(a.id));
+          return byZone != 0 ? byZone : salesOf(b.id).total.compareTo(salesOf(a.id).total);
+        });
 
         return DefaultTabController(
           length: 2,
@@ -740,11 +750,11 @@ class AdvisorManagementView extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Text('🏆', style: TextStyle(fontSize: 22)),
-                                  SizedBox(width: 8),
-                                  Expanded(
+                                  const Text('🏆', style: TextStyle(fontSize: 22)),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
                                     child: Text(
                                       'Ranking de Mejores Vendedores (Leaderboard)',
                                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -752,6 +762,20 @@ class AdvisorManagementView extends StatelessWidget {
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 8),
+                              Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                                Text('Se ordena por ventas de:', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                                SegmentedButton<String>(
+                                  showSelectedIcon: false,
+                                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                                  segments: const [
+                                    ButtonSegment(value: 'calle', label: Text('🛣️ Calle')),
+                                    ButtonSegment(value: 'oficina', label: Text('🏢 Oficina')),
+                                  ],
+                                  selected: {rankBy},
+                                  onSelectionChanged: (v) => _rankBy.value = v.first,
+                                ),
+                              ]),
                               const SizedBox(height: 12),
                               Row(
                                 children: rankedAdvisors.take(3).toList().asMap().entries.map((entry) {
@@ -804,9 +828,22 @@ class AdvisorManagementView extends StatelessWidget {
                                             ),
                                           ),
                                           const SizedBox(height: 2),
-                                          Text(
-                                            '🏢 ${salesOf(adv.id).oficina} oficina • 🛣️ ${salesOf(adv.id).calle} calle',
-                                            style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                                          Text.rich(
+                                            TextSpan(
+                                              style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+                                              children: [
+                                                TextSpan(
+                                                  text: '🏢 ${salesOf(adv.id).oficina} oficina',
+                                                  style: rankBy == 'oficina' ? const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue) : null,
+                                                ),
+                                                const TextSpan(text: ' • '),
+                                                TextSpan(
+                                                  text: '🛣️ ${salesOf(adv.id).calle} calle',
+                                                  style: rankBy == 'calle' ? const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryBlue) : null,
+                                                ),
+                                              ],
+                                            ),
+                                            textAlign: TextAlign.center,
                                           ),
                                         ],
                                       ),
@@ -1068,6 +1105,7 @@ class AdvisorManagementView extends StatelessWidget {
           ),
         );
       },
+      ),
     );
   }
 

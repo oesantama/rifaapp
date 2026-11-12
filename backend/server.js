@@ -8256,11 +8256,21 @@ app.get('/api/analytics/sales', adminOrAdvisorMenu('proyeccion'), (req, res) => 
   // Boletas por día necesarias para agotar la rifa a tiempo
   const neededPerDay = daysLeft && daysLeft > 0 ? Math.max(0, totalTickets - soldCount) / daysLeft : null;
 
-  // Todos los asesores de la empresa (también los que aún no venden), de la mayor venta a la menor
+  // Todos los asesores de la empresa (también los que aún no venden). Se muestran las ventas de calle y de oficina; el orden es por calle
+  const zeroZone = () => ({ tickets: 0, money: 0 });
+  const newAdvisorRow = name => ({ name, tickets: 0, money: 0, calle: zeroZone(), oficina: zeroZone() });
   const byAdvisor = new Map();
-  (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, { name: a.name, tickets: 0, money: 0 }));
-  // Solo cuentan las ventas de calle (saleZone CALLE) y su valor
-  sold.filter(t => inferredSaleZone(t, t.advisorId ? (db.advisors || []).find(a => a.id === t.advisorId) : null) === 'CALLE').forEach(t => { const k = t.advisorName || 'Venta directa'; const e = byAdvisor.get(k) || { name: k, tickets: 0, money: 0 }; e.tickets++; e.money += Number(t.totalPaid) || 0; byAdvisor.set(k, e); });
+  (db.advisors || []).filter(a => a.companyId === raffle.companyId).forEach(a => byAdvisor.set(a.name, newAdvisorRow(a.name)));
+  sold.forEach(t => {
+    const k = t.advisorName || 'Venta directa';
+    const e = byAdvisor.get(k) || newAdvisorRow(k);
+    const paid = Number(t.totalPaid) || 0;
+    e.tickets++; e.money += paid;
+    const zone = inferredSaleZone(t, t.advisorId ? (db.advisors || []).find(a => a.id === t.advisorId) : null);
+    if (zone === 'CALLE') { e.calle.tickets++; e.calle.money += paid; }
+    else if (zone === 'OFICINA') { e.oficina.tickets++; e.oficina.money += paid; }
+    byAdvisor.set(k, e);
+  });
 
   // Boletas que vendió el chatbot (solo informativo): apartadas, abonadas y pagadas, y por cuál asesor quedaron referenciadas
   const botStatus = t => t.status === 'RESERVADA' ? 'reserved' : t.status === 'ABONO_PARCIAL' ? 'partial' : (t.status === 'PAGADA' || t.status === 'CONFIRMADA') ? 'paid' : null;
@@ -8283,7 +8293,7 @@ app.get('/api/analytics/sales', adminOrAdvisorMenu('proyeccion'), (req, res) => 
     today, firstSaleDay: first, spanDays, drawDay, daysLeft, avgAll, avg7, neededPerDay, collectRatio,
     bestWeekday: best && best.tickets > 0 ? { weekday: best.weekday, name: best.name, avgTickets: best.avgTickets } : null,
     projectionAll: project(avgAll), projection7: project(avg7),
-    chatbot, daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.tickets - a.tickets || b.money - a.money || a.name.localeCompare(b.name))
+    chatbot, daily, weekday, topAdvisors: [...byAdvisor.values()].sort((a, b) => b.calle.tickets - a.calle.tickets || b.calle.money - a.calle.money || b.tickets - a.tickets || a.name.localeCompare(b.name))
   });
 });
 

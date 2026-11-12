@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.24] - 2026-11-12
+
+- Ranking de asesores (pestaña Asesores y Proyección): se ordena por ventas de calle, con la opción de ordenarlo por oficina; siempre se muestran las ventas de calle y de oficina y el total vendido. En Proyección cada fila muestra además el valor de la otra zona y el total.
+
 ## [3.4.23] - 2026-11-12
 
 - Pagos y abonos (detalle): paginación de la tabla y de las tarjetas del celular, con 10 filas por página (10, 25, 50, 100 o todas), rango «1–10 de 16» y flechas de página; el check de seleccionar todo aplica a la página.

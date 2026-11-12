@@ -24,6 +24,9 @@ class SalesProjectionView extends StatefulWidget {
 }
 
 class _SalesProjectionViewState extends State<SalesProjectionView> {
+  /// El ranking de asesores se ordena por ventas de 'calle' u 'oficina'; siempre se muestran las dos.
+  String _rankZone = 'calle';
+
   Map<String, dynamic>? _data;
   String? _error;
   bool _loading = true;
@@ -146,7 +149,17 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
           _section('Boletas del chatbot (informativo)'),
           _chatbot(d),
           const SizedBox(height: 20),
-          _section('Asesores: ventas de calle, de la mayor a la menor'),
+          _section('Asesores: ranking por ventas de ${_rankZone == 'calle' ? 'calle' : 'oficina'}'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SegmentedButton<String>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [ButtonSegment(value: 'calle', label: Text('🛣️ Calle')), ButtonSegment(value: 'oficina', label: Text('🏢 Oficina'))],
+              selected: {_rankZone},
+              onSelectionChanged: (v) => setState(() => _rankZone = v.first),
+            ),
+          ),
           _advisors(d),
           const SizedBox(height: 30),
         ],
@@ -343,23 +356,47 @@ class _SalesProjectionViewState extends State<SalesProjectionView> {
   }
 
   Widget _advisors(Map<String, dynamic> d) {
-    final list = (d['topAdvisors'] as List).cast<Map<String, dynamic>>();
-    if (list.isEmpty) return _card(const Text('Aún no hay asesores.'));
-    final maxT = list.map((e) => _n(e['tickets']).toDouble()).fold<double>(1, math.max);
+    final all = (d['topAdvisors'] as List).cast<Map<String, dynamic>>();
+    if (all.isEmpty) return _card(const Text('Aún no hay asesores.'));
+    final other = _rankZone == 'calle' ? 'oficina' : 'calle';
+    Map<String, dynamic> zone(Map<String, dynamic> a, String z) => Map<String, dynamic>.from((a[z] as Map?) ?? const {});
+    // Orden por la zona elegida (en desempate, el valor y luego el total); el servidor ya trae el orden por calle
+    final list = [...all]..sort((a, b) {
+        final za = zone(a, _rankZone), zb = zone(b, _rankZone);
+        final byTickets = _n(zb['tickets']).compareTo(_n(za['tickets']));
+        if (byTickets != 0) return byTickets;
+        final byMoney = _n(zb['money']).compareTo(_n(za['money']));
+        return byMoney != 0 ? byMoney : _n(b['tickets']).compareTo(_n(a['tickets']));
+      });
+    final maxT = list.map((e) => _n(zone(e, _rankZone)['tickets']).toDouble()).fold<double>(1, math.max);
     return _card(Column(children: [
       for (var i = 0; i < list.length; i++)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(children: [
-            SizedBox(width: 26, child: Text('${i + 1}', style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
-            SizedBox(width: 130, child: Text(list[i]['name'] as String, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5))),
-            Expanded(child: LinearProgressIndicator(value: _n(list[i]['tickets']).toDouble() / maxT, minHeight: 10, borderRadius: BorderRadius.circular(6))),
-            const SizedBox(width: 8),
-            SizedBox(width: 28, child: Text('${list[i]['tickets']}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
-            const SizedBox(width: 8),
-            SizedBox(width: 92, child: Text(_money.format(_n(list[i]['money'])), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
-          ]),
-        ),
+        Builder(builder: (context) {
+          final main = zone(list[i], _rankZone);
+          final side = zone(list[i], other);
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                SizedBox(width: 26, child: Text('${i + 1}', style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
+                SizedBox(width: 130, child: Text(list[i]['name'] as String, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5))),
+                Expanded(child: LinearProgressIndicator(value: _n(main['tickets']).toDouble() / maxT, minHeight: 10, borderRadius: BorderRadius.circular(6))),
+                const SizedBox(width: 8),
+                SizedBox(width: 28, child: Text('${main['tickets'] ?? 0}', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold))),
+                const SizedBox(width: 8),
+                SizedBox(width: 92, child: Text(_money.format(_n(main['money'])), textAlign: TextAlign.right, style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
+              ]),
+              // Siempre se ve todo: lo de la otra zona y el total vendido
+              Padding(
+                padding: const EdgeInsets.only(left: 26),
+                child: Text(
+                  '${other == 'oficina' ? '🏢 Oficina' : '🛣️ Calle'}: ${side['tickets'] ?? 0} · ${_money.format(_n(side['money']))}   |   Total vendidas: ${list[i]['tickets']} · ${_money.format(_n(list[i]['money']))}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
+              ),
+            ]),
+          );
+        }),
     ]));
   }
 }
