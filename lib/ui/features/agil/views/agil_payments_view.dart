@@ -52,6 +52,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   bool _truncated = false;
   final Set<String> _selected = {};
   bool _busy = false;
+  /// Bloque de filtros y acciones del detalle: cerrado por defecto para darle el espacio a la tabla.
+  bool _filtersOpen = false;
 
   static final _day = DateFormat('yyyy-MM-dd');
   static final _shown = DateFormat('dd/MM/yyyy');
@@ -255,35 +257,12 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
           Row(children: [
             const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
             const SizedBox(width: 8),
-            Expanded(child: Text(widget.advisorMode ? 'Caja' : 'Pagos y abonos', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+            Text(widget.advisorMode ? 'Caja' : 'Pagos y abonos', style: TextStyle(fontSize: isMobile ? 18 : 20, fontWeight: FontWeight.bold)),
+            // En pantallas anchas el rango de fechas va en la misma fila del título (ahorra una fila de alto)
+            if (!isMobile) ...[const SizedBox(width: 16), Expanded(child: _dateButtons())] else const Spacer(),
             IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh), tooltip: 'Actualizar'),
           ]),
-          const SizedBox(height: 6),
-          // El rango de fechas aplica al resumen y al detalle
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            OutlinedButton.icon(
-              onPressed: () => _pickDate(true),
-              icon: const Icon(Icons.event, size: 18),
-              label: Text(_from == null ? 'Desde' : 'Desde ${_shown.format(_from!)}'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => _pickDate(false),
-              icon: const Icon(Icons.event, size: 18),
-              label: Text(_to == null ? 'Hasta hoy' : 'Hasta ${_shown.format(_to!)}'),
-            ),
-            if (_from != null || _to != null)
-              IconButton(
-                tooltip: 'Quitar fechas',
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () {
-                  setState(() {
-                    _from = null;
-                    _to = null;
-                  });
-                  _load();
-                },
-              ),
-          ]),
+          if (isMobile) ...[const SizedBox(height: 2), _dateButtons()],
           const SizedBox(height: 4),
           if (!widget.advisorMode)
             TabBar(
@@ -306,6 +285,38 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
         ],
       ),
     );
+  }
+
+  /// Rango de fechas (aplica al resumen y al detalle).
+  Widget _dateButtons() {
+    final compact = ButtonStyle(visualDensity: VisualDensity.compact, padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10)));
+    return Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      OutlinedButton.icon(
+        style: compact,
+        onPressed: () => _pickDate(true),
+        icon: const Icon(Icons.event, size: 16),
+        label: Text(_from == null ? 'Desde' : 'Desde ${_shown.format(_from!)}'),
+      ),
+      OutlinedButton.icon(
+        style: compact,
+        onPressed: () => _pickDate(false),
+        icon: const Icon(Icons.event, size: 16),
+        label: Text(_to == null ? 'Hasta hoy' : 'Hasta ${_shown.format(_to!)}'),
+      ),
+      if (_from != null || _to != null)
+        IconButton(
+          tooltip: 'Quitar fechas',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.close, size: 18),
+          onPressed: () {
+            setState(() {
+              _from = null;
+              _to = null;
+            });
+            _load();
+          },
+        ),
+    ]);
   }
 
   // ---------------------------------------------------------------------------
@@ -538,30 +549,20 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     final pending = Map<String, dynamic>.from(_totals['pending'] ?? {});
     final uploaded = Map<String, dynamic>.from(_totals['uploaded'] ?? {});
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 10, runSpacing: 8, children: [
-          _kpi('Total filtrado', cashCurrency.format(_n(_totals['amount'])), '$_total pagos', AppTheme.primaryBlue),
-          _kpi('Pendientes AGIL', cashCurrency.format(_n(pending['amount'])), '${pending['count'] ?? 0} pagos', Colors.orange.shade800),
-          _kpi('Subidos AGIL', cashCurrency.format(_n(uploaded['amount'])), '${uploaded['count'] ?? 0} pagos', AppTheme.secondaryEmerald),
-        ]),
-        const SizedBox(height: 10),
-        _filtersBar(),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          if (!widget.readOnly) ...[
-          FilledButton.icon(onPressed: _busy ? null : _export, icon: const Icon(Icons.download, size: 18), label: const Text('Descargar Excel')),
-          FilledButton.tonalIcon(onPressed: _busy ? null : _createBatch, icon: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Generar lote AGIL')),
-          OutlinedButton.icon(onPressed: _busy ? null : _uploadReturned, icon: const Icon(Icons.upload_file, size: 18), label: const Text('Subir Excel devuelto (SUBIDO)')),
-          ],
-          if (!widget.readOnly && _selected.isNotEmpty) ...[
-            Text('${_selected.length} seleccionados', style: const TextStyle(fontWeight: FontWeight.w600)),
-            OutlinedButton(onPressed: _busy ? null : () => _markSelected('SUBIDO'), child: const Text('Marcar SUBIDO')),
-            OutlinedButton(onPressed: _busy ? null : () => _markSelected('PENDIENTE'), child: const Text('Marcar PENDIENTE')),
-          ],
-          if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-        ]),
-        const SizedBox(height: 8),
+        _controlsBlock(isMobile, pending, uploaded),
+        // Con pagos marcados las acciones quedan a la vista aunque el bloque esté cerrado
+        if (!widget.readOnly && _selected.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('${_selected.length} seleccionados', style: const TextStyle(fontWeight: FontWeight.w600)),
+              OutlinedButton(onPressed: _busy ? null : () => _markSelected('SUBIDO'), child: const Text('Marcar SUBIDO')),
+              OutlinedButton(onPressed: _busy ? null : () => _markSelected('PENDIENTE'), child: const Text('Marcar PENDIENTE')),
+            ]),
+          ),
+        const SizedBox(height: 6),
         Expanded(
           child: _payments.isEmpty
               ? Center(child: Text('No hay pagos con esos filtros.', style: TextStyle(color: Colors.grey[600])))
@@ -577,20 +578,77 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     );
   }
 
-  Widget _kpi(String title, String value, String subtitle, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withValues(alpha: 0.35))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
-          Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-          Text(subtitle, style: TextStyle(fontSize: 11.5, color: Colors.grey[700])),
-        ]),
-      );
+  /// Un solo bloque expandible con los totales, los filtros y las acciones. Cerrado muestra los totales en una línea
+  /// (y cuántos filtros hay activos); abierto muestra los filtros y los botones.
+  Widget _controlsBlock(bool isMobile, Map<String, dynamic> pending, Map<String, dynamic> uploaded) {
+    final activeFilters = [_agil, _method, _settled, _search.text.trim(), _account].where((v) => v.isNotEmpty).length;
+    Widget stat(String label, String value, Color color) => RichText(
+          text: TextSpan(style: TextStyle(fontSize: isMobile ? 12 : 13, color: Theme.of(context).textTheme.bodyMedium?.color), children: [
+            TextSpan(text: '$label ', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+            TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ]),
+        );
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          onTap: () => setState(() => _filtersOpen = !_filtersOpen),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: isMobile ? 8 : 10),
+            child: Row(children: [
+              Icon(Icons.tune, size: 18, color: activeFilters > 0 ? AppTheme.primaryBlue : Colors.grey[600]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Wrap(spacing: 14, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  stat('Total', '${cashCurrency.format(_n(_totals['amount']))} · $_total pagos', AppTheme.primaryBlue),
+                  stat('Pend. AGIL', cashCurrency.format(_n(pending['amount'])), Colors.orange.shade800),
+                  stat('Subidos', cashCurrency.format(_n(uploaded['amount'])), AppTheme.secondaryEmerald),
+                ]),
+              ),
+              if (activeFilters > 0)
+                Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                  child: Text('$activeFilters filtro${activeFilters == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                ),
+              Icon(_filtersOpen ? Icons.expand_less : Icons.expand_more),
+            ]),
+          ),
+        ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: !_filtersOpen
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Divider(height: 1),
+                    const SizedBox(height: 10),
+                    _filtersBar(isMobile),
+                    if (!widget.readOnly) ...[
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                        FilledButton.icon(onPressed: _busy ? null : _export, icon: const Icon(Icons.download, size: 18), label: const Text('Descargar Excel')),
+                        FilledButton.tonalIcon(onPressed: _busy ? null : _createBatch, icon: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Generar lote AGIL')),
+                        OutlinedButton.icon(onPressed: _busy ? null : _uploadReturned, icon: const Icon(Icons.upload_file, size: 18), label: Text(isMobile ? 'Subir Excel devuelto' : 'Subir Excel devuelto (SUBIDO)')),
+                        if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      ]),
+                    ],
+                  ]),
+                ),
+        ),
+      ]),
+    );
+  }
 
-  Widget _filtersBar() {
+  Widget _filtersBar(bool isMobile) {
     InputDecoration deco(String label) => InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder());
-    Widget drop(String label, String value, Map<String, String> options, ValueChanged<String> onChanged, {double width = 150}) => SizedBox(
-          width: width,
+    Widget drop(String label, String value, Map<String, String> options, ValueChanged<String> onChanged, {double? width}) => SizedBox(
+          width: width ?? (isMobile ? (MediaQuery.of(context).size.width - 66) / 2 : 150),
           child: DropdownButtonFormField<String>(
             value: value,
             decoration: deco(label),
@@ -619,7 +677,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       drop('Método', _method, const {'': 'Todos', 'TRANSFERENCIA': 'Transferencia', 'EFECTIVO': 'Efectivo'}, (v) => _method = v),
       drop('Caja', _settled, const {'': 'Todos', 'SI': 'Legalizados', 'NO': 'Sin legalizar'}, (v) => _settled = v),
       SizedBox(
-        width: 250,
+        width: isMobile ? double.infinity : 250,
         child: TextField(
           controller: _search,
           decoration: deco('Buscar (boleta, comprador, referencia…)').copyWith(suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _load)),

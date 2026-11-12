@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.21] - 2026-11-12
+
+- Pagos y abonos (detalle): los totales, los filtros y las acciones quedan en un solo bloque expandible, cerrado por defecto; cerrado muestra los totales en una línea y cuántos filtros hay activos. La tabla (o las tarjetas en el celular) ocupa todo el espacio que queda.
+- Pagos y abonos: en pantallas anchas el rango de fechas va en la misma fila del título; en el celular los filtros se acomodan a dos por fila.
+
 ## [3.4.20] - 2026-11-11
 
 - Comprobantes: cuando hay varias etiquetas, la referencia es la de «aprobación» o «código de autorización»; «Nro de transacción» u «operación» solo se usa si no hay otra (en los recibos de recarga Nequi se llenaba con el número de transacción).
