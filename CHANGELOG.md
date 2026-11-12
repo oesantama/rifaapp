@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.22] - 2026-11-12
+
+- Pagos y abonos: el título va junto a los totales en la primera línea del bloque expandible; las fechas «Desde / Hasta» y «Actualizar» pasaron adentro del bloque (aplican al resumen y al detalle); los filtros y botones del detalle solo aparecen en esa pestaña. Las pestañas son más bajas (ícono y texto en la misma línea).
+
 ## [3.4.21] - 2026-11-12
 
 - Pagos y abonos (detalle): los totales, los filtros y las acciones quedan en un solo bloque expandible, cerrado por defecto; cerrado muestra los totales en una línea y cuántos filtros hay activos. La tabla (o las tarjetas en el celular) ocupa todo el espacio que queda.

@@ -12,7 +12,8 @@ import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/core/utils/file_saver.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart';
 
-const _xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const _xlsxMime =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 /// Menú "Pagos" (solo administrador):
 ///  • Resumen por cuenta: cuánto hay en cada cuenta, cuánto está legalizado y cuánto falta, y el efectivo.
@@ -20,17 +21,23 @@ const _xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 class AgilPaymentsView extends StatefulWidget {
   /// true = la ve un asesor de punto/integral con permiso: solo el resumen de la caja (sin AGIL ni Excel).
   final bool advisorMode;
+
   /// Solo lectura (asesor con la parte «Pagos» del menú): sin descargas, lotes, marcas ni gastos.
   final bool readOnly;
   final bool canRegisterExpenses;
 
-  const AgilPaymentsView({super.key, this.advisorMode = false, this.canRegisterExpenses = false, this.readOnly = false});
+  const AgilPaymentsView(
+      {super.key,
+      this.advisorMode = false,
+      this.canRegisterExpenses = false,
+      this.readOnly = false});
 
   @override
   State<AgilPaymentsView> createState() => _AgilPaymentsViewState();
 }
 
-class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerProviderStateMixin {
+class _AgilPaymentsViewState extends State<AgilPaymentsView>
+    with SingleTickerProviderStateMixin {
   final _api = ApiService();
   final _search = TextEditingController();
   late final TabController _tabs = TabController(length: 2, vsync: this);
@@ -52,6 +59,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   bool _truncated = false;
   final Set<String> _selected = {};
   bool _busy = false;
+
   /// Bloque de filtros y acciones del detalle: cerrado por defecto para darle el espacio a la tabla.
   bool _filtersOpen = false;
 
@@ -80,6 +88,9 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   void initState() {
     super.initState();
     _raffleId = context.read<RaffleViewModel>().selectedRaffle?.id ?? '';
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging && mounted) setState(() {});
+    });
     _load();
   }
 
@@ -97,13 +108,17 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     });
     try {
       final results = await Future.wait([
-        widget.advisorMode ? Future.value(<String, dynamic>{}) : _api.agilPayments(_filters),
+        widget.advisorMode
+            ? Future.value(<String, dynamic>{})
+            : _api.agilPayments(_filters),
         _api.agilSummary(_dateFilters),
       ]);
       if (!mounted) return;
       final res = results[0];
       setState(() {
-        _payments = ((res['payments'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+        _payments = ((res['payments'] as List?) ?? [])
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         _totals = Map<String, dynamic>.from(res['totals'] ?? {});
         _total = (res['total'] as num?)?.toInt() ?? _payments.length;
         _truncated = res['truncated'] == true;
@@ -122,7 +137,10 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
 
   void _toast(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: error ? AppTheme.dangerRose : AppTheme.secondaryEmerald, content: Text(text)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor:
+            error ? AppTheme.dangerRose : AppTheme.secondaryEmerald,
+        content: Text(text)));
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -150,7 +168,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   }
 
   /// Desde una tarjeta del resumen: abre el detalle ya filtrado.
-  void _openDetail({String account = '', String accountLabel = '', String method = ''}) {
+  void _openDetail(
+      {String account = '', String accountLabel = '', String method = ''}) {
     setState(() {
       _account = account;
       _accountLabel = accountLabel;
@@ -165,7 +184,9 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
 
   Future<void> _export() => _run(() async {
         final bytes = await _api.agilExport(_filters);
-        await saveAndDownloadBytes('Pagos_${_day.format(DateTime.now())}.xlsx', bytes, mimeType: _xlsxMime);
+        await saveAndDownloadBytes(
+            'Pagos_${_day.format(DateTime.now())}.xlsx', bytes,
+            mimeType: _xlsxMime);
         _toast('Excel descargado ($_total pagos).');
       });
 
@@ -183,8 +204,12 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
           '${ready > 0 ? '\n\nEn el filtro actual hay $ready pago(s) listos.' : ''}',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Generar y descargar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Generar y descargar')),
         ],
       ),
     );
@@ -196,7 +221,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       );
       final batch = Map<String, dynamic>.from(res['batch'] ?? {});
       final bytes = await _api.agilBatchFile('${batch['id']}');
-      await saveAndDownloadBytes('${batch['fileName']}', bytes, mimeType: _xlsxMime);
+      await saveAndDownloadBytes('${batch['fileName']}', bytes,
+          mimeType: _xlsxMime);
       _toast('Lote ${batch['number']} generado: ${batch['count']} pagos.');
       await _load();
     });
@@ -214,8 +240,12 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
           'Use únicamente el Excel que descargó o recibió por WhatsApp y que ya subieron a AGIL.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí, marcar como subidos')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sí, marcar como subidos')),
         ],
       ),
     );
@@ -233,7 +263,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     if (_selected.isEmpty) return;
     await _run(() async {
       final res = await _api.agilMark(_selected.toList(), status);
-      _toast('${res['changed'] ?? 0} pagos marcados como ${status == 'SUBIDO' ? 'SUBIDOS' : 'PENDIENTES'}.');
+      _toast(
+          '${res['changed'] ?? 0} pagos marcados como ${status == 'SUBIDO' ? 'SUBIDOS' : 'PENDIENTES'}.');
       await _load();
     });
   }
@@ -242,7 +273,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 700;
     // Al cambiar de rifa se recarga con las cuentas y pagos de la nueva
-    final currentRaffleId = context.watch<RaffleViewModel>().selectedRaffle?.id ?? '';
+    final currentRaffleId =
+        context.watch<RaffleViewModel>().selectedRaffle?.id ?? '';
     if (currentRaffleId != _raffleId) {
       _raffleId = currentRaffleId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -250,37 +282,74 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
       });
     }
     return Padding(
-      padding: EdgeInsets.fromLTRB(isMobile ? 10 : 16, isMobile ? 10 : 14, isMobile ? 10 : 16, 0),
+      padding: EdgeInsets.fromLTRB(
+          isMobile ? 10 : 16, isMobile ? 10 : 14, isMobile ? 10 : 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
-            const SizedBox(width: 8),
-            Text(widget.advisorMode ? 'Caja' : 'Pagos y abonos', style: TextStyle(fontSize: isMobile ? 18 : 20, fontWeight: FontWeight.bold)),
-            // En pantallas anchas el rango de fechas va en la misma fila del título (ahorra una fila de alto)
-            if (!isMobile) ...[const SizedBox(width: 16), Expanded(child: _dateButtons())] else const Spacer(),
-            IconButton(onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh), tooltip: 'Actualizar'),
-          ]),
-          if (isMobile) ...[const SizedBox(height: 2), _dateButtons()],
-          const SizedBox(height: 4),
-          if (!widget.advisorMode)
+          if (widget.advisorMode) ...[
+            Row(children: [
+              const Icon(Icons.receipt_long, color: AppTheme.primaryBlue),
+              const SizedBox(width: 8),
+              Text('Caja',
+                  style: TextStyle(
+                      fontSize: isMobile ? 18 : 20,
+                      fontWeight: FontWeight.bold)),
+              const Spacer(),
+              IconButton(
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Actualizar'),
+            ]),
+            _dateButtons(),
+          ] else ...[
+            // Título, totales, fechas, actualizar y filtros: todo en un solo bloque expandible
+            _controlsBlock(isMobile),
             TabBar(
               controller: _tabs,
-              tabs: const [Tab(icon: Icon(Icons.account_balance_outlined, size: 18), text: 'Resumen por cuenta'), Tab(icon: Icon(Icons.table_rows_outlined, size: 18), text: 'Detalle de pagos')],
+              dividerHeight: 0.5,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+              tabs: const [
+                Tab(
+                    height: 34,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.account_balance_outlined, size: 16),
+                      SizedBox(width: 6),
+                      Text('Resumen por cuenta')
+                    ])),
+                Tab(
+                    height: 34,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.table_rows_outlined, size: 16),
+                      SizedBox(width: 6),
+                      Text('Detalle de pagos')
+                    ])),
+              ],
             ),
+          ],
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _error != null
                     ? Center(
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text(_error!, style: const TextStyle(color: AppTheme.dangerRose), textAlign: TextAlign.center),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(_error!,
+                              style:
+                                  const TextStyle(color: AppTheme.dangerRose),
+                              textAlign: TextAlign.center),
                           const SizedBox(height: 8),
-                          OutlinedButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
+                          OutlinedButton.icon(
+                              onPressed: _load,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Reintentar')),
                         ]),
                       )
-                    : (widget.advisorMode ? _summaryTab() : TabBarView(controller: _tabs, children: [_summaryTab(), _detailTab(isMobile)])),
+                    : (widget.advisorMode
+                        ? _summaryTab()
+                        : TabBarView(
+                            controller: _tabs,
+                            children: [_summaryTab(), _detailTab(isMobile)])),
           ),
         ],
       ),
@@ -289,34 +358,43 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
 
   /// Rango de fechas (aplica al resumen y al detalle).
   Widget _dateButtons() {
-    final compact = ButtonStyle(visualDensity: VisualDensity.compact, padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 10)));
-    return Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      OutlinedButton.icon(
-        style: compact,
-        onPressed: () => _pickDate(true),
-        icon: const Icon(Icons.event, size: 16),
-        label: Text(_from == null ? 'Desde' : 'Desde ${_shown.format(_from!)}'),
-      ),
-      OutlinedButton.icon(
-        style: compact,
-        onPressed: () => _pickDate(false),
-        icon: const Icon(Icons.event, size: 16),
-        label: Text(_to == null ? 'Hasta hoy' : 'Hasta ${_shown.format(_to!)}'),
-      ),
-      if (_from != null || _to != null)
-        IconButton(
-          tooltip: 'Quitar fechas',
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.close, size: 18),
-          onPressed: () {
-            setState(() {
-              _from = null;
-              _to = null;
-            });
-            _load();
-          },
-        ),
-    ]);
+    final compact = ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(horizontal: 10)));
+    return Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          OutlinedButton.icon(
+            style: compact,
+            onPressed: () => _pickDate(true),
+            icon: const Icon(Icons.event, size: 16),
+            label: Text(
+                _from == null ? 'Desde' : 'Desde ${_shown.format(_from!)}'),
+          ),
+          OutlinedButton.icon(
+            style: compact,
+            onPressed: () => _pickDate(false),
+            icon: const Icon(Icons.event, size: 16),
+            label: Text(
+                _to == null ? 'Hasta hoy' : 'Hasta ${_shown.format(_to!)}'),
+          ),
+          if (_from != null || _to != null)
+            IconButton(
+              tooltip: 'Quitar fechas',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () {
+                setState(() {
+                  _from = null;
+                  _to = null;
+                });
+                _load();
+              },
+            ),
+        ]);
   }
 
   // ---------------------------------------------------------------------------
@@ -325,7 +403,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   num _n(dynamic v) => (v as num?) ?? 0;
 
   /// Gastos y saldo de una cuenta (o del efectivo) con los botones para registrarlos y verlos.
-  List<Widget> _expenseBlock(Map<String, dynamic> m, {required String account, required String label}) {
+  List<Widget> _expenseBlock(Map<String, dynamic> m,
+      {required String account, required String label}) {
     final expenses = Map<String, dynamic>.from(m['expenses'] ?? {});
     final count = _n(expenses['count']).toInt();
     final balance = _n(m['balance']);
@@ -336,26 +415,37 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: (balance >= 0 ? Colors.indigo : AppTheme.dangerRose).withValues(alpha: 0.08),
+          color: (balance >= 0 ? Colors.indigo : AppTheme.dangerRose)
+              .withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(children: [
-          const Expanded(child: Text('Debe haber (legalizado − gastos)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-          Text(cashCurrency.format(balance), style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: balance >= 0 ? Colors.indigo : AppTheme.dangerRose)),
+          const Expanded(
+              child: Text('Debe haber (legalizado − gastos)',
+                  style:
+                      TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+          Text(cashCurrency.format(balance),
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: balance >= 0 ? Colors.indigo : AppTheme.dangerRose)),
         ]),
       ),
       Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(spacing: 8, runSpacing: 4, children: [
-          if (!widget.readOnly && (!widget.advisorMode || widget.canRegisterExpenses))
+          if (!widget.readOnly &&
+              (!widget.advisorMode || widget.canRegisterExpenses))
             OutlinedButton.icon(
-              onPressed: () => _openExpenseDialog(account: account, label: label, balance: balance),
+              onPressed: () => _openExpenseDialog(
+                  account: account, label: label, balance: balance),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Registrar gasto'),
             ),
           if (count > 0)
             TextButton.icon(
-              onPressed: () => _openExpensesList(account: account, label: label),
+              onPressed: () =>
+                  _openExpensesList(account: account, label: label),
               icon: const Icon(Icons.list_alt, size: 18),
               label: Text('Ver gastos ($count)'),
             ),
@@ -364,10 +454,14 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     ];
   }
 
-  Future<void> _openExpenseDialog({required String account, required String label, required num balance}) async {
+  Future<void> _openExpenseDialog(
+      {required String account,
+      required String label,
+      required num balance}) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) => ExpenseDialog(api: _api, account: account, label: label, balance: balance),
+      builder: (_) => ExpenseDialog(
+          api: _api, account: account, label: label, balance: balance),
     );
     if (saved == true) {
       _toast('Gasto registrado.');
@@ -375,14 +469,23 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     }
   }
 
-  Future<void> _openExpensesList({required String account, required String label}) async {
-    final changed = await showDialog<bool>(context: context, builder: (_) => ExpensesListDialog(api: _api, account: account, label: label, allowVoid: !widget.advisorMode && !widget.readOnly));
+  Future<void> _openExpensesList(
+      {required String account, required String label}) async {
+    final changed = await showDialog<bool>(
+        context: context,
+        builder: (_) => ExpensesListDialog(
+            api: _api,
+            account: account,
+            label: label,
+            allowVoid: !widget.advisorMode && !widget.readOnly));
     if (changed == true) await _load();
   }
 
   Widget _summaryTab() {
     final grand = Map<String, dynamic>.from(_summary['grand'] ?? {});
-    final accounts = ((_summary['accounts'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+    final accounts = ((_summary['accounts'] as List?) ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final cash = Map<String, dynamic>.from(_summary['cash'] ?? {});
     return LayoutBuilder(builder: (context, c) {
       const gap = 12.0;
@@ -393,59 +496,120 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
         padding: const EdgeInsets.fromLTRB(0, 12, 0, 24),
         children: [
           Wrap(spacing: gap, runSpacing: gap, children: [
-            _bigKpi('TOTAL GENERAL', _n(grand['total']), AppTheme.primaryBlue, Icons.account_balance_wallet_outlined, c.maxWidth, kCols),
-            _bigKpi('LEGALIZADO', _n(grand['legalized']), AppTheme.secondaryEmerald, Icons.verified_outlined, c.maxWidth, kCols),
-            _bigKpi('POR LEGALIZAR', _n(grand['pending']), Colors.orange.shade800, Icons.hourglass_bottom, c.maxWidth, kCols),
-            _bigKpi('GASTOS', _n(grand['expenses']), AppTheme.dangerRose, Icons.receipt_long_outlined, c.maxWidth, kCols),
-            _bigKpi('DEBE HABER (legalizado − gastos)', _n(grand['balance']), _n(grand['balance']) >= 0 ? Colors.indigo : AppTheme.dangerRose, Icons.savings_outlined, c.maxWidth, kCols),
+            _bigKpi('TOTAL GENERAL', _n(grand['total']), AppTheme.primaryBlue,
+                Icons.account_balance_wallet_outlined, c.maxWidth, kCols),
+            _bigKpi(
+                'LEGALIZADO',
+                _n(grand['legalized']),
+                AppTheme.secondaryEmerald,
+                Icons.verified_outlined,
+                c.maxWidth,
+                kCols),
+            _bigKpi(
+                'POR LEGALIZAR',
+                _n(grand['pending']),
+                Colors.orange.shade800,
+                Icons.hourglass_bottom,
+                c.maxWidth,
+                kCols),
+            _bigKpi('GASTOS', _n(grand['expenses']), AppTheme.dangerRose,
+                Icons.receipt_long_outlined, c.maxWidth, kCols),
+            _bigKpi(
+                'DEBE HABER (legalizado − gastos)',
+                _n(grand['balance']),
+                _n(grand['balance']) >= 0 ? Colors.indigo : AppTheme.dangerRose,
+                Icons.savings_outlined,
+                c.maxWidth,
+                kCols),
           ]),
           const SizedBox(height: 18),
-          const Text('Cuentas de transferencia', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('Cuentas de transferencia',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Lo que ha llegado a cada cuenta hasta la fecha, lo que el administrador ya validó en Caja y lo que falta por validar.',
+          Text(
+              'Lo que ha llegado a cada cuenta hasta la fecha, lo que el administrador ya validó en Caja y lo que falta por validar.',
               style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 10),
-          if (accounts.isEmpty) Text('Aún no hay transferencias ni cuentas configuradas.', style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic)),
-          Wrap(spacing: gap, runSpacing: gap, children: [for (final a in accounts) SizedBox(width: cardW, child: _accountCard(a))]),
+          if (accounts.isEmpty)
+            Text('Aún no hay transferencias ni cuentas configuradas.',
+                style: TextStyle(
+                    color: Colors.grey[600], fontStyle: FontStyle.italic)),
+          Wrap(spacing: gap, runSpacing: gap, children: [
+            for (final a in accounts)
+              SizedBox(width: cardW, child: _accountCard(a))
+          ]),
           const SizedBox(height: 18),
-          const Text('Efectivo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text('Efectivo',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
-          Text('Legalizado = el administrador ya lo recibió. Pendiente = sigue en poder de cada asesor o en una entrega por confirmar.',
+          Text(
+              'Legalizado = el administrador ya lo recibió. Pendiente = sigue en poder de cada asesor o en una entrega por confirmar.',
               style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 10),
-          SizedBox(width: math.min(c.maxWidth - 32, cols == 1 ? cardW : cardW * 1.6), child: _cashCard(cash)),
+          SizedBox(
+              width: math.min(c.maxWidth - 32, cols == 1 ? cardW : cardW * 1.6),
+              child: _cashCard(cash)),
         ],
       );
     });
   }
 
-  Widget _bigKpi(String title, num value, Color color, IconData icon, double maxW, int cols) {
+  Widget _bigKpi(String title, num value, Color color, IconData icon,
+      double maxW, int cols) {
     final w = (maxW - 32 - 12 * (cols - 1)) / cols;
     return Container(
       width: w,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withValues(alpha: 0.4))),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.4))),
       child: Row(children: [
         Icon(icon, color: color, size: 26),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: color)),
-            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(cashCurrency.format(value), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 10.5, fontWeight: FontWeight.bold, color: color)),
+            FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(cashCurrency.format(value),
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.bold))),
           ]),
         ),
       ]),
     );
   }
 
-  Widget _line(String label, num amount, int count, Color color, {bool small = false}) => Padding(
+  Widget _line(String label, num amount, int count, Color color,
+          {bool small = false}) =>
+      Padding(
         padding: const EdgeInsets.only(top: 6),
         child: Row(children: [
-          Container(width: 9, height: 9, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: TextStyle(fontSize: small ? 12 : 13.5))),
-          Text('${cashCurrency.format(amount)}  ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: small ? 12.5 : 14, color: color)),
-          SizedBox(width: 62, child: Text('$count pago${count == 1 ? '' : 's'}', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.grey[600]))),
+          Expanded(
+              child:
+                  Text(label, style: TextStyle(fontSize: small ? 12 : 13.5))),
+          Text('${cashCurrency.format(amount)}  ',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: small ? 12.5 : 14,
+                  color: color)),
+          SizedBox(
+              width: 62,
+              child: Text('$count pago${count == 1 ? '' : 's'}',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]))),
         ]),
       );
 
@@ -455,33 +619,63 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     final pending = Map<String, dynamic>.from(a['pending'] ?? {});
     final rejected = Map<String, dynamic>.from(a['rejected'] ?? {});
     final uploaded = Map<String, dynamic>.from(a['uploaded'] ?? {});
-    final progress = total <= 0 ? 0.0 : (_n(legalized['amount']) / total).clamp(0, 1).toDouble();
+    final progress = total <= 0
+        ? 0.0
+        : (_n(legalized['amount']) / total).clamp(0, 1).toDouble();
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: widget.advisorMode ? null : () => _openDetail(account: '${a['key']}', accountLabel: '${a['label']}', method: 'TRANSFERENCIA'),
+        onTap: widget.advisorMode
+            ? null
+            : () => _openDetail(
+                account: '${a['key']}',
+                accountLabel: '${a['label']}',
+                method: 'TRANSFERENCIA'),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const Icon(Icons.account_balance, size: 20, color: AppTheme.primaryBlue),
+              const Icon(Icons.account_balance,
+                  size: 20, color: AppTheme.primaryBlue),
               const SizedBox(width: 8),
-              Expanded(child: Text('${a['label']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5))),
+              Expanded(
+                  child: Text('${a['label']}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14.5))),
               Icon(Icons.chevron_right, color: Colors.grey[500]),
             ]),
             const SizedBox(height: 8),
-            Text(cashCurrency.format(total), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-            Text('total hasta la fecha • ${a['count']} pago${a['count'] == 1 ? '' : 's'}', style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
+            Text(cashCurrency.format(total),
+                style:
+                    const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+            Text(
+                'total hasta la fecha • ${a['count']} pago${a['count'] == 1 ? '' : 's'}',
+                style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.orange.shade100, color: AppTheme.secondaryEmerald),
+              child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor: Colors.orange.shade100,
+                  color: AppTheme.secondaryEmerald),
             ),
-            _line('Legalizado', _n(legalized['amount']), _n(legalized['count']).toInt(), AppTheme.secondaryEmerald),
-            _line('Por legalizar', _n(pending['amount']), _n(pending['count']).toInt(), Colors.orange.shade800),
-            if (_n(rejected['count']) > 0) _line('Rechazado (no suma)', _n(rejected['amount']), _n(rejected['count']).toInt(), AppTheme.dangerRose, small: true),
-            if (_n(uploaded['count']) > 0) _line('Ya subido a AGIL', _n(uploaded['amount']), _n(uploaded['count']).toInt(), Colors.blueGrey, small: true),
+            _line('Legalizado', _n(legalized['amount']),
+                _n(legalized['count']).toInt(), AppTheme.secondaryEmerald),
+            _line('Por legalizar', _n(pending['amount']),
+                _n(pending['count']).toInt(), Colors.orange.shade800),
+            if (_n(rejected['count']) > 0)
+              _line('Rechazado (no suma)', _n(rejected['amount']),
+                  _n(rejected['count']).toInt(), AppTheme.dangerRose,
+                  small: true),
+            if (_n(uploaded['count']) > 0)
+              _line('Ya subido a AGIL', _n(uploaded['amount']),
+                  _n(uploaded['count']).toInt(), Colors.blueGrey,
+                  small: true),
             ..._expenseBlock(a, account: '${a['key']}', label: '${a['label']}'),
           ]),
         ),
@@ -494,45 +688,87 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
     final pending = Map<String, dynamic>.from(cash['pending'] ?? {});
     final uploaded = Map<String, dynamic>.from(cash['uploaded'] ?? {});
     final total = _n(cash['total']);
-    final progress = total <= 0 ? 0.0 : (_n(legalized['amount']) / total).clamp(0, 1).toDouble();
-    final advisors = ((cash['byAdvisor'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+    final progress = total <= 0
+        ? 0.0
+        : (_n(legalized['amount']) / total).clamp(0, 1).toDouble();
+    final advisors = ((cash['byAdvisor'] as List?) ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: widget.advisorMode ? null : () => _openDetail(method: 'EFECTIVO'),
+        onTap:
+            widget.advisorMode ? null : () => _openDetail(method: 'EFECTIVO'),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              const Icon(Icons.payments_outlined, size: 20, color: AppTheme.primaryBlue),
+              const Icon(Icons.payments_outlined,
+                  size: 20, color: AppTheme.primaryBlue),
               const SizedBox(width: 8),
-              const Expanded(child: Text('Efectivo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5))),
+              const Expanded(
+                  child: Text('Efectivo',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14.5))),
               Icon(Icons.chevron_right, color: Colors.grey[500]),
             ]),
             const SizedBox(height: 8),
-            Text(cashCurrency.format(total), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-            Text('total hasta la fecha • ${cash['count'] ?? 0} pagos', style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
+            Text(cashCurrency.format(total),
+                style:
+                    const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+            Text('total hasta la fecha • ${cash['count'] ?? 0} pagos',
+                style: TextStyle(fontSize: 11.5, color: Colors.grey[600])),
             const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: Colors.orange.shade100, color: AppTheme.secondaryEmerald),
+              child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor: Colors.orange.shade100,
+                  color: AppTheme.secondaryEmerald),
             ),
-            _line('Legalizado (recibido por el administrador)', _n(legalized['amount']), _n(legalized['count']).toInt(), AppTheme.secondaryEmerald),
-            _line('Por legalizar (en poder de asesores)', _n(pending['amount']), _n(pending['count']).toInt(), Colors.orange.shade800),
-            if (_n(uploaded['count']) > 0) _line('Ya subido a AGIL', _n(uploaded['amount']), _n(uploaded['count']).toInt(), Colors.blueGrey, small: true),
+            _line(
+                'Legalizado (recibido por el administrador)',
+                _n(legalized['amount']),
+                _n(legalized['count']).toInt(),
+                AppTheme.secondaryEmerald),
+            _line('Por legalizar (en poder de asesores)', _n(pending['amount']),
+                _n(pending['count']).toInt(), Colors.orange.shade800),
+            if (_n(uploaded['count']) > 0)
+              _line('Ya subido a AGIL', _n(uploaded['amount']),
+                  _n(uploaded['count']).toInt(), Colors.blueGrey,
+                  small: true),
             if (_n(cash['advisorExpenses']) > 0)
-              _line('Gastos de asesores por justificar', _n(cash['advisorExpenses']), advisors.fold<int>(0, (sum, a) => sum + _n(a['expensesCount']).toInt()), Colors.orange.shade800, small: true),
+              _line(
+                  'Gastos de asesores por justificar',
+                  _n(cash['advisorExpenses']),
+                  advisors.fold<int>(
+                      0, (sum, a) => sum + _n(a['expensesCount']).toInt()),
+                  Colors.orange.shade800,
+                  small: true),
             ..._expenseBlock(cash, account: 'efectivo', label: 'Efectivo'),
-            if (advisors.any((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0)) ...[
+            if (advisors
+                .any((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0)) ...[
               const Divider(height: 22),
-              const Text('Debe entregar cada asesor (en poder − gastos por justificar)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
-              for (final adv in advisors.where((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0).take(8)) ...[
-                _line('${adv['name']}', _n(adv['toDeliver']), _n(adv['pendingCount']).toInt(), Colors.orange.shade800, small: true),
+              const Text(
+                  'Debe entregar cada asesor (en poder − gastos por justificar)',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5)),
+              for (final adv in advisors
+                  .where((a) => _n(a['pending']) > 0 || _n(a['expenses']) > 0)
+                  .take(8)) ...[
+                _line('${adv['name']}', _n(adv['toDeliver']),
+                    _n(adv['pendingCount']).toInt(), Colors.orange.shade800,
+                    small: true),
                 if (_n(adv['expenses']) > 0)
                   Padding(
                     padding: const EdgeInsets.only(left: 17, top: 2),
-                    child: Text('en poder ${cashCurrency.format(_n(adv['pending']))} − gastos ${cashCurrency.format(_n(adv['expenses']))}', style: TextStyle(fontSize: 10.5, color: Colors.grey[700])),
+                    child: Text(
+                        'en poder ${cashCurrency.format(_n(adv['pending']))} − gastos ${cashCurrency.format(_n(adv['expenses']))}',
+                        style:
+                            TextStyle(fontSize: 10.5, color: Colors.grey[700])),
                   ),
               ],
             ],
@@ -546,31 +782,41 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   // Detalle
   // ---------------------------------------------------------------------------
   Widget _detailTab(bool isMobile) {
-    final pending = Map<String, dynamic>.from(_totals['pending'] ?? {});
-    final uploaded = Map<String, dynamic>.from(_totals['uploaded'] ?? {});
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 4),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _controlsBlock(isMobile, pending, uploaded),
         // Con pagos marcados las acciones quedan a la vista aunque el bloque esté cerrado
         if (!widget.readOnly && _selected.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              Text('${_selected.length} seleccionados', style: const TextStyle(fontWeight: FontWeight.w600)),
-              OutlinedButton(onPressed: _busy ? null : () => _markSelected('SUBIDO'), child: const Text('Marcar SUBIDO')),
-              OutlinedButton(onPressed: _busy ? null : () => _markSelected('PENDIENTE'), child: const Text('Marcar PENDIENTE')),
-            ]),
+            child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text('${_selected.length} seleccionados',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  OutlinedButton(
+                      onPressed: _busy ? null : () => _markSelected('SUBIDO'),
+                      child: const Text('Marcar SUBIDO')),
+                  OutlinedButton(
+                      onPressed:
+                          _busy ? null : () => _markSelected('PENDIENTE'),
+                      child: const Text('Marcar PENDIENTE')),
+                ]),
           ),
         const SizedBox(height: 6),
         Expanded(
           child: _payments.isEmpty
-              ? Center(child: Text('No hay pagos con esos filtros.', style: TextStyle(color: Colors.grey[600])))
+              ? Center(
+                  child: Text('No hay pagos con esos filtros.',
+                      style: TextStyle(color: Colors.grey[600])))
               : _PaymentsList(
                   payments: _payments,
                   selected: _selected,
                   mobile: isMobile,
-                  footer: 'Mostrando ${_payments.length} de $_total${_truncated ? ' (el Excel trae todos)' : ''}',
+                  footer:
+                      'Mostrando ${_payments.length} de $_total${_truncated ? ' (el Excel trae todos)' : ''}',
                   onChanged: () => setState(() {}),
                 ),
         ),
@@ -580,13 +826,32 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
 
   /// Un solo bloque expandible con los totales, los filtros y las acciones. Cerrado muestra los totales en una línea
   /// (y cuántos filtros hay activos); abierto muestra los filtros y los botones.
-  Widget _controlsBlock(bool isMobile, Map<String, dynamic> pending, Map<String, dynamic> uploaded) {
-    final activeFilters = [_agil, _method, _settled, _search.text.trim(), _account].where((v) => v.isNotEmpty).length;
+  Widget _controlsBlock(bool isMobile) {
+    final pending = Map<String, dynamic>.from(_totals['pending'] ?? {});
+    final uploaded = Map<String, dynamic>.from(_totals['uploaded'] ?? {});
+    final inDetail = _tabs.index == 1;
+    final activeFilters = [
+          _agil,
+          _method,
+          _settled,
+          _search.text.trim(),
+          _account
+        ].where((v) => v.isNotEmpty).length +
+        (_from != null || _to != null ? 1 : 0);
     Widget stat(String label, String value, Color color) => RichText(
-          text: TextSpan(style: TextStyle(fontSize: isMobile ? 12 : 13, color: Theme.of(context).textTheme.bodyMedium?.color), children: [
-            TextSpan(text: '$label ', style: TextStyle(color: color, fontWeight: FontWeight.w600)),
-            TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ]),
+          text: TextSpan(
+              style: TextStyle(
+                  fontSize: isMobile ? 12 : 13,
+                  color: Theme.of(context).textTheme.bodyMedium?.color),
+              children: [
+                TextSpan(
+                    text: '$label ',
+                    style:
+                        TextStyle(color: color, fontWeight: FontWeight.w600)),
+                TextSpan(
+                    text: value,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+              ]),
         );
     return Card(
       margin: EdgeInsets.zero,
@@ -595,23 +860,51 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
         InkWell(
           onTap: () => setState(() => _filtersOpen = !_filtersOpen),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: isMobile ? 8 : 10),
+            padding: EdgeInsets.symmetric(
+                horizontal: 12, vertical: isMobile ? 8 : 10),
             child: Row(children: [
-              Icon(Icons.tune, size: 18, color: activeFilters > 0 ? AppTheme.primaryBlue : Colors.grey[600]),
+              const Icon(Icons.receipt_long,
+                  size: 20, color: AppTheme.primaryBlue),
               const SizedBox(width: 8),
+              Text('Pagos y abonos',
+                  style: TextStyle(
+                      fontSize: isMobile ? 15 : 17,
+                      fontWeight: FontWeight.bold)),
+              const SizedBox(width: 14),
               Expanded(
-                child: Wrap(spacing: 14, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                  stat('Total', '${cashCurrency.format(_n(_totals['amount']))} · $_total pagos', AppTheme.primaryBlue),
-                  stat('Pend. AGIL', cashCurrency.format(_n(pending['amount'])), Colors.orange.shade800),
-                  stat('Subidos', cashCurrency.format(_n(uploaded['amount'])), AppTheme.secondaryEmerald),
-                ]),
+                child: Wrap(
+                    spacing: 14,
+                    runSpacing: 2,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      stat(
+                          'Total',
+                          '${cashCurrency.format(_n(_totals['amount']))} · $_total pagos',
+                          AppTheme.primaryBlue),
+                      stat(
+                          'Pend. AGIL',
+                          cashCurrency.format(_n(pending['amount'])),
+                          Colors.orange.shade800),
+                      stat(
+                          'Subidos',
+                          cashCurrency.format(_n(uploaded['amount'])),
+                          AppTheme.secondaryEmerald),
+                    ]),
               ),
               if (activeFilters > 0)
                 Container(
                   margin: const EdgeInsets.only(left: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: AppTheme.primaryBlue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-                  child: Text('$activeFilters filtro${activeFilters == 1 ? '' : 's'}', style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: AppTheme.primaryBlue)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10)),
+                  child: Text(
+                      '$activeFilters filtro${activeFilters == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryBlue)),
                 ),
               Icon(_filtersOpen ? Icons.expand_less : Icons.expand_more),
             ]),
@@ -625,20 +918,65 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
               ? const SizedBox(width: double.infinity)
               : Padding(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Divider(height: 1),
-                    const SizedBox(height: 10),
-                    _filtersBar(isMobile),
-                    if (!widget.readOnly) ...[
-                      const SizedBox(height: 10),
-                      Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                        FilledButton.icon(onPressed: _busy ? null : _export, icon: const Icon(Icons.download, size: 18), label: const Text('Descargar Excel')),
-                        FilledButton.tonalIcon(onPressed: _busy ? null : _createBatch, icon: const Icon(Icons.inventory_2_outlined, size: 18), label: const Text('Generar lote AGIL')),
-                        OutlinedButton.icon(onPressed: _busy ? null : _uploadReturned, icon: const Icon(Icons.upload_file, size: 18), label: Text(isMobile ? 'Subir Excel devuelto' : 'Subir Excel devuelto (SUBIDO)')),
-                        if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
+                        // Fechas y actualizar (aplican al resumen y al detalle)
+                        Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              _dateButtons(),
+                              OutlinedButton.icon(
+                                style: ButtonStyle(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: WidgetStateProperty.all(
+                                        const EdgeInsets.symmetric(
+                                            horizontal: 10))),
+                                onPressed: _loading ? null : _load,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Actualizar'),
+                              ),
+                            ]),
+                        if (inDetail) ...[
+                          const SizedBox(height: 10),
+                          _filtersBar(isMobile),
+                        ],
+                        if (inDetail && !widget.readOnly) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                FilledButton.icon(
+                                    onPressed: _busy ? null : _export,
+                                    icon: const Icon(Icons.download, size: 18),
+                                    label: const Text('Descargar Excel')),
+                                FilledButton.tonalIcon(
+                                    onPressed: _busy ? null : _createBatch,
+                                    icon: const Icon(Icons.inventory_2_outlined,
+                                        size: 18),
+                                    label: const Text('Generar lote AGIL')),
+                                OutlinedButton.icon(
+                                    onPressed: _busy ? null : _uploadReturned,
+                                    icon:
+                                        const Icon(Icons.upload_file, size: 18),
+                                    label: Text(isMobile
+                                        ? 'Subir Excel devuelto'
+                                        : 'Subir Excel devuelto (SUBIDO)')),
+                                if (_busy)
+                                  const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                              ]),
+                        ],
                       ]),
-                    ],
-                  ]),
                 ),
         ),
       ]),
@@ -646,45 +984,78 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView> with SingleTickerPr
   }
 
   Widget _filtersBar(bool isMobile) {
-    InputDecoration deco(String label) => InputDecoration(labelText: label, isDense: true, border: const OutlineInputBorder());
-    Widget drop(String label, String value, Map<String, String> options, ValueChanged<String> onChanged, {double? width}) => SizedBox(
-          width: width ?? (isMobile ? (MediaQuery.of(context).size.width - 66) / 2 : 150),
+    InputDecoration deco(String label) => InputDecoration(
+        labelText: label, isDense: true, border: const OutlineInputBorder());
+    Widget drop(String label, String value, Map<String, String> options,
+            ValueChanged<String> onChanged,
+            {double? width}) =>
+        SizedBox(
+          width: width ??
+              (isMobile ? (MediaQuery.of(context).size.width - 66) / 2 : 150),
           child: DropdownButtonFormField<String>(
             value: value,
             decoration: deco(label),
             isExpanded: true,
-            items: [for (final e in options.entries) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
+            items: [
+              for (final e in options.entries)
+                DropdownMenuItem(
+                    value: e.key,
+                    child: Text(e.value, overflow: TextOverflow.ellipsis))
+            ],
             onChanged: (v) {
               onChanged(v ?? '');
               _load();
             },
           ),
         );
-    return Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      if (_account.isNotEmpty)
-        InputChip(
-          avatar: const Icon(Icons.account_balance, size: 16),
-          label: Text('Cuenta: $_accountLabel'),
-          onDeleted: () {
-            setState(() {
-              _account = '';
-              _accountLabel = '';
-            });
-            _load();
-          },
-        ),
-      drop('Estado AGIL', _agil, const {'': 'Todos', 'PENDIENTE': 'Pendiente', 'SUBIDO': 'Subido'}, (v) => _agil = v),
-      drop('Método', _method, const {'': 'Todos', 'TRANSFERENCIA': 'Transferencia', 'EFECTIVO': 'Efectivo'}, (v) => _method = v),
-      drop('Caja', _settled, const {'': 'Todos', 'SI': 'Legalizados', 'NO': 'Sin legalizar'}, (v) => _settled = v),
-      SizedBox(
-        width: isMobile ? double.infinity : 250,
-        child: TextField(
-          controller: _search,
-          decoration: deco('Buscar (boleta, comprador, referencia…)').copyWith(suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _load)),
-          onSubmitted: (_) => _load(),
-        ),
-      ),
-    ]);
+    return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (_account.isNotEmpty)
+            InputChip(
+              avatar: const Icon(Icons.account_balance, size: 16),
+              label: Text('Cuenta: $_accountLabel'),
+              onDeleted: () {
+                setState(() {
+                  _account = '';
+                  _accountLabel = '';
+                });
+                _load();
+              },
+            ),
+          drop(
+              'Estado AGIL',
+              _agil,
+              const {'': 'Todos', 'PENDIENTE': 'Pendiente', 'SUBIDO': 'Subido'},
+              (v) => _agil = v),
+          drop(
+              'Método',
+              _method,
+              const {
+                '': 'Todos',
+                'TRANSFERENCIA': 'Transferencia',
+                'EFECTIVO': 'Efectivo'
+              },
+              (v) => _method = v),
+          drop(
+              'Caja',
+              _settled,
+              const {'': 'Todos', 'SI': 'Legalizados', 'NO': 'Sin legalizar'},
+              (v) => _settled = v),
+          SizedBox(
+            width: isMobile ? double.infinity : 250,
+            child: TextField(
+              controller: _search,
+              decoration: deco('Buscar (boleta, comprador, referencia…)')
+                  .copyWith(
+                      suffixIcon: IconButton(
+                          icon: const Icon(Icons.search), onPressed: _load)),
+              onSubmitted: (_) => _load(),
+            ),
+          ),
+        ]);
   }
 }
 
@@ -697,7 +1068,12 @@ class _PaymentsList extends StatefulWidget {
   final String footer;
   final VoidCallback onChanged;
 
-  const _PaymentsList({required this.payments, required this.selected, required this.mobile, required this.footer, required this.onChanged});
+  const _PaymentsList(
+      {required this.payments,
+      required this.selected,
+      required this.mobile,
+      required this.footer,
+      required this.onChanged});
 
   @override
   State<_PaymentsList> createState() => _PaymentsListState();
@@ -724,7 +1100,8 @@ class _PaymentsListState extends State<_PaymentsList> {
   ];
   static const _checkW = 52.0;
   static const _rowH = 54.0;
-  static double get _tableW => _checkW + _cols.fold<double>(0, (s, c) => s + c.$2);
+  static double get _tableW =>
+      _checkW + _cols.fold<double>(0, (s, c) => s + c.$2);
 
   @override
   void dispose() {
@@ -736,33 +1113,46 @@ class _PaymentsListState extends State<_PaymentsList> {
   bool _isSel(Map<String, dynamic> p) => widget.selected.contains('${p['id']}');
 
   void _toggle(Map<String, dynamic> p, bool? v) {
-    v == true ? widget.selected.add('${p['id']}') : widget.selected.remove('${p['id']}');
+    v == true
+        ? widget.selected.add('${p['id']}')
+        : widget.selected.remove('${p['id']}');
     widget.onChanged();
   }
 
   void _toggleAll(bool? v) {
     for (final p in widget.payments) {
-      v == true ? widget.selected.add('${p['id']}') : widget.selected.remove('${p['id']}');
+      v == true
+          ? widget.selected.add('${p['id']}')
+          : widget.selected.remove('${p['id']}');
     }
     widget.onChanged();
   }
 
-  void _openSupport(Map<String, dynamic> p) => launchUrl(Uri.parse('${p['soporteLink']}'), mode: LaunchMode.externalApplication);
+  void _openSupport(Map<String, dynamic> p) =>
+      launchUrl(Uri.parse('${p['soporteLink']}'),
+          mode: LaunchMode.externalApplication);
 
-  Widget _cajaChip(Map<String, dynamic> p) =>
-      p['settled'] == true ? const CashChip('LEGALIZADO', AppTheme.secondaryEmerald) : CashChip('${p['cashState']}'.replaceAll('_', ' '), Colors.orange.shade800);
+  Widget _cajaChip(Map<String, dynamic> p) => p['settled'] == true
+      ? const CashChip('LEGALIZADO', AppTheme.secondaryEmerald)
+      : CashChip(
+          '${p['cashState']}'.replaceAll('_', ' '), Colors.orange.shade800);
 
   Widget _agilChip(Map<String, dynamic> p) => p['agilStatus'] == 'SUBIDO'
-      ? const CashChip('SUBIDO', AppTheme.secondaryEmerald, icon: Icons.cloud_done_outlined)
-      : CashChip('PENDIENTE${p['batchNumber'] != null ? ' • lote ${p['batchNumber']}' : ''}', Colors.orange.shade800);
+      ? const CashChip('SUBIDO', AppTheme.secondaryEmerald,
+          icon: Icons.cloud_done_outlined)
+      : CashChip(
+          'PENDIENTE${p['batchNumber'] != null ? ' • lote ${p['batchNumber']}' : ''}',
+          Colors.orange.shade800);
 
-  bool _hasSupport(Map<String, dynamic> p) => ((p['soporteLink'] ?? '') as String).isNotEmpty;
+  bool _hasSupport(Map<String, dynamic> p) =>
+      ((p['soporteLink'] ?? '') as String).isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final footer = Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Text(widget.footer, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+      child: Text(widget.footer,
+          style: TextStyle(fontSize: 12, color: Colors.grey[700])),
     );
     return Column(children: [
       Expanded(child: widget.mobile ? _cards() : _grid()),
@@ -785,22 +1175,38 @@ class _PaymentsListState extends State<_PaymentsList> {
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data:
+                  Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 tilePadding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
                 childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                leading: Checkbox(value: _isSel(p), onChanged: (v) => _toggle(p, v)),
+                leading:
+                    Checkbox(value: _isSel(p), onChanged: (v) => _toggle(p, v)),
                 title: Row(children: [
-                  Expanded(child: Text(cashDate('${p['date']}'), style: const TextStyle(fontSize: 12.5))),
-                  Text(cashCurrency.format((p['amount'] as num?) ?? 0), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Expanded(
+                      child: Text(cashDate('${p['date']}'),
+                          style: const TextStyle(fontSize: 12.5))),
+                  Text(cashCurrency.format((p['amount'] as num?) ?? 0),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
                 ]),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Boleta $nums • ${p['buyerName']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Wrap(spacing: 6, runSpacing: 4, children: [CashChip('${p['method']}', Colors.blueGrey), _cajaChip(p), _agilChip(p)]),
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Boleta $nums • ${p['buyerName']}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Wrap(spacing: 6, runSpacing: 4, children: [
+                          CashChip('${p['method']}', Colors.blueGrey),
+                          _cajaChip(p),
+                          _agilChip(p)
+                        ]),
+                      ]),
                 ),
                 children: [
                   _info('Asesor', '${p['advisorName']}'),
@@ -810,7 +1216,10 @@ class _PaymentsListState extends State<_PaymentsList> {
                   if (_hasSupport(p))
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: TextButton.icon(onPressed: () => _openSupport(p), icon: const Icon(Icons.image_search, size: 18), label: const Text('Ver soporte')),
+                      child: TextButton.icon(
+                          onPressed: () => _openSupport(p),
+                          icon: const Icon(Icons.image_search, size: 18),
+                          label: const Text('Ver soporte')),
                     ),
                 ],
               ),
@@ -827,10 +1236,16 @@ class _PaymentsListState extends State<_PaymentsList> {
           padding: const EdgeInsets.only(bottom: 2),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text.rich(TextSpan(children: [
-              TextSpan(text: '$label: ', style: TextStyle(color: Colors.grey[700])),
-              TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.w600)),
-            ]), style: const TextStyle(fontSize: 13)),
+            child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                      text: '$label: ',
+                      style: TextStyle(color: Colors.grey[700])),
+                  TextSpan(
+                      text: value,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ]),
+                style: const TextStyle(fontSize: 13)),
           ),
         );
 
@@ -838,10 +1253,13 @@ class _PaymentsListState extends State<_PaymentsList> {
   Widget _grid() {
     return LayoutBuilder(builder: (context, c) {
       final width = math.max(c.maxWidth, _tableW);
-      final allSelected = widget.payments.isNotEmpty && widget.payments.every(_isSel);
+      final allSelected =
+          widget.payments.isNotEmpty && widget.payments.every(_isSel);
       final someSelected = widget.payments.any(_isSel);
       return Container(
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey.shade300),
+            borderRadius: BorderRadius.circular(10)),
         clipBehavior: Clip.antiAlias,
         child: Scrollbar(
           controller: _h,
@@ -856,15 +1274,32 @@ class _PaymentsListState extends State<_PaymentsList> {
               child: Column(children: [
                 Container(
                   height: 44,
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.08),
                   child: Row(children: [
-                    SizedBox(width: _checkW, child: Checkbox(tristate: true, value: allSelected ? true : (someSelected ? null : false), onChanged: (v) => _toggleAll(allSelected ? false : true))),
+                    SizedBox(
+                        width: _checkW,
+                        child: Checkbox(
+                            tristate: true,
+                            value: allSelected
+                                ? true
+                                : (someSelected ? null : false),
+                            onChanged: (v) =>
+                                _toggleAll(allSelected ? false : true))),
                     for (final col in _cols)
                       SizedBox(
-                        width: col.$2 + (width - _tableW) * (col.$1 == 'Cuenta destino' ? 1 : 0),
+                        width: col.$2 +
+                            (width - _tableW) *
+                                (col.$1 == 'Cuenta destino' ? 1 : 0),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(col.$1, textAlign: col.$3 ? TextAlign.right : TextAlign.left, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: Text(col.$1,
+                              textAlign:
+                                  col.$3 ? TextAlign.right : TextAlign.left,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
                         ),
                       ),
                   ]),
@@ -878,7 +1313,8 @@ class _PaymentsListState extends State<_PaymentsList> {
                       controller: _v,
                       itemExtent: _rowH,
                       itemCount: widget.payments.length,
-                      itemBuilder: (context, i) => _row(widget.payments[i], i, width),
+                      itemBuilder: (context, i) =>
+                          _row(widget.payments[i], i, width),
                     ),
                   ),
                 ),
@@ -893,15 +1329,31 @@ class _PaymentsListState extends State<_PaymentsList> {
   Widget _row(Map<String, dynamic> p, int i, double width) {
     final extra = width - _tableW;
     Widget cell(int index, Widget child) => SizedBox(
-          width: _cols[index].$2 + (_cols[index].$1 == 'Cuenta destino' ? extra : 0),
-          child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Align(alignment: _cols[index].$3 ? Alignment.centerRight : Alignment.centerLeft, child: child)),
+          width: _cols[index].$2 +
+              (_cols[index].$1 == 'Cuenta destino' ? extra : 0),
+          child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Align(
+                  alignment: _cols[index].$3
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: child)),
         );
-    Text t(String s, {bool bold = false}) => Text(s, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.bold : FontWeight.normal));
+    Text t(String s, {bool bold = false}) => Text(s,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+            fontSize: 13,
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal));
     final selected = _isSel(p);
     return Container(
-      color: selected ? AppTheme.primaryBlue.withValues(alpha: 0.08) : (i.isEven ? null : Colors.grey.withValues(alpha: 0.05)),
+      color: selected
+          ? AppTheme.primaryBlue.withValues(alpha: 0.08)
+          : (i.isEven ? null : Colors.grey.withValues(alpha: 0.05)),
       child: Row(children: [
-        SizedBox(width: _checkW, child: Checkbox(value: selected, onChanged: (v) => _toggle(p, v))),
+        SizedBox(
+            width: _checkW,
+            child: Checkbox(value: selected, onChanged: (v) => _toggle(p, v))),
         cell(0, t(cashDate('${p['date']}'))),
         cell(1, t((p['numbers'] as List? ?? []).join(' - '))),
         cell(2, t('${p['buyerName']}')),
@@ -913,12 +1365,19 @@ class _PaymentsListState extends State<_PaymentsList> {
         cell(8, t('${p['approvalNumber']}')),
         cell(9, _cajaChip(p)),
         cell(10, _agilChip(p)),
-        cell(11, _hasSupport(p) ? IconButton(tooltip: 'Ver soporte', icon: const Icon(Icons.image_search, size: 20, color: AppTheme.primaryBlue), onPressed: () => _openSupport(p)) : const Text('—')),
+        cell(
+            11,
+            _hasSupport(p)
+                ? IconButton(
+                    tooltip: 'Ver soporte',
+                    icon: const Icon(Icons.image_search,
+                        size: 20, color: AppTheme.primaryBlue),
+                    onPressed: () => _openSupport(p))
+                : const Text('—')),
       ]),
     );
   }
 }
-
 
 /// Registrar un gasto de una cuenta o del efectivo: valor, fecha, motivo y foto opcional.
 class ExpenseDialog extends StatefulWidget {
@@ -927,7 +1386,11 @@ class ExpenseDialog extends StatefulWidget {
   final String label;
   final num balance;
 
-  const ExpenseDialog({required this.api, required this.account, required this.label, required this.balance});
+  const ExpenseDialog(
+      {required this.api,
+      required this.account,
+      required this.label,
+      required this.balance});
 
   @override
   State<ExpenseDialog> createState() => _ExpenseDialogState();
@@ -948,20 +1411,24 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
     super.dispose();
   }
 
-  num get _value => num.tryParse(_amount.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+  num get _value =>
+      num.tryParse(_amount.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
 
   Future<void> _pickPhoto() async {
     try {
       final picked = await pickImageBase64(maxSide: 1600);
-      if (picked != null && mounted) setState(() => _image = compressImageDataUri(picked, maxSide: 1600));
+      if (picked != null && mounted)
+        setState(() => _image = compressImageDataUri(picked, maxSide: 1600));
     } catch (e) {
       if (mounted) setState(() => _error = 'No se pudo cargar la foto: $e');
     }
   }
 
   Future<void> _save() async {
-    if (_value <= 0) return setState(() => _error = 'Escriba el valor del gasto.');
-    if (_reason.text.trim().length < 3) return setState(() => _error = 'Escriba el motivo del gasto.');
+    if (_value <= 0)
+      return setState(() => _error = 'Escriba el valor del gasto.');
+    if (_reason.text.trim().length < 3)
+      return setState(() => _error = 'Escriba el motivo del gasto.');
     setState(() {
       _saving = true;
       _error = null;
@@ -977,10 +1444,11 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) setState(() {
-        _saving = false;
-        _error = e.toString();
-      });
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _error = e.toString();
+        });
     }
   }
 
@@ -988,61 +1456,102 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
   Widget build(BuildContext context) {
     final exceeds = _value > 0 && _value > widget.balance;
     return AlertDialog(
-      title: Text('Registrar gasto\n${widget.label}', style: const TextStyle(fontSize: 16)),
+      title: Text('Registrar gasto\n${widget.label}',
+          style: const TextStyle(fontSize: 16)),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Saldo legalizado disponible: ${cashCurrency.format(widget.balance)}', style: TextStyle(fontSize: 12.5, color: Colors.grey[700])),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _amount,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(labelText: 'Valor del gasto *', prefixIcon: Icon(Icons.attach_money), border: OutlineInputBorder()),
-            ),
-            if (exceeds)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text('⚠️ Supera el saldo legalizado: el saldo quedará en negativo.', style: TextStyle(fontSize: 12, color: Colors.orange.shade800, fontWeight: FontWeight.w600)),
-              ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2024), lastDate: DateTime.now());
-                if (picked != null) setState(() => _date = picked);
-              },
-              icon: const Icon(Icons.event, size: 18),
-              label: Text('Fecha del gasto: ${DateFormat('dd/MM/yyyy').format(_date)}'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reason,
-              maxLines: 2,
-              maxLength: 300,
-              decoration: const InputDecoration(labelText: 'Motivo del gasto *', hintText: 'Ej: pago de publicidad, transporte, premios…', border: OutlineInputBorder()),
-            ),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _saving ? null : _pickPhoto,
-                  icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                  label: Text(_image == null ? 'Foto del gasto (opcional)' : '✓ Foto adjunta (cambiar)'),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    'Saldo legalizado disponible: ${cashCurrency.format(widget.balance)}',
+                    style: TextStyle(fontSize: 12.5, color: Colors.grey[700])),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _amount,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                      labelText: 'Valor del gasto *',
+                      prefixIcon: Icon(Icons.attach_money),
+                      border: OutlineInputBorder()),
                 ),
-              ),
-              if (_image != null) IconButton(onPressed: () => setState(() => _image = null), icon: const Icon(Icons.close, color: Colors.red), tooltip: 'Quitar foto'),
-            ]),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_error!, style: const TextStyle(color: AppTheme.dangerRose, fontWeight: FontWeight.w600))),
-          ]),
+                if (exceeds)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                        '⚠️ Supera el saldo legalizado: el saldo quedará en negativo.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade800,
+                            fontWeight: FontWeight.w600)),
+                  ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _date,
+                        firstDate: DateTime(2024),
+                        lastDate: DateTime.now());
+                    if (picked != null) setState(() => _date = picked);
+                  },
+                  icon: const Icon(Icons.event, size: 18),
+                  label: Text(
+                      'Fecha del gasto: ${DateFormat('dd/MM/yyyy').format(_date)}'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _reason,
+                  maxLines: 2,
+                  maxLength: 300,
+                  decoration: const InputDecoration(
+                      labelText: 'Motivo del gasto *',
+                      hintText: 'Ej: pago de publicidad, transporte, premios…',
+                      border: OutlineInputBorder()),
+                ),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _pickPhoto,
+                      icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                      label: Text(_image == null
+                          ? 'Foto del gasto (opcional)'
+                          : '✓ Foto adjunta (cambiar)'),
+                    ),
+                  ),
+                  if (_image != null)
+                    IconButton(
+                        onPressed: () => setState(() => _image = null),
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        tooltip: 'Quitar foto'),
+                ]),
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(_error!,
+                          style: const TextStyle(
+                              color: AppTheme.dangerRose,
+                              fontWeight: FontWeight.w600))),
+              ]),
         ),
       ),
       actions: [
-        TextButton(onPressed: _saving ? null : () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
         ElevatedButton(
           onPressed: _saving ? null : _save,
-          child: _saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Guardar gasto'),
+          child: _saving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Guardar gasto'),
         ),
       ],
     );
@@ -1058,7 +1567,11 @@ class ExpensesListDialog extends StatefulWidget {
   /// allowVoid: solo el administrador anula gastos.
   final bool allowVoid;
 
-  const ExpensesListDialog({required this.api, required this.account, required this.label, this.allowVoid = true});
+  const ExpensesListDialog(
+      {required this.api,
+      required this.account,
+      required this.label,
+      this.allowVoid = true});
 
   @override
   State<ExpensesListDialog> createState() => _ExpensesListDialogState();
@@ -1083,79 +1596,134 @@ class _ExpensesListDialogState extends State<ExpensesListDialog> {
       final res = await widget.api.agilExpenses(account: widget.account);
       if (!mounted) return;
       setState(() {
-        _expenses = ((res['expenses'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+        _expenses = ((res['expenses'] as List?) ?? [])
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         _total = (res['total'] as num?) ?? 0;
         _loading = false;
         _error = null;
       });
     } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
   Future<void> _void(Map<String, dynamic> e) async {
-    final reason = await askReason(context, 'Anular gasto de ${cashCurrency.format((e['amount'] as num?) ?? 0)}', hint: 'Ej: se registró dos veces', confirmLabel: 'Anular gasto');
+    final reason = await askReason(context,
+        'Anular gasto de ${cashCurrency.format((e['amount'] as num?) ?? 0)}',
+        hint: 'Ej: se registró dos veces', confirmLabel: 'Anular gasto');
     if (reason == null || !mounted) return;
     try {
       await widget.api.agilVoidExpense('${e['id']}', reason);
       _changed = true;
       await _load();
     } catch (err) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: AppTheme.dangerRose, content: Text(err.toString())));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            backgroundColor: AppTheme.dangerRose,
+            content: Text(err.toString())));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Gastos\n${widget.label}', style: const TextStyle(fontSize: 16)),
+      title:
+          Text('Gastos\n${widget.label}', style: const TextStyle(fontSize: 16)),
       content: SizedBox(
         width: 460,
         child: _loading
-            ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()))
+            ? const SizedBox(
+                height: 80, child: Center(child: CircularProgressIndicator()))
             : _error != null
-                ? Text(_error!, style: const TextStyle(color: AppTheme.dangerRose))
+                ? Text(_error!,
+                    style: const TextStyle(color: AppTheme.dangerRose))
                 : ListView(shrinkWrap: true, children: [
-                    Text('Total gastado: ${cashCurrency.format(_total)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Total gastado: ${cashCurrency.format(_total)}',
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     for (final e in _expenses)
                       Card(
                         margin: const EdgeInsets.only(bottom: 8),
-                        color: e['voided'] != null ? Colors.grey.shade100 : null,
+                        color:
+                            e['voided'] != null ? Colors.grey.shade100 : null,
                         child: Padding(
                           padding: const EdgeInsets.all(10),
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Row(children: [
-                              Expanded(child: Text(cashDate('${e['date']}'), style: const TextStyle(fontWeight: FontWeight.w600))),
-                              Text(cashCurrency.format((e['amount'] as num?) ?? 0),
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.dangerRose, decoration: e['voided'] != null ? TextDecoration.lineThrough : null)),
-                            ]),
-                            const SizedBox(height: 2),
-                            Text('${e['reason']}', style: TextStyle(fontSize: 13, decoration: e['voided'] != null ? TextDecoration.lineThrough : null)),
-                            Text('Registró ${e['createdBy']}${e['applied'] != null ? ' • conciliado con el administrador' : ''}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                            if (e['voided'] != null)
-                              Text('ANULADO por ${(e['voided'] as Map)['by']}: ${(e['voided'] as Map)['reason']}', style: TextStyle(fontSize: 11.5, color: Colors.red.shade700, fontWeight: FontWeight.w600)),
-                            Row(children: [
-                              if (e['hasSupport'] == true)
-                                TextButton.icon(
-                                  onPressed: () => showSoporte(context, driveId: e['soporteDriveId'] as String?, webViewUrl: e['soporteWebViewUrl'] as String?, title: 'Foto del gasto'),
-                                  icon: const Icon(Icons.image_search, size: 18),
-                                  label: const Text('Ver foto'),
-                                ),
-                              const Spacer(),
-                              if (e['voided'] == null && widget.allowVoid)
-                                TextButton(onPressed: () => _void(e), child: const Text('Anular', style: TextStyle(color: AppTheme.dangerRose))),
-                            ]),
-                          ]),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Expanded(
+                                      child: Text(cashDate('${e['date']}'),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600))),
+                                  Text(
+                                      cashCurrency
+                                          .format((e['amount'] as num?) ?? 0),
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: AppTheme.dangerRose,
+                                          decoration: e['voided'] != null
+                                              ? TextDecoration.lineThrough
+                                              : null)),
+                                ]),
+                                const SizedBox(height: 2),
+                                Text('${e['reason']}',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        decoration: e['voided'] != null
+                                            ? TextDecoration.lineThrough
+                                            : null)),
+                                Text(
+                                    'Registró ${e['createdBy']}${e['applied'] != null ? ' • conciliado con el administrador' : ''}',
+                                    style: TextStyle(
+                                        fontSize: 11, color: Colors.grey[600])),
+                                if (e['voided'] != null)
+                                  Text(
+                                      'ANULADO por ${(e['voided'] as Map)['by']}: ${(e['voided'] as Map)['reason']}',
+                                      style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: Colors.red.shade700,
+                                          fontWeight: FontWeight.w600)),
+                                Row(children: [
+                                  if (e['hasSupport'] == true)
+                                    TextButton.icon(
+                                      onPressed: () => showSoporte(context,
+                                          driveId:
+                                              e['soporteDriveId'] as String?,
+                                          webViewUrl:
+                                              e['soporteWebViewUrl'] as String?,
+                                          title: 'Foto del gasto'),
+                                      icon: const Icon(Icons.image_search,
+                                          size: 18),
+                                      label: const Text('Ver foto'),
+                                    ),
+                                  const Spacer(),
+                                  if (e['voided'] == null && widget.allowVoid)
+                                    TextButton(
+                                        onPressed: () => _void(e),
+                                        child: const Text('Anular',
+                                            style: TextStyle(
+                                                color: AppTheme.dangerRose))),
+                                ]),
+                              ]),
                         ),
                       ),
-                    if (_expenses.isEmpty) Text('No hay gastos registrados.', style: TextStyle(color: Colors.grey[600])),
+                    if (_expenses.isEmpty)
+                      Text('No hay gastos registrados.',
+                          style: TextStyle(color: Colors.grey[600])),
                   ]),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, _changed), child: const Text('Cerrar'))],
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, _changed),
+            child: const Text('Cerrar'))
+      ],
     );
   }
 }
