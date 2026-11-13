@@ -1,4 +1,5 @@
 import 'package:rifaapp/ui/features/analytics/sales_projection_view.dart';
+import 'package:rifaapp/ui/features/advisors/views/advisor_whatsapp_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'ui/core/utils/apk_updater.dart';
 import 'package:rifaapp/data/services/api_service.dart';
@@ -557,6 +558,11 @@ class _MainShellScreenState extends State<MainShellScreen>
                             context,
                             name: authVM.currentUserName,
                             isSuperAdmin: authVM.isSuperAdmin,
+                            onWhatsApp: authVM.isAsesor
+                                ? () => showDialog(
+                                    context: context,
+                                    builder: (_) => const AdvisorWhatsAppDialog())
+                                : null,
                             onProfile: () {
                               if (authVM.isAdmin || authVM.isSuperAdmin) {
                                 showDialog(

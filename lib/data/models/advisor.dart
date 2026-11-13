@@ -17,6 +17,9 @@ class Advisor {
   final bool canViewCash;
   /// Oficina/integral: ve todas las boletas y recibe pagos de las de otros asesores, como ayuda del administrador.
   final bool canManageAllTickets;
+  /// Número del WhatsApp que el asesor vinculó (para avisar a sus clientes); null si no lo ha vinculado.
+  final String? whatsappNumber;
+  final bool whatsappLinked;
   /// Partes del menú del administrador que puede ver (solo lectura): 'proyeccion', 'pagos'.
   final List<String> menuAccess;
   /// Ids de las rifas de su empresa en las que está autorizado a vender.
@@ -46,6 +49,8 @@ class Advisor {
     this.canRegisterExpenses = false,
     this.canViewCash = false,
     this.canManageAllTickets = false,
+    this.whatsappNumber,
+    this.whatsappLinked = false,
     this.menuAccess = const [],
     this.raffleIds = const [],
     this.status = 'ACTIVO',
@@ -119,6 +124,8 @@ class Advisor {
       canRegisterExpenses: json['canRegisterExpenses'] == true,
       canViewCash: json['canViewCash'] == true,
       canManageAllTickets: json['canManageAllTickets'] == true,
+      whatsappLinked: json['whatsapp'] is Map && (json['whatsapp']['instance'] ?? '').toString().isNotEmpty,
+      whatsappNumber: json['whatsapp'] is Map ? json['whatsapp']['number']?.toString() : null,
       menuAccess: (json['menuAccess'] as List? ?? []).map((e) => e.toString()).toList(),
       raffleIds: (json['raffleIds'] as List? ?? []).map((e) => e.toString()).toList(),
       status: json['status'] ?? 'ACTIVO',

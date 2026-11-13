@@ -603,7 +603,7 @@ class _HandoffSettingsState extends State<_HandoffSettings> {
     _message = TextEditingController(text: '${h['message'] ?? ''}');
     _greeting = TextEditingController(text: '${widget.config['greeting'] ?? ''}');
     _options = TextEditingController(text: ((how['options'] as List?) ?? []).join(', '));
-    _resume = TextEditingController(text: '${h['resumeHours'] ?? 12}');
+    _resume = TextEditingController(text: '${h['resumeHours'] ?? 4}');
   }
 
   @override
@@ -627,7 +627,7 @@ class _HandoffSettingsState extends State<_HandoffSettings> {
         'message': _message.text.trim(),
         'notifyNumber': _notify.text.trim(),
         'autoAfterFails': _autoAfter,
-        'resumeHours': int.tryParse(_resume.text.trim()) ?? 12,
+        'resumeHours': int.tryParse(_resume.text.trim()) ?? 4,
       },
       'howHeard': {'enabled': _howEnabled, 'options': _list(_options)},
     });

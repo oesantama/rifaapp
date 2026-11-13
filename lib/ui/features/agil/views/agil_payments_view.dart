@@ -1140,14 +1140,13 @@ class _PaymentsListState extends State<_PaymentsList> {
 
   int get _pages => _pageSize == 0 ? 1 : math.max(1, (widget.payments.length / _pageSize).ceil());
   int get _curPage => math.min(_page, _pages - 1);
-  List<Map<String, dynamic>> get _visible => _pageSize == 0
-      ? widget.payments
-      : widget.payments.skip(_curPage * _pageSize).take(_pageSize).toList();
+  List<Map<String, dynamic>> get _visible => _pageSize == 0 ? _sorted : _sorted.skip(_curPage * _pageSize).take(_pageSize).toList();
 
   // (título, ancho, alineado a la derecha)
   static const _cols = <(String, double, bool)>[
-    ('Fecha', 150, false),
+    ('Fecha de pago', 150, false),
     ('Boleta', 120, false),
+    ('Fecha legalización', 150, false),
     ('Comprador', 170, false),
     ('Asesor', 140, false),
     ('Valor', 110, true),
@@ -1159,6 +1158,83 @@ class _PaymentsListState extends State<_PaymentsList> {
     ('AGIL', 170, false),
     ('Soporte', 80, false),
   ];
+
+  // Orden de la tabla: columna elegida (índice en _cols) y sentido. Por defecto, la fecha de pago, la más reciente primero
+  int _sortCol = 0;
+  bool _sortAsc = false;
+
+  /// Valor por el que se ordena cada columna.
+  Comparable _sortValue(Map<String, dynamic> p, int col) {
+    String text(dynamic v) => '${v ?? ''}'.toLowerCase();
+    switch (col) {
+      case 0:
+        return text(p['date']);
+      case 1:
+        final n = (p['numbers'] as List? ?? []).join(' - ');
+        return n.isEmpty ? text(p['ticketNumber']) : n;
+      case 2:
+        return text(p['legalizedAt']); // sin fecha (aún no legalizado) queda al final al ordenar ascendente
+      case 3:
+        return text(p['buyerName']);
+      case 4:
+        return text(p['advisorName']);
+      case 5:
+        return (p['amount'] as num?) ?? 0;
+      case 6:
+        return text(p['method']);
+      case 7:
+        return text(p['originBank']);
+      case 8:
+        return text(p['cuentaDestino']);
+      case 9:
+        return text(p['approvalNumber']);
+      case 10:
+        return p['settled'] == true ? 'a-legalizado' : 'b-${text(p['cashState'])}';
+      case 11:
+        return text(p['agilStatus']);
+      default:
+        return _hasSupport(p) ? 0 : 1;
+    }
+  }
+
+  List<Map<String, dynamic>>? _sortedCache;
+  List<Map<String, dynamic>>? _sortedFrom;
+  int _sortedCol = -1;
+  bool _sortedAsc = false;
+
+  /// Los pagos ordenados por la columna elegida (se recalcula solo si cambia la lista o el orden).
+  List<Map<String, dynamic>> get _sorted {
+    if (_sortedCache != null && identical(_sortedFrom, widget.payments) && _sortedCol == _sortCol && _sortedAsc == _sortAsc) return _sortedCache!;
+    final list = [...widget.payments];
+    int cmp(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final va = _sortValue(a, _sortCol), vb = _sortValue(b, _sortCol);
+      // Las fechas vacías (sin legalizar) van siempre al final, sea cual sea el sentido
+      if (_sortCol == 2) {
+        final ea = '$va'.isEmpty, eb = '$vb'.isEmpty;
+        if (ea != eb) return ea ? 1 : -1;
+      }
+      final r = va.compareTo(vb);
+      return _sortAsc ? r : -r;
+    }
+
+    list.sort(cmp);
+    _sortedCache = list;
+    _sortedFrom = widget.payments;
+    _sortedCol = _sortCol;
+    _sortedAsc = _sortAsc;
+    return list;
+  }
+
+  void _sortBy(int col) => setState(() {
+        if (_sortCol == col) {
+          _sortAsc = !_sortAsc;
+        } else {
+          _sortCol = col;
+          // fechas y valores: primero lo más reciente / lo más alto; textos: de la A a la Z
+          _sortAsc = !(col == 0 || col == 2 || col == 5);
+        }
+        _page = 0;
+      });
   static const _checkW = 52.0;
   static const _rowH = 54.0;
   static double get _tableW =>
@@ -1269,7 +1345,47 @@ class _PaymentsListState extends State<_PaymentsList> {
   }
 
   // --- tarjetas (celular) ---
+  /// Celular: elegir por qué columna se ordenan las tarjetas y en qué sentido.
+  Widget _sortBar() => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          const Text('Ordenar por:', style: TextStyle(fontSize: 12.5)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                value: _sortCol,
+                isDense: true,
+                isExpanded: true,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).textTheme.bodyMedium?.color),
+                items: [
+                  for (var i = 0; i < _cols.length - 1; i++) DropdownMenuItem(value: i, child: Text(_cols[i].$1)),
+                ],
+                onChanged: (v) => setState(() {
+                  _sortCol = v ?? 0;
+                  _sortAsc = !(_sortCol == 0 || _sortCol == 2 || _sortCol == 5);
+                  _page = 0;
+                }),
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: _sortAsc ? 'Ascendente' : 'Descendente',
+            icon: Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward, size: 18),
+            onPressed: () => setState(() {
+              _sortAsc = !_sortAsc;
+              _page = 0;
+            }),
+          ),
+        ]),
+      );
+
   Widget _cards() {
+    return Column(children: [_sortBar(), Expanded(child: _cardsList())]);
+  }
+
+  Widget _cardsList() {
     return Scrollbar(
       controller: _v,
       thumbVisibility: true,
@@ -1317,6 +1433,8 @@ class _PaymentsListState extends State<_PaymentsList> {
                       ]),
                 ),
                 children: [
+                  _info('Fecha de pago', cashDate('${p['date']}')),
+                  _info('Fecha de legalización', p['legalizedAt'] == null ? '' : cashDate('${p['legalizedAt']}')),
                   _info('Asesor', '${p['advisorName']}'),
                   _info('Banco origen', '${p['originBank']}'),
                   _info('Cuenta destino', '${p['cuentaDestino']}'),
@@ -1396,18 +1514,34 @@ class _PaymentsListState extends State<_PaymentsList> {
                                 : (someSelected ? null : false),
                             onChanged: (v) =>
                                 _toggleAll(allSelected ? false : true))),
-                    for (final col in _cols)
+                    for (var ci = 0; ci < _cols.length; ci++)
                       SizedBox(
-                        width: col.$2 +
+                        width: _cols[ci].$2 +
                             (width - _tableW) *
-                                (col.$1 == 'Cuenta destino' ? 1 : 0),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(col.$1,
-                              textAlign:
-                                  col.$3 ? TextAlign.right : TextAlign.left,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                                (_cols[ci].$1 == 'Cuenta destino' ? 1 : 0),
+                        child: InkWell(
+                          onTap: () => _sortBy(ci),
+                          child: Tooltip(
+                            message: 'Ordenar por ${_cols[ci].$1}',
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              child: Row(
+                                mainAxisAlignment: _cols[ci].$3 ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                children: [
+                                  Flexible(
+                                    child: Text(_cols[ci].$1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: _sortCol == ci ? AppTheme.primaryBlue : null)),
+                                  ),
+                                  if (_sortCol == ci)
+                                    Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: AppTheme.primaryBlue),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                   ]),
@@ -1463,17 +1597,18 @@ class _PaymentsListState extends State<_PaymentsList> {
             child: Checkbox(value: selected, onChanged: (v) => _toggle(p, v))),
         cell(0, t(cashDate('${p['date']}'))),
         cell(1, t((p['numbers'] as List? ?? []).join(' - '))),
-        cell(2, t('${p['buyerName']}')),
-        cell(3, t('${p['advisorName']}')),
-        cell(4, t(cashCurrency.format((p['amount'] as num?) ?? 0), bold: true)),
-        cell(5, t('${p['method']}')),
-        cell(6, t('${p['originBank']}')),
-        cell(7, t('${p['cuentaDestino']}')),
-        cell(8, t('${p['approvalNumber']}')),
-        cell(9, _cajaChip(p)),
-        cell(10, _agilChip(p)),
+        cell(2, t(p['legalizedAt'] == null ? '—' : cashDate('${p['legalizedAt']}'))),
+        cell(3, t('${p['buyerName']}')),
+        cell(4, t('${p['advisorName']}')),
+        cell(5, t(cashCurrency.format((p['amount'] as num?) ?? 0), bold: true)),
+        cell(6, t('${p['method']}')),
+        cell(7, t('${p['originBank']}')),
+        cell(8, t('${p['cuentaDestino']}')),
+        cell(9, t('${p['approvalNumber']}')),
+        cell(10, _cajaChip(p)),
+        cell(11, _agilChip(p)),
         cell(
-            11,
+            12,
             _hasSupport(p)
                 ? IconButton(
                     tooltip: 'Ver soporte',

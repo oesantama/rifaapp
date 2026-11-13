@@ -1993,6 +1993,17 @@ class ApiService {
         body: jsonEncode({'fileName': fileName, 'base64': base64Encode(bytes)}),
       ));
 
+  /// Recordatorios y resultados del sorteo semanal por WhatsApp a los compradores (administrador).
+  Future<Map<String, dynamic>> drawRemindersConfig() => _botJson(authGet(Uri.parse('$baseUrl/draw-reminders/config')));
+
+  Future<Map<String, dynamic>> saveDrawRemindersConfig({required bool enabled, required int daysBefore}) => _botJson(authPut(
+        Uri.parse('$baseUrl/draw-reminders/config'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'enabled': enabled, 'daysBefore': daysBefore}),
+      ));
+
+  Future<Map<String, dynamic>> drawRemindersPreview() => _botJson(authGet(Uri.parse('$baseUrl/draw-reminders/preview')));
+
   Future<Map<String, dynamic>> disconnectWhatsApp() async {
     final response = await authPost(Uri.parse('$baseUrl/whatsapp/disconnect'));
     if (response.statusCode == 200) {

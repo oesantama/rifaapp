@@ -35,6 +35,7 @@ Future<void> showAccountSheet(
   required String name,
   required bool isSuperAdmin,
   required VoidCallback onProfile,
+  VoidCallback? onWhatsApp, // solo asesores: vincular su WhatsApp para avisar a sus clientes
 }) {
   return showModalBottomSheet(
     context: context,
@@ -55,6 +56,16 @@ Future<void> showAccountSheet(
               onProfile();
             },
           ),
+          if (onWhatsApp != null)
+            ListTile(
+              leading: const Icon(Icons.chat, color: Color(0xFF128C7E)),
+              title: const Text('Mi WhatsApp para mis clientes'),
+              subtitle: const Text('Recordatorios y resultados de los sorteos', style: TextStyle(fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                onWhatsApp();
+              },
+            ),
           ListTile(
             leading: const Icon(Icons.gavel_outlined),
             title: const Text('Términos y condiciones'),

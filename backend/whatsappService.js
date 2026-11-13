@@ -719,12 +719,20 @@ async function handleWebhookEventInner(body, db, saveDBCallback) {
   // Documentos (Excel devuelto de AGIL): los atiende quien se registró con setDocumentHandler
   const docMsg = msgData.documentMessage || msgData.documentWithCaptionMessage?.message?.documentMessage;
   if (docMsg && documentHandler) {
-    const fileName = docMsg.fileName || docMsg.title || '';
+    const isSheetMime = /spreadsheetml|ms-excel/i.test(docMsg.mimetype || '');
+    let fileName = docMsg.fileName || docMsg.title || '';
+    // Algunos teléfonos envían el archivo sin nombre o sin extensión: si el tipo es de hoja de cálculo se trata como .xlsx
+    if (isSheetMime && !/\.xlsx?$/i.test(fileName)) fileName = `${fileName || 'archivo'}.xlsx`;
+    const isSheet = /\.xlsx?$/i.test(fileName);
     let base64 = msgData.base64 || body.data?.message?.base64 || body.data?.base64 || docMsg.base64 || null;
-    if (!base64 && /\.xlsx?$/i.test(fileName)) base64 = await fetchMediaBase64(instance, key);
+    // Evolution puede tardar en tener listo el archivo: se reintenta la descarga antes de rendirse
+    for (let attempt = 0; !base64 && isSheet && attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt));
+      base64 = await fetchMediaBase64(instance, key);
+    }
     const handled = await documentHandler({ instance, senderPhone, fileName, base64, mimetype: docMsg.mimetype });
     if (handled && handled.handled) return { handled: true, document: true };
-    return { ignored: true };
+    return { ignored: true, note: (handled && handled.reason) || (isSheet ? 'excel-no-atendido' : 'documento-no-es-excel') };
   }
   const userText = (msgData.conversation || msgData.extendedTextMessage?.text || msgData.imageMessage?.caption || '').trim();
   const hasImage = !!msgData.imageMessage;
@@ -806,6 +814,9 @@ _(Escribe el número de la opción o tu consulta)_`;
     if (advisor) {
       company = (db.companies || []).find(c => c.id === advisor.companyId);
     }
+    // El WhatsApp que el asesor vincula es el suyo, personal: solo se usa para enviar avisos a sus clientes. El bot no contesta ahí
+    // (salvo que el administrador haya habilitado el bot para ese asesor)
+    if (!advisor || advisor.whatsappBot !== true) return { ignored: true, advisorLine: true };
   } else if (instance.startsWith('empresa_')) {
     const compCode = instance.replace('empresa_', '');
     company = (db.companies || []).find(c => 
@@ -833,7 +844,14 @@ _(Escribe el número de la opción o tu consulta)_`;
                                 cleanLower === '1' || cleanLower === '2' || cleanLower === '3';
     const hoursSinceAssisted = (Date.now() - (session.humanAssistedAt || 0)) / (1000 * 60 * 60);
 
-    if (!isHumanResetCommand && hoursSinceAssisted < cfg.handoff.resumeHours) {
+    // El chat pasó a un humano, pero si en 30 minutos nadie lo tomó (sigue PENDIENTE) y el cliente hace un pedido claro
+    // (foto de comprobante, un número o una consulta conocida), el bot vuelve a atenderlo en lugar de dejarlo sin respuesta
+    const pendingHand = (db.botHandoffs || []).find(h => h.companyId === (company ? company.id : null) && h.phone === senderPhone && h.status === 'PENDIENTE');
+    const unattendedMin = pendingHand ? (Date.now() - (Date.parse(pendingHand.at) || Date.now())) / 60000 : 0;
+    const handNorm = botBrain.normalize(userText);
+    const clearIntent = hasImage || /^\d{3,}$/.test(handNorm) || hasPhrase(handNorm, ALL_INTENT_PHRASES);
+    const wakeOnIntent = clearIntent && (!pendingHand || unattendedMin >= 30);
+    if (!isHumanResetCommand && !wakeOnIntent && hoursSinceAssisted < cfg.handoff.resumeHours) {
       // Mantener al día el último mensaje del cliente en la lista de chats por atender
       const pending = (db.botHandoffs || []).find(h => h.companyId === (company ? company.id : null) && h.phone === senderPhone && h.status === 'PENDIENTE');
       if (pending && userText) { pending.lastMessage = String(userText).slice(0, 300); pending.updatedAt = new Date().toISOString(); }
@@ -2504,8 +2522,11 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
   info.msgId = msgId;
   info.edadMin = ageMin;
   const isClientMsg = !info.propio && !info.grupo;
+  // Un Excel (el que se devuelve a AGIL con SUBIDO) se procesa aunque llegue tarde: marcar pagos como subidos no depende de la hora
+  // y no es una respuesta a un cliente que esté esperando; el filtro de mensajes viejos es solo para el chat con clientes
+  const isSpreadsheet = !!(m.documentMessage || m.documentWithCaptionMessage);
   if (isClientMsg) {
-    if (ageMin !== undefined && ageMin > BOT_MAX_MESSAGE_AGE_MIN) {
+    if (ageMin !== undefined && ageMin > BOT_MAX_MESSAGE_AGE_MIN && !isSpreadsheet) {
       botLog({ ...info, result: 'ignorado-antiguo', note: `mensaje de hace ${ageMin} min: no se responde` });
       return { ignored: true, stale: true };
     }
@@ -2519,7 +2540,7 @@ async function handleWebhookEvent(body, db, saveDBCallback) {
   try {
     const result = await botContext.run({ origin: 'respuesta-bot', msgId, ageMin }, () => handleWebhookEventInner(body, db, saveDBCallback));
     // Los mensajes propios, de grupos o sin contenido no son de clientes: no llenan el registro
-    if (isClientMsg) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.paused ? 'ignorado-pausa' : (result && result.ignored ? 'ignorado' : 'ok')), ms: Date.now() - t0 });
+    if (isClientMsg) botLog({ ...info, result: result && result.handled ? 'atendido' : (result && result.paused ? 'ignorado-pausa' : (result && result.ignored ? 'ignorado' : 'ok')), ...(result && result.note ? { note: result.note } : {}), ms: Date.now() - t0 });
     return result;
   } catch (err) {
     botLog({ ...info, result: 'error', error: String(err.message || err).slice(0, 160), ms: Date.now() - t0 });

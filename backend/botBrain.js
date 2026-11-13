@@ -29,7 +29,7 @@ function defaultConfig() {
       message: '',
       notifyNumber: '',
       autoAfterFails: 2,
-      resumeHours: 12
+      resumeHours: 4
     },
     howHeard: { enabled: true, options: [...DEFAULT_HOW_HEARD] }
   };
@@ -119,7 +119,7 @@ function sanitizeConfig(input, previous) {
     message: h.message === undefined ? ph.message : cleanString(h.message, LIMITS.messageLen),
     notifyNumber: h.notifyNumber === undefined ? ph.notifyNumber : cleanString(h.notifyNumber, 20).replace(/[^\d+]/g, ''),
     autoAfterFails: h.autoAfterFails === undefined ? ph.autoAfterFails : Math.max(0, Math.min(10, parseInt(h.autoAfterFails, 10) || 0)),
-    resumeHours: h.resumeHours === undefined ? ph.resumeHours : Math.max(1, Math.min(72, parseInt(h.resumeHours, 10) || 12))
+    resumeHours: h.resumeHours === undefined ? ph.resumeHours : Math.max(1, Math.min(72, parseInt(h.resumeHours, 10) || 4))
   };
 
   const hh = input.howHeard || {};

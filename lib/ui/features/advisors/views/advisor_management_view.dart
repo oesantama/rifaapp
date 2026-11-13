@@ -962,6 +962,27 @@ class AdvisorManagementView extends StatelessWidget {
                                                     ),
                                                   ),
                                                 ),
+                                                // WhatsApp vinculado: desde ahí se avisa a sus clientes los recordatorios y resultados de los sorteos
+                                                Tooltip(
+                                                  message: adv.whatsappLinked
+                                                      ? 'Tiene su WhatsApp vinculado${adv.whatsappNumber != null ? ' (+${adv.whatsappNumber})' : ''}: sus clientes reciben los avisos de sorteos'
+                                                      : 'No ha vinculado su WhatsApp: sus clientes no reciben los avisos de sorteos',
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: (adv.whatsappLinked ? const Color(0xFF128C7E) : Colors.grey).withValues(alpha: 0.15),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                                      Icon(adv.whatsappLinked ? Icons.chat : Icons.link_off, size: 11, color: adv.whatsappLinked ? const Color(0xFF128C7E) : Colors.grey.shade700),
+                                                      const SizedBox(width: 3),
+                                                      Text(
+                                                        adv.whatsappLinked ? 'WHATSAPP' : 'SIN WHATSAPP',
+                                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: adv.whatsappLinked ? const Color(0xFF128C7E) : Colors.grey.shade700),
+                                                      ),
+                                                    ]),
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                             const SizedBox(height: 4),

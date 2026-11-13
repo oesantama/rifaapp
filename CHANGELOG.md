@@ -8,6 +8,15 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.33] - 2026-11-13
+
+- WhatsApp del asesor: cada asesor puede vincular SU WhatsApp (toca su nombre arriba a la derecha → «Mi WhatsApp para mis clientes»: QR o código de 8 dígitos). Ese número solo envía avisos: el bot NO contesta los mensajes que lleguen a ese WhatsApp personal. En la lista de asesores se ve quién lo tiene vinculado.
+- Recordatorios del sorteo semanal a los compradores (se activan en Control → WhatsApp, opción apagada por defecto): faltando 3 días (configurable de 1 a 7) cada comprador recibe, desde el WhatsApp de su asesor (o de la empresa si no tiene asesor), si todavía debe el abono mínimo para participar o si ya cumple y juega ese día, con el premio del sorteo (más el acumulado de sorteos anteriores sin ganador). Se envía de 9 a.m. a 7 p.m., de a un mensaje con pausa, una sola vez por comprador y sorteo. «Ver a quién le llegaría» muestra, sin enviar nada, cuántos recibirían, de qué WhatsApp, quiénes no (asesor sin WhatsApp vinculado) y un ejemplo.
+- Resultado del sorteo semanal: al guardar el ganador en Ganadores, todos los compradores (de cada asesor con WhatsApp vinculado y los de la empresa por su bot) reciben qué número cayó y si fue vendido a alguien (con nombre y la inicial del apellido) o si no está vendido y el premio se acumula (con el pozo y el próximo sorteo); el comprador de la boleta ganadora recibe un mensaje de felicitación. Se envía en segundo plano y retoma si el servidor se reinicia.
+- Pagos y abonos → Detalle: se puede ordenar por cualquier columna tocando su título (otra vez cambia el sentido; en el celular, con «Ordenar por»), y hay una columna nueva «Fecha legalización» (cuándo se validó la transferencia o se recibió el efectivo): quedan Fecha de pago, Boleta y Fecha legalización.
+- Bot y Excel de AGIL: el Excel devuelto se procesa aunque llegue tarde (7 de 9 archivos recientes se descartaron por el filtro de mensajes de más de 30 minutos, pensado para el chat con clientes); un archivo sin nombre pero de tipo hoja de cálculo se trata como .xlsx; la descarga se reintenta; si el archivo es de AGIL pero lo envía un número que no es el configurado, el bot lo dice en lugar de ignorarlo, y el motivo de cada archivo no atendido queda en el registro del bot.
+- Bot «dormido»: si el chat pasó a una persona y nadie lo tomó en 30 minutos, un pedido claro del cliente (foto de comprobante, un número o una consulta conocida) hace que el bot vuelva a atenderlo; el tiempo por defecto de silencio pasó de 12 a 4 horas.
+
 ## [3.4.32] - 2026-11-13
 
 - Sorteos semanales / anticipados: en la pantalla de gestionar la rifa se muestran y se guardan ordenados por fecha, del más antiguo al más reciente, también cuando la rifa tiene las fechas guardadas como DD/MM/AAAA (se ordenaban como texto: 05/12 antes que 14/11).

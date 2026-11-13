@@ -164,6 +164,8 @@ module.exports = function createAgilService(deps) {
       approvalNumber: abono.approvalNumber || '',
       cashState: abonoCashState(abono),
       settled: row.settled,
+      // Cuándo se legalizó: la validación de la transferencia o la recepción del efectivo en caja
+      legalizedAt: row.settled ? ((abono.verification && abono.verification.status === 'VALIDADA' && abono.verification.at) || (abono.received && abono.received.at) || null) : null,
       hasSupport: !!(abono.soporteDriveId || abono.soporteWebViewUrl || abono.soporteUrl),
       soporteLink: (abono.soporteDriveId || abono.soporteWebViewUrl || abono.soporteUrl) ? soporteLinkFor(ticket.id, abono.id) : '',
       agilStatus: agil.status,
@@ -534,11 +536,18 @@ module.exports = function createAgilService(deps) {
   async function handleIncomingDocument({ instance, senderPhone, fileName, base64 }) {
     const db = getDb();
     const company = companyOfInstance(db, instance);
-    if (!company) return { handled: false };
+    if (!company) return { handled: false, reason: 'sin-empresa-para-la-instancia' };
     const cfg = getConfig(company);
-    if (!cfg.phone || whatsappService.formatPhoneNumber(cfg.phone) !== whatsappService.formatPhoneNumber(senderPhone)) return { handled: false };
-    if (!/\.xlsx?$/i.test(fileName || '')) return { handled: false };
+    if (!/\.xlsx?$/i.test(fileName || '')) return { handled: false, reason: 'documento-no-es-excel' };
     const reply = text => whatsappService.sendTextMessage(instance, senderPhone, text).catch(() => {});
+    if (!cfg.phone || whatsappService.formatPhoneNumber(cfg.phone) !== whatsappService.formatPhoneNumber(senderPhone)) {
+      // Un archivo de AGIL de un número que no es el configurado: antes se ignoraba en silencio y parecía que el bot no lo tomaba
+      if (/agil/i.test(fileName || '')) {
+        await reply('ℹ️ Recibí el archivo de AGIL, pero este número no es el configurado en *Pagos → AGIL* para devolverlo, así que no lo procesé. Envíelo desde el número configurado o cámbielo en la configuración de AGIL.');
+        return { handled: true };
+      }
+      return { handled: false, reason: 'numero-no-es-el-de-agil' };
+    }
     if (!base64) {
       await reply('⚠️ Recibí el archivo pero no pude descargarlo. Envíelo de nuevo, por favor.');
       return { handled: true };

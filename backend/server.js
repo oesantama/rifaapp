@@ -2757,6 +2757,15 @@ const alertService = require('./alertService')({
   whatsappService
 });
 alertService.registerRoutes(app, { adminOnly });
+
+// Recordatorios y resultados de los sorteos semanales por WhatsApp a los compradores (desde el WhatsApp del asesor o el de la empresa)
+const drawReminders = require('./drawReminders')({
+  getDb: () => db,
+  saveDB: () => saveDB(),
+  whatsappService,
+  weeklyMinAbonoOf
+});
+drawReminders.registerRoutes(app, { adminOnly, targetCompanyOf });
 whatsappService.setDocumentHandler(agilService.handleIncomingDocument);
 agilService.start();
 
@@ -2910,6 +2919,18 @@ app.get('/api/whatsapp/status', async (req, res) => {
   try {
     const instanceName = whatsappService.getInstanceName(req.auth);
     const status = await whatsappService.getStatus(instanceName);
+    // Asesor: se guarda su WhatsApp vinculado (sirve para enviar recordatorios y resultados de sorteo a sus clientes)
+    if (req.auth && req.auth.role === 'asesor') {
+      const adv = (db.advisors || []).find(a => a.id === req.auth.record.id);
+      if (adv) {
+        if (status.state === 'open') {
+          if (!adv.whatsapp || adv.whatsapp.instance !== instanceName || (status.number && adv.whatsapp.number !== status.number)) {
+            adv.whatsapp = { instance: instanceName, number: status.number || (adv.whatsapp && adv.whatsapp.number) || null, linkedAt: (adv.whatsapp && adv.whatsapp.linkedAt) || new Date().toISOString() };
+            saveDB();
+          }
+        }
+      }
+    }
     res.json({ success: true, instanceName, ...status });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -2931,6 +2952,10 @@ app.post('/api/whatsapp/disconnect', async (req, res) => {
   try {
     const instanceName = whatsappService.getInstanceName(req.auth);
     const result = await whatsappService.disconnectInstance(instanceName);
+    if (req.auth && req.auth.role === 'asesor' && result.ok) {
+      const adv = (db.advisors || []).find(a => a.id === req.auth.record.id);
+      if (adv && adv.whatsapp) { delete adv.whatsapp; saveDB(); }
+    }
     res.json({ ...result, success: result.ok === true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -7955,6 +7980,8 @@ app.post('/api/winners', adminOnly, (req, res) => {
   db.winners.unshift(record);
   saveDB();
   res.status(201).json(record);
+  // Avisa a los compradores (cada asesor desde su WhatsApp vinculado y la empresa desde su bot), en segundo plano
+  try { drawReminders.announceResult(record); } catch (err) { console.warn('⚠️ No se pudo iniciar el aviso del resultado:', err.message); }
 });
 
 // Main draw without winner: play it again on another date (and lottery) or close it without winner
@@ -8625,6 +8652,7 @@ async function startServer() {
     // Corrige referencias mal leídas por versiones anteriores del lector (una sola vez por pago)
     setTimeout(() => repairMisreadApprovals().catch(err => console.warn('⚠️ Revisión de referencias:', err.message)), 20000);
     alertService.start();
+    drawReminders.start();
 
     // Keep-Alive Self-Ping: solo en Render (en el VPS no hace falta y pegaba a un servidor ajeno)
     const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || '';
