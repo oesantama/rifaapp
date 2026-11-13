@@ -1196,7 +1196,8 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
     const winners = (db.winners || []).filter(w => w.raffleId === mainRaffle.id);
     if (mainRaffle.weeklyPrizes && mainRaffle.weeklyPrizes.length > 0) {
       prizeMsg += `🎁 *Sorteos Semanales / Anticipados:*\n`;
-      mainRaffle.weeklyPrizes.forEach(p => {
+      // Del más antiguo al más reciente
+      [...mainRaffle.weeklyPrizes].sort((a, b) => String(a.drawDate || '9999').localeCompare(String(b.drawDate || '9999'))).forEach(p => {
         const winner = winners.find(w => w.prizeName === p.name || w.prizeId === p.id);
         const statusText = winner ? `✅ Ganador: ${winner.winnerName || 'Entregado'}` : (p.isAccumulative ? '⏳ Acumulado' : '🗓️ Por jugar');
         prizeMsg += `• *${p.name || 'Premio Semanal'}:* $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha'}) - [${statusText}]\n`;

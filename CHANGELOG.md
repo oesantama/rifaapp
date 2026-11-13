@@ -12,6 +12,7 @@ Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya c
 
 - Caja → En poder de asesores: se pueden marcar varios pagos (uno por uno, todos los de un asesor o todos los visibles) y recibirlos de una vez con el botón «Recibir seleccionados» (con confirmación del total). Cada comprador recibe un solo aviso por boleta; los pagos que ya no se pueden recibir se informan sin detener los demás.
 - Caja → En poder de asesores: buscador para filtrar por el nombre del asesor que entrega.
+- Verificación de la boleta (página pública con QR) y plan de premios del bot: el cronograma de abonos mínimos / sorteos semanales se muestra ordenado por fecha, del más antiguo al más reciente (antes salía en el orden en que se crearon).
 - Números disponibles: al buscar un número que ya no está disponible se avisa. Al asesor se le dice «ya fue vendido por otro asesor» (o «ya lo vendió usted»), sin mostrarle datos del comprador ni quién lo vendió; al administrador, quién lo vendió y en qué estado.
 
 ## [3.4.30] - 2026-11-13

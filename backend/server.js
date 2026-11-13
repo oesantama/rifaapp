@@ -1093,7 +1093,7 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
                       </tr>
                     </thead>
                     <tbody>
-                      ${raffle.weeklyPrizes.map(p => {
+                      ${[...raffle.weeklyPrizes].sort((a, b) => String(a.drawDate || '9999').localeCompare(String(b.drawDate || '9999'))).map(p => {
                         const reqAbono = p.minAbonoType === 'PORCENTAJE' 
                           ? (ticketPrice * (p.minAbonoValue || 50) / 100) 
                           : (p.minAbonoValue || 0);
