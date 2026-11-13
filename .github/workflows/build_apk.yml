@@ -26,6 +26,10 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          # Misma versión con la que se compila localmente (AGP 9.1.0). Con «stable» a secas GitHub toma siempre la más nueva y
+          # esta exigió AGP 9.1.1 o mayor: la compilación fallaba con «Android Gradle Plugin version 9.1.0 is lower than Flutter's minimum».
+          # Para subir de versión: actualizar Flutter local, el plugin en android/settings.gradle.kts y este número a la vez.
+          flutter-version: '3.47.5'
 
       - name: Install dependencies
         run: flutter pub get
