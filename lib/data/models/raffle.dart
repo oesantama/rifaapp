@@ -1,3 +1,13 @@
+/// Clave para ordenar fechas de sorteo: acepta AAAA-MM-DD(…) y DD/MM/AAAA (algunas rifas antiguas la guardan así); sin fecha va al final.
+String drawDateSortKey(String value) {
+  final t = value.trim();
+  final dmy = RegExp(r'^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})').firstMatch(t);
+  if (dmy != null) return '${dmy[3]}-${dmy[2]!.padLeft(2, '0')}-${dmy[1]!.padLeft(2, '0')}';
+  return RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(t) ? t.substring(0, 10) : '9999';
+}
+
+int compareDrawDates(String a, String b) => drawDateSortKey(a).compareTo(drawDateSortKey(b));
+
 class WeeklyPrize {
   final String id;
   final String name;

@@ -154,7 +154,8 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
     _weeklyMinAbonoType = widget.raffle.weeklyMinAbonoType;
     _weeklyMinAbonoValueController = TextEditingController(text: widget.raffle.weeklyMinAbonoValue.toStringAsFixed(0));
     _isWeeklyPrizeAccumulative = widget.raffle.isWeeklyPrizeAccumulative;
-    _weeklyPrizes = List.from(widget.raffle.weeklyPrizes);
+    // Del sorteo más antiguo al más reciente
+    _weeklyPrizes = List.from(widget.raffle.weeklyPrizes)..sort((a, b) => compareDrawDates(a.drawDate, b.drawDate));
     _transferAccounts = List.from(widget.raffle.transferAccounts);
   }
 
@@ -397,7 +398,7 @@ class _RaffleEditDialogState extends State<RaffleEditDialog> {
                       } else {
                         _weeklyPrizes.add(prizeObj);
                       }
-                      _weeklyPrizes.sort((a, b) => a.drawDate.compareTo(b.drawDate));
+                      _weeklyPrizes.sort((a, b) => compareDrawDates(a.drawDate, b.drawDate));
                     });
                     Navigator.pop(ctx);
                   },

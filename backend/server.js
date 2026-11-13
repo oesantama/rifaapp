@@ -6,6 +6,9 @@ const security = require('./security');
 const driveService = require('./driveService');
 const ocrService = require('./ocrService');
 const whatsappService = require('./whatsappService');
+const drawSchedule = require('./drawSchedule');
+const { drawDateKey, byDrawDate, drawDateLabel, weeklyMinAbonoOf } = drawSchedule;
+const participationText = (raffle, paid) => drawSchedule.participationText(raffle, paid, colombiaDay(Date.now()));
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://45-137-192-195.sslip.io').replace(/\/+$/, '');
 let admin;
 try {
@@ -226,14 +229,6 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid
 // se guarda por boleta junto con los datos de los que depende, así que cambia solo si cambian.
 const verificationCodeCache = new Map();
 
-// Clave de orden de una fecha de sorteo: acepta AAAA-MM-DD(…) y DD/MM/AAAA; sin fecha va al final
-const drawDateKey = v => {
-  const t = String(v || '').trim();
-  const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(t);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
-  return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : '9999';
-};
-const byDrawDate = (a, b) => drawDateKey(a.drawDate).localeCompare(drawDateKey(b.drawDate));
 
 function ticketVerificationCode(ticket) {
   if (!ticket || ticket.status === 'DISPONIBLE' || !db.settings || !db.settings.verificationSecret) return null;
@@ -358,15 +353,6 @@ function parseDrawDate(value) {
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   const d = dmy ? new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])) : new Date(s);
   return isNaN(d.getTime()) ? null : d;
-}
-
-/** Abono mínimo para participar en un sorteo semanal: el del propio sorteo (cada uno tiene el suyo) o, si no lo define, el de la rifa. */
-function weeklyMinAbonoOf(raffle, prize) {
-  const price = Number(raffle.ticketPrice) || 0;
-  const hasOwn = prize && prize.minAbonoType && prize.minAbonoValue !== undefined && prize.minAbonoValue !== null;
-  const type = hasOwn ? prize.minAbonoType : (raffle.weeklyMinAbonoType || 'PORCENTAJE');
-  const value = hasOwn ? Number(prize.minAbonoValue) : (Number.isFinite(Number(raffle.weeklyMinAbonoValue)) && raffle.weeklyMinAbonoValue !== null && raffle.weeklyMinAbonoValue !== undefined ? Number(raffle.weeklyMinAbonoValue) : 50);
-  return type === 'PORCENTAJE' ? price * value / 100 : value;
 }
 
 /** Próximo sorteo semanal (el primero que aún no se juega; si todos pasaron, el último). */
@@ -3925,6 +3911,7 @@ ${SEP}
 📅 *Juega el:* {fecha_sorteo} con {loteria}
 🏆 *Gana con:* {cifras_ganadoras}
 ⚠️ *Importante:* la boleta debe estar pagada en su totalidad antes del sorteo; si no, *no juega*.
+{participacion_sorteos}
 ${SEP}
 💵 *Cómo pagar:* en efectivo con tu asesor(a) o por transferencia a:
 {cuentas}
@@ -3952,6 +3939,7 @@ ${SEP}
 🏆 *Gana con:* {cifras_ganadoras}
 ⚠️ *Recuerda:* completa el pago antes del sorteo; la boleta que no esté pagada en su totalidad *no juega*.
 🗓️ *Sorteos semanales:* {sorteos_semanales}
+{participacion_sorteos}
 ${SEP}
 💵 *Para completar el pago:* en efectivo con tu asesor(a) o por transferencia a:
 {cuentas}
@@ -3977,6 +3965,7 @@ ${SEP}
 📅 *Juega el:* {fecha_sorteo} con {loteria}
 🏆 *Gana con:* {cifras_ganadoras}
 🗓️ *Sorteos semanales:* {sorteos_semanales}
+{participacion_sorteos}
 ${SEP}
 🔐 *Verifica tu boleta en línea:*
 {enlace_verificacion}
@@ -4028,6 +4017,7 @@ const MESSAGE_PLACEHOLDERS = [
   ['loteria', 'Lotería del sorteo principal'],
   ['cifras_ganadoras', 'Cifras que deciden el ganador'],
   ['sorteos_semanales', 'Sorteos semanales: día, lotería y abono mínimo, o "no aplica"'],
+  ['participacion_sorteos', 'En qué sorteos participa con lo que lleva pagado y cuánto debe tener abonado para el siguiente (vacío si no hay sorteos semanales)'],
   ['cuentas', 'Cuentas de transferencia de la rifa (una por línea)'],
   ['enlace_verificacion', 'Enlace para verificar la boleta en línea'],
   ['codigo_verificacion', 'Código de verificación de la boleta']
@@ -4105,6 +4095,7 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
     sorteos_semanales: raffle.hasWeeklyDraws === false
       ? 'no aplica para esta rifa'
       : `cada ${raffle.weeklyDrawDay || 'semana'} con ${weeklyLottery}; participan las boletas con un abono mínimo de ${money(minAbono)}`,
+    participacion_sorteos: participationText(raffle, paid),
     cuentas: !owes ? '' : (accounts.length ? accounts.join('\n\n') : 'Consulta las cuentas con tu asesor(a).'),
     enlace_verificacion: code ? `${baseUrl}/verificar/${code}` : '(disponible cuando la boleta esté registrada)',
     codigo_verificacion: code || '—'
@@ -4114,7 +4105,7 @@ function renderMessage(template, { ticket, raffle, company, baseUrl }) {
     .replace(/\{enlace_verificacion\}\s*([^\n\r])/g, '{enlace_verificacion}\n$1');
   const lines = cleanTpl.split('\n');
   return lines
-    .filter(line => !(line.trim() === '{cuentas}' && !values.cuentas))
+    .filter(line => !(line.trim() === '{cuentas}' && !values.cuentas) && !(line.trim() === '{participacion_sorteos}' && !values.participacion_sorteos))
     .join('\n')
     .replace(/\{([a-z_]+)\}/g, (m, key) => (key in values ? values[key] : m));
 }
@@ -6816,6 +6807,8 @@ function buyerPaymentConfirmationMessage({ ticket, raffle, kind, amountNow, abon
   if (!isFull) lines.push(`⏳ *Saldo pendiente:* ${money(pending)} COP`);
   lines.push(`🏆 *Sorteo:* ${(raffle && raffle.title) || 'Gran Sorteo'}`);
   lines.push(`📌 *Estado:* ${isFull ? 'PAGADA — activa para el sorteo' : `ABONADA — falta ${money(pending)} para completar el pago`}`);
+  const participation = participationText(raffle, paid);
+  if (participation) lines.push('', participation);
   return `✅ *${title}* 🎉
 
 Hola *${name}*, ${intro}

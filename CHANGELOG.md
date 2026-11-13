@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.32] - 2026-11-13
+
+- Sorteos semanales / anticipados: en la pantalla de gestionar la rifa se muestran y se guardan ordenados por fecha, del más antiguo al más reciente, también cuando la rifa tiene las fechas guardadas como DD/MM/AAAA (se ordenaban como texto: 05/12 antes que 14/11).
+- Mensajes de WhatsApp al comprador: nueva sección «Tu participación en los sorteos» que dice en qué sorteos participa con lo que lleva pagado (por fecha) y, para el siguiente, cuánto debe tener abonado en total y cuánto le falta; no cuenta los sorteos que ya pasaron. Aparece en el aviso de pago/abono/transferencia confirmada, en los mensajes de boleta apartada, abono y pagada (variable nueva {participacion_sorteos} para quien personalice las plantillas) y cuando el bot registra un comprobante.
+
 ## [3.4.31] - 2026-11-13
 
 - Caja → En poder de asesores: se pueden marcar varios pagos (uno por uno, todos los de un asesor o todos los visibles) y recibirlos de una vez con el botón «Recibir seleccionados» (con confirmación del total). Cada comprador recibe un solo aviso por boleta; los pagos que ya no se pueden recibir se informan sin detener los demás.
