@@ -144,7 +144,11 @@ class _LoginViewState extends State<LoginView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _passwordFocus.requestFocus();
-      SystemChannels.textInput.invokeMethod('TextInput.show');
+      // «Mostrar teclado» solo cuando el campo ya abrió su conexión con el motor: enviarlo en el mismo instante del requestFocus
+      // llegaba antes que la configuración del campo y el motor web registraba «Null check operator used on a null value»
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted && _passwordFocus.hasFocus) SystemChannels.textInput.invokeMethod('TextInput.show');
+      });
     });
   }
 

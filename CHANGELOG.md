@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.28] - 2026-11-13
+
+- Ingreso: se corrigió el error «Null check operator used on a null value» de la consola al abrir la pantalla de ingreso: la app enviaba «mostrar teclado» al motor web en el mismo instante en que pedía el foco del campo de contraseña, antes de que el campo abriera su conexión. Ahora lo envía solo cuando el campo ya tiene el foco (comprobado en Chrome: con el usuario recordado el error aparecía en cada carga y ya no aparece).
+
 ## [3.4.27] - 2026-11-13
 
 - Conexión lenta o con pocos datos: las cargas de sorteos, asesores, ganadores y boletas se reintentan solas (1 s y 3 s de espera) y, si no hay respuesta, conservan lo que ya se veía en vez de mostrar sorteos o asesores de ejemplo; si la lista de boletas no pudo cargar aparece el aviso «Conexión lenta o sin internet» con el botón Reintentar, y se vuelve a cargar sola cuando regresa la conexión.
