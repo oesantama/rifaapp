@@ -14,6 +14,15 @@ const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'https://williamrifas.sa
  * Normaliza números telefónicos para WhatsApp:
  * Si es un número colombiano de 10 dígitos (inicia en 3), le antepone automáticamente el 57.
  */
+// Clave de orden de una fecha de sorteo: acepta AAAA-MM-DD(…) y DD/MM/AAAA; sin fecha va al final
+const drawDateKey = v => {
+  const t = String(v || '').trim();
+  const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(t);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : '9999';
+};
+const byDrawDate = (a, b) => drawDateKey(a.drawDate).localeCompare(drawDateKey(b.drawDate));
+
 function formatPhoneNumber(number) {
   let clean = String(number || '').replace(/[^0-9]/g, '');
   if (clean.length === 10 && clean.startsWith('3')) {
@@ -1197,7 +1206,7 @@ ${missingAfter.map((m, idx) => `${idx + 1}️⃣ *${m}*`).join('\n')}
     if (mainRaffle.weeklyPrizes && mainRaffle.weeklyPrizes.length > 0) {
       prizeMsg += `🎁 *Sorteos Semanales / Anticipados:*\n`;
       // Del más antiguo al más reciente
-      [...mainRaffle.weeklyPrizes].sort((a, b) => String(a.drawDate || '9999').localeCompare(String(b.drawDate || '9999'))).forEach(p => {
+      [...mainRaffle.weeklyPrizes].sort(byDrawDate).forEach(p => {
         const winner = winners.find(w => w.prizeName === p.name || w.prizeId === p.id);
         const statusText = winner ? `✅ Ganador: ${winner.winnerName || 'Entregado'}` : (p.isAccumulative ? '⏳ Acumulado' : '🗓️ Por jugar');
         prizeMsg += `• *${p.name || 'Premio Semanal'}:* $${Number(p.amount || 0).toLocaleString('es-CO')} COP (${p.drawDate || 'según fecha'}) - [${statusText}]\n`;

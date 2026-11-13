@@ -226,6 +226,15 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid
 // se guarda por boleta junto con los datos de los que depende, así que cambia solo si cambian.
 const verificationCodeCache = new Map();
 
+// Clave de orden de una fecha de sorteo: acepta AAAA-MM-DD(…) y DD/MM/AAAA; sin fecha va al final
+const drawDateKey = v => {
+  const t = String(v || '').trim();
+  const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(t);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : '9999';
+};
+const byDrawDate = (a, b) => drawDateKey(a.drawDate).localeCompare(drawDateKey(b.drawDate));
+
 function ticketVerificationCode(ticket) {
   if (!ticket || ticket.status === 'DISPONIBLE' || !db.settings || !db.settings.verificationSecret) return null;
   const secret = db.settings.verificationSecret;
@@ -1093,7 +1102,7 @@ function renderBuyerPortalHtml({ ticket, raffle, company, ticketsList = [], erro
                       </tr>
                     </thead>
                     <tbody>
-                      ${[...raffle.weeklyPrizes].sort((a, b) => String(a.drawDate || '9999').localeCompare(String(b.drawDate || '9999'))).map(p => {
+                      ${[...raffle.weeklyPrizes].sort(byDrawDate).map(p => {
                         const reqAbono = p.minAbonoType === 'PORCENTAJE' 
                           ? (ticketPrice * (p.minAbonoValue || 50) / 100) 
                           : (p.minAbonoValue || 0);
