@@ -1898,7 +1898,8 @@ class ApiService {
 
   Future<Map<String, dynamic>> agilPayments(Map<String, String> filters) => _botJson(authGet(_agilUri('payments', filters)));
 
-  Future<Map<String, dynamic>> agilExpenses({String account = ''}) => _botJson(authGet(_agilUri('expenses', {'account': account})));
+  Future<Map<String, dynamic>> agilExpenses({String account = '', String from = '', String to = ''}) =>
+      _botJson(authGet(_agilUri('expenses', {'account': account, 'from': from, 'to': to})));
 
   Future<void> agilCreateExpense({
     required String account,
@@ -1918,6 +1919,29 @@ class ApiService {
 
   Future<void> agilVoidExpense(String id, String reason) async {
     await _botJson(authPost(_agilUri('expenses/$id/void'), headers: _jsonHeaders, body: jsonEncode({'reason': reason})));
+  }
+
+  /// Traslados entre cajas (efectivo ↔ cuentas): lista, nuevo y anular.
+  Future<Map<String, dynamic>> agilMovements(Map<String, String> filters) => _botJson(authGet(_agilUri('movements', filters)));
+
+  Future<void> agilCreateMovement({
+    required String from,
+    required String to,
+    required num amount,
+    required String date,
+    required String reason,
+    String note = '',
+  }) async {
+    final response = await authPost(
+      _agilUri('movements'),
+      headers: _jsonHeaders,
+      body: jsonEncode({'from': from, 'to': to, 'amount': amount, 'date': date, 'reason': reason, 'note': note}),
+    ).timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200 && response.statusCode != 201) throw ApiException.fromResponse(response);
+  }
+
+  Future<void> agilVoidMovement(String id, String reason) async {
+    await _botJson(authPost(_agilUri('movements/$id/void'), headers: _jsonHeaders, body: jsonEncode({'reason': reason})));
   }
 
   Future<Map<String, dynamic>> agilSummary(Map<String, String> filters) => _botJson(authGet(_agilUri('summary', filters)));

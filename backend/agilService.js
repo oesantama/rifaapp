@@ -184,7 +184,7 @@ module.exports = function createAgilService(deps) {
   function summarize(db, company, f = {}) {
     const accounts = new Map();
     const ensure = (key, label) => {
-      if (!accounts.has(key)) accounts.set(key, { key, label, total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), rejected: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), balance: 0 });
+      if (!accounts.has(key)) accounts.set(key, { key, label, total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), rejected: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), movedIn: emptyBucket(), movedOut: emptyBucket(), balance: 0 });
       return accounts.get(key);
     };
     // Las cuentas configuradas en las rifas aparecen aunque todavía no tengan movimiento
@@ -197,7 +197,7 @@ module.exports = function createAgilService(deps) {
         }
       }
     }
-    const cash = { total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), balance: 0, advisorExpenses: 0, netPending: 0, byAdvisor: new Map() };
+    const cash = { total: 0, count: 0, legalized: emptyBucket(), pending: emptyBucket(), uploaded: emptyBucket(), expenses: emptyBucket(), movedIn: emptyBucket(), movedOut: emptyBucket(), balance: 0, advisorExpenses: 0, netPending: 0, byAdvisor: new Map() };
     const rows = collectRows(db, company, { from: f.from, to: f.to, raffleId: f.raffleId });
     for (const { abono, settled } of rows) {
       const amount = Number(abono.amount) || 0;
@@ -239,17 +239,30 @@ module.exports = function createAgilService(deps) {
         else addTo(ensure(e.account, e.accountLabel || e.account).expenses, e.amount);
       }
     }
+    // Traslados entre cajas (efectivo ↔ cuentas, o cuenta ↔ cuenta): suman al destino y restan al origen
+    for (const m of db.cashMovements || []) {
+      if (m.companyId !== company.id || m.voided) continue;
+      if (f.from && m.date < f.from) continue;
+      if (f.to && m.date > f.to) continue;
+      const amount = Number(m.amount) || 0;
+      const side = (key, label, bucket) => {
+        if (key === CASH_KEY) { if (!f.raffleId) addTo(cash[bucket], amount); return; }
+        if (f.raffleId && !accounts.has(key)) return;
+        addTo(ensure(key, label || key)[bucket], amount);
+      };
+      side(m.from, m.fromLabel, 'movedOut');
+      side(m.to, m.toLabel, 'movedIn');
+    }
     for (const adv of cash.byAdvisor.values()) adv.toDeliver = adv.pending - adv.expenses;
     cash.netPending = cash.pending.amount - cash.advisorExpenses;
     // Saldo que debe haber = lo legalizado menos los gastos
-    for (const a of accounts.values()) a.balance = a.legalized.amount - a.expenses.amount;
-    cash.balance = cash.legalized.amount - cash.expenses.amount;
+    for (const a of accounts.values()) a.balance = a.legalized.amount - a.expenses.amount + a.movedIn.amount - a.movedOut.amount;
+    cash.balance = cash.legalized.amount - cash.expenses.amount + cash.movedIn.amount - cash.movedOut.amount;
 
     const list = [...accounts.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
     const grand = { total: 0, legalized: 0, pending: 0, expenses: 0, balance: 0 };
-    for (const a of list) { grand.total += a.total; grand.legalized += a.legalized.amount; grand.pending += a.pending.amount; grand.expenses += a.expenses.amount; }
-    grand.total += cash.total; grand.legalized += cash.legalized.amount; grand.pending += cash.pending.amount; grand.expenses += cash.expenses.amount;
-    grand.balance = grand.legalized - grand.expenses;
+    for (const a of list) { grand.total += a.total; grand.legalized += a.legalized.amount; grand.pending += a.pending.amount; grand.expenses += a.expenses.amount; grand.balance += a.balance; }
+    grand.total += cash.total; grand.legalized += cash.legalized.amount; grand.pending += cash.pending.amount; grand.expenses += cash.expenses.amount; grand.balance += cash.balance;
     return {
       accounts: list,
       cash: { ...cash, byAdvisor: [...cash.byAdvisor.values()].sort((a, b) => b.toDeliver - a.toDeliver || b.pending - a.pending || b.total - a.total) },
@@ -638,6 +651,89 @@ module.exports = function createAgilService(deps) {
       });
     });
 
+    // ---- Traslados entre cajas: mover dinero del efectivo a una cuenta, de una cuenta al efectivo o entre cuentas ----
+    const movementView = m => ({
+      id: m.id, type: m.type || 'MANUAL', from: m.from, fromLabel: m.fromLabel, to: m.to, toLabel: m.toLabel, amount: m.amount, date: m.date,
+      reason: m.reason || '', note: m.note || '', auto: !!m.auto, deliveryId: m.deliveryId || null, advisorName: m.advisorName || null,
+      createdBy: m.createdBy, createdAt: m.createdAt, voided: m.voided || null
+    });
+
+    app.get('/api/agil/movements', cashAccess('view'), (req, res) => {
+      const company = need(req, res);
+      if (!company) return;
+      const f = filtersOf(req.query);
+      const account = String(req.query.account || '').slice(0, 120);
+      const q = norm(req.query.q || '');
+      const list = (getDb().cashMovements || [])
+        .filter(m => m.companyId === company.id && (!account || m.from === account || m.to === account) && (!f.from || m.date >= f.from) && (!f.to || m.date <= f.to) &&
+          (!q || norm(`${m.fromLabel} ${m.toLabel} ${m.reason} ${m.note} ${m.createdBy} ${m.advisorName || ''}`).includes(q)))
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
+      res.json({ movements: list.slice(0, 1000).map(movementView), total: list.filter(m => !m.voided).reduce((s, m) => s + m.amount, 0), count: list.length });
+    });
+
+    app.post('/api/agil/movements', adminOnly, (req, res) => {
+      const company = need(req, res);
+      if (!company) return;
+      const db = getDb();
+      const body = req.body || {};
+      const from = String(body.from || '').slice(0, 120);
+      const to = String(body.to || '').slice(0, 120);
+      const amount = Math.round(Number(body.amount));
+      const date = String(body.date || '');
+      const reason = String(body.reason || '').trim();
+      const note = String(body.note || '').trim().slice(0, 300);
+      if (!from || !to) return res.status(400).json({ error: 'Seleccione la caja de origen y la de destino.' });
+      if (from === to) return res.status(400).json({ error: 'El origen y el destino deben ser cajas distintas.' });
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000000) return res.status(400).json({ error: 'El valor del traslado debe ser mayor a 0.' });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Indique la fecha del traslado.' });
+      if (date > colombiaDay(Date.now())) return res.status(400).json({ error: 'La fecha del traslado no puede ser posterior a hoy.' });
+      if (reason.length < 5 || reason.length > 300) return res.status(400).json({ error: 'Escriba la justificación del traslado (5 a 300 caracteres).' });
+      // Las cajas válidas son el efectivo y las cuentas que existen en el resumen de la empresa
+      const summary = summarize(db, company, {});
+      const boxes = new Map([[CASH_KEY, { label: 'Efectivo', balance: summary.cash.balance }]]);
+      for (const a of summary.accounts) boxes.set(a.key, { label: a.label, balance: a.balance });
+      const src = boxes.get(from);
+      const dst = boxes.get(to);
+      if (!src || !dst) return res.status(400).json({ error: 'La caja de origen o la de destino no existe.' });
+      if (amount > src.balance) {
+        return res.status(400).json({ error: `La caja de origen (${src.label}) solo tiene $${Math.round(src.balance).toLocaleString('es-CO')}: no alcanza para trasladar $${amount.toLocaleString('es-CO')}.`, code: 'INSUFFICIENT_BALANCE' });
+      }
+      if (!Array.isArray(db.cashMovements)) db.cashMovements = [];
+      const movement = {
+        id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+        companyId: company.id, type: 'MANUAL',
+        from, fromLabel: src.label, to, toLabel: dst.label,
+        amount, date, reason, note,
+        createdBy: actorName(req), createdAt: new Date().toISOString()
+      };
+      db.cashMovements.unshift(movement);
+      if (auditPush) auditPush({ type: 'TRASLADO_CAJA', companyId: company.id, targetId: movement.id, targetName: `${src.label} → ${dst.label}`, detail: `Traslado $${amount} (${date}): ${reason}`, by: movement.createdBy });
+      saveDB();
+      res.status(201).json({ movement: movementView(movement) });
+    });
+
+    // Un traslado no se borra: se anula con su motivo y el dinero vuelve a su caja de origen. Los automáticos (entregas por transferencia) no se anulan
+    app.post('/api/agil/movements/:id/void', adminOnly, (req, res) => {
+      const company = need(req, res);
+      if (!company) return;
+      const movement = (getDb().cashMovements || []).find(m => m.id === req.params.id && m.companyId === company.id);
+      if (!movement) return res.status(404).json({ error: 'Traslado no encontrado.' });
+      if (movement.voided) return res.status(400).json({ error: 'Este traslado ya está anulado.' });
+      if (movement.auto) return res.status(400).json({ error: 'Este traslado lo generó una entrega por transferencia confirmada y no se puede anular.' });
+      const reason = String((req.body || {}).reason || '').trim();
+      if (reason.length < 5) return res.status(400).json({ error: 'Explique por qué anula el traslado (mínimo 5 caracteres).' });
+      // Anular devuelve el dinero al origen: el destino debe conservar al menos ese valor
+      const summary = summarize(getDb(), company, {});
+      const dest = movement.to === CASH_KEY ? summary.cash : summary.accounts.find(a => a.key === movement.to);
+      if (dest && dest.balance < movement.amount) {
+        return res.status(400).json({ error: `La caja de destino (${movement.toLabel}) ya no tiene $${Math.round(movement.amount).toLocaleString('es-CO')}: no se puede devolver el traslado.`, code: 'INSUFFICIENT_BALANCE' });
+      }
+      movement.voided = { by: actorName(req), at: new Date().toISOString(), reason: reason.slice(0, 300) };
+      if (auditPush) auditPush({ type: 'TRASLADO_CAJA_ANULADO', companyId: company.id, targetId: movement.id, targetName: `${movement.fromLabel} → ${movement.toLabel}`, detail: `Traslado $${movement.amount} anulado: ${reason}`, by: actorName(req) });
+      saveDB();
+      res.json({ ok: true });
+    });
+
     app.post('/api/agil/expenses', cashAccess('register'), async (req, res) => {
       const company = need(req, res);
       if (!company) return;
@@ -844,5 +940,32 @@ module.exports = function createAgilService(deps) {
     return applied;
   }
 
-  return { unappliedCashExpenses, applyExpenses, summarize, registerRoutes, start, handleIncomingDocument, tick, runBatch, isDue, getConfig, buildWorkbook, collectRows, applyReturnedWorkbook, createBatch, pendingRows, sanitizeConfig };
+  /**
+   * El administrador confirmó una entrega del asesor hecha por TRANSFERENCIA: ese efectivo que tenía el asesor ya no está en la caja de
+   * efectivo sino en la cuenta a la que transfirió, así que se registra el traslado Efectivo → cuenta (una sola vez por entrega).
+   */
+  function recordDeliveryTransfer(delivery, by, at) {
+    const db = getDb();
+    if (!delivery || delivery.method !== 'transferencia' || !(Number(delivery.total) > 0)) return null;
+    if (!Array.isArray(db.cashMovements)) db.cashMovements = [];
+    const existing = db.cashMovements.find(m => m.deliveryId === delivery.id && !m.voided);
+    if (existing) return existing;
+    const toLabel = String(delivery.destination || '').trim() || 'Sin cuenta registrada';
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(delivery.transferDate || '') ? delivery.transferDate : colombiaDay(Date.parse(at) || Date.now());
+    const movement = {
+      id: `mov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
+      companyId: delivery.companyId, type: 'ENTREGA_TRANSFERENCIA', auto: true,
+      from: CASH_KEY, fromLabel: 'Efectivo', to: norm(toLabel) || 'sin-cuenta', toLabel,
+      amount: Math.round(Number(delivery.total)), date: day,
+      reason: `Entrega de ${delivery.advisorName || 'asesor'} por transferencia, confirmada por ${by}`,
+      note: [delivery.approvalNumber ? `Aprobación ${delivery.approvalNumber}` : '', delivery.note || ''].filter(Boolean).join(' · '),
+      deliveryId: delivery.id, advisorName: delivery.advisorName || null,
+      createdBy: by, createdAt: at || new Date().toISOString()
+    };
+    db.cashMovements.unshift(movement);
+    if (auditPush) auditPush({ type: 'TRASLADO_CAJA', companyId: movement.companyId, targetId: movement.id, targetName: `Efectivo → ${toLabel}`, detail: `Entrega por transferencia confirmada: $${movement.amount}`, by });
+    return movement;
+  }
+
+  return { recordDeliveryTransfer, unappliedCashExpenses, applyExpenses, summarize, registerRoutes, start, handleIncomingDocument, tick, runBatch, isDue, getConfig, buildWorkbook, collectRows, applyReturnedWorkbook, createBatch, pendingRows, sanitizeConfig };
 };

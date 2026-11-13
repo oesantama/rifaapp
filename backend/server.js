@@ -1824,7 +1824,7 @@ setInterval(maybeDailySnapshot, 15 * 60 * 1000);
 
 /** Every known collection exists; unknown sections from backups are kept untouched. */
 function ensureDbShape(target) {
-  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests', 'independentDeliveries']) {
+  for (const key of ['companies', 'raffles', 'tickets', 'advisors', 'winners', 'cashTransactions', 'logs', 'auditLogs', 'commissionPayouts', 'cashDeliveries', 'subscriptionPayments', 'deletionRequests', 'independentDeliveries', 'cashMovements']) {
     if (!Array.isArray(target[key])) target[key] = [];
   }
   return target;
@@ -3542,6 +3542,7 @@ app.delete('/api/companies/:id', superAdminOnly, (req, res) => {
   // Remove commission payouts
   db.commissionPayouts = (db.commissionPayouts || []).filter(cp => !companyAdvisorIds.has(cp.advisorId) && !companyRaffleIds.has(cp.raffleId));
   db.expenses = (db.expenses || []).filter(e => e.companyId !== id);
+  db.cashMovements = (db.cashMovements || []).filter(m => m.companyId !== id);
   db.agilBatches = (db.agilBatches || []).filter(b => b.companyId !== id);
 
   if (!db.auditLogs) db.auditLogs = [];
@@ -7302,6 +7303,10 @@ app.post('/api/cash/deliveries/:id/:action', adminOnly, (req, res) => {
   }
   if (action === 'confirmar' && delivery.method === 'efectivo' && (delivery.expenseIds || []).length) {
     agilService.applyExpenses(delivery.expenseIds, { deliveryId: delivery.id, by, at });
+  }
+  // Entrega por transferencia confirmada: el efectivo del asesor pasa a la cuenta a la que transfirió (traslado Efectivo → cuenta)
+  if (action === 'confirmar' && delivery.method === 'transferencia') {
+    agilService.recordDeliveryTransfer(delivery, by, at);
   }
   delivery.status = action === 'confirmar' ? 'CONFIRMADA' : 'RECHAZADA';
   delivery.reviewedBy = by;

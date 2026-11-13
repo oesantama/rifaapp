@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.29] - 2026-11-13
+
+- Traslados entre cajas: nuevo registro de movimientos de dinero entre el efectivo y las cuentas (o entre cuentas). El botón «Trasladar entre cajas» (Pagos y abonos → Resumen por cuenta, y en la pestaña nueva) pide caja de origen, caja de destino, valor, fecha, justificación (obligatoria) y observación; no deja pasar del saldo de la caja de origen. Los traslados suman al destino y restan al origen en el «Debe haber» de cada caja, y se pueden anular con motivo.
+- Entregas del asesor por transferencia: al confirmarlas el administrador, el sistema registra solo el traslado Efectivo → cuenta donde se transfirió (una vez por entrega, no se anula a mano); así el efectivo no queda inflado y la cuenta refleja el dinero.
+- Pagos y abonos: pestaña nueva «Gastos y traslados» para consultar los gastos y los traslados entre cajas por fechas, por caja y con búsqueda, con paginación y anulación con motivo.
+
 ## [3.4.28] - 2026-11-13
 
 - Ingreso: se corrigió el error «Null check operator used on a null value» de la consola al abrir la pantalla de ingreso: la app enviaba «mostrar teclado» al motor web en el mismo instante en que pedía el foco del campo de contraseña, antes de que el campo abriera su conexión. Ahora lo envía solo cuando el campo ya tiene el foco (comprobado en Chrome: con el usuario recordado el error aparecía en cada carga y ya no aparece).

@@ -285,7 +285,9 @@ class _AdminCashViewState extends State<AdminCashView> {
               deliveries: deliveries,
               onConfirm: (d) async => _after(
                 await context.read<CashViewModel>().reviewDelivery(d.id, 'confirmar', raffleId: _raffleId),
-                'Entrega confirmada: el dinero quedó conciliado en caja.',
+                d.isTransfer
+                    ? 'Entrega confirmada. Se registró el traslado de Efectivo a ${(d.destination ?? '').isEmpty ? 'la cuenta indicada' : d.destination} (Pagos y abonos → Gastos y traslados).'
+                    : 'Entrega confirmada: el dinero quedó conciliado en caja.',
               ),
               onReject: (d) async {
                 final reason = await askReason(context, 'Rechazar entrega de ${d.advisorName}', hint: 'Ej: el valor no coincide');

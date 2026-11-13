@@ -11,6 +11,7 @@ import 'package:rifaapp/ui/core/utils/file_picker_helper.dart';
 import 'package:rifaapp/ui/core/utils/image_compress.dart';
 import 'package:rifaapp/ui/core/utils/file_saver.dart';
 import 'package:rifaapp/ui/features/admin_cash/views/cash_widgets.dart';
+import 'package:rifaapp/ui/features/agil/views/cash_movements_widgets.dart';
 
 const _xlsxMime =
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -40,7 +41,8 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
     with SingleTickerProviderStateMixin {
   final _api = ApiService();
   final _search = TextEditingController();
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
+  final GlobalKey<CashMovementsTabState> _movKey = GlobalKey<CashMovementsTabState>();
 
   DateTime? _from;
   DateTime? _to;
@@ -126,6 +128,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
         _selected.clear();
         _loading = false;
       });
+      _movKey.currentState?.reload();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -324,6 +327,13 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
                       SizedBox(width: 6),
                       Text('Detalle de pagos')
                     ])),
+                Tab(
+                    height: 34,
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.swap_horiz, size: 16),
+                      SizedBox(width: 6),
+                      Text('Gastos y traslados')
+                    ])),
               ],
             ),
           ],
@@ -347,9 +357,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
                       )
                     : (widget.advisorMode
                         ? _summaryTab()
-                        : TabBarView(
-                            controller: _tabs,
-                            children: [_summaryTab(), _detailTab(isMobile)])),
+                        : TabBarView(controller: _tabs, children: [_summaryTab(), _detailTab(isMobile), _movementsTab()])),
           ),
         ],
       ),
@@ -411,6 +419,10 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
     return [
       const Divider(height: 20),
       _line('Gastos', _n(expenses['amount']), count, AppTheme.dangerRose),
+      if (_n(Map<String, dynamic>.from(m['movedIn'] ?? {})['count']) > 0)
+        _line('Traslados recibidos', _n(Map<String, dynamic>.from(m['movedIn'])['amount']), _n(Map<String, dynamic>.from(m['movedIn'])['count']).toInt(), Colors.teal),
+      if (_n(Map<String, dynamic>.from(m['movedOut'] ?? {})['count']) > 0)
+        _line('Traslados enviados', _n(Map<String, dynamic>.from(m['movedOut'])['amount']), _n(Map<String, dynamic>.from(m['movedOut'])['count']).toInt(), Colors.blueGrey),
       Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -421,7 +433,7 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
         ),
         child: Row(children: [
           const Expanded(
-              child: Text('Debe haber (legalizado − gastos)',
+              child: Text('Debe haber (legalizado − gastos ± traslados)',
                   style:
                       TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
           Text(cashCurrency.format(balance),
@@ -481,6 +493,35 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
     if (changed == true) await _load();
   }
 
+  /// Las cajas para trasladar: el efectivo y cada cuenta, con su saldo («debe haber»).
+  List<CashBox> _boxes() {
+    final cash = Map<String, dynamic>.from(_summary['cash'] ?? {});
+    final accounts = ((_summary['accounts'] as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
+    return [
+      CashBox('efectivo', 'Efectivo', _n(cash['balance'])),
+      for (final a in accounts) CashBox('${a['key']}', '${a['label']}', _n(a['balance'])),
+    ];
+  }
+
+  Future<void> _openMovementDialog({String? from}) async {
+    final ok = await showDialog<bool>(context: context, builder: (_) => MovementDialog(api: _api, boxes: _boxes(), initialFrom: from));
+    if (ok == true) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Traslado registrado.')));
+      _load();
+    }
+  }
+
+  Widget _movementsTab() => CashMovementsTab(
+        key: _movKey,
+        api: _api,
+        from: _from == null ? '' : _day.format(_from!),
+        to: _to == null ? '' : _day.format(_to!),
+        boxes: _boxes(),
+        readOnly: widget.readOnly,
+        onChanged: _load,
+        onNewMovement: _openMovementDialog,
+      );
+
   Widget _summaryTab() {
     final grand = Map<String, dynamic>.from(_summary['grand'] ?? {});
     final accounts = ((_summary['accounts'] as List?) ?? [])
@@ -515,13 +556,24 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
             _bigKpi('GASTOS', _n(grand['expenses']), AppTheme.dangerRose,
                 Icons.receipt_long_outlined, c.maxWidth, kCols),
             _bigKpi(
-                'DEBE HABER (legalizado − gastos)',
+                'DEBE HABER (legalizado − gastos ± traslados)',
                 _n(grand['balance']),
                 _n(grand['balance']) >= 0 ? Colors.indigo : AppTheme.dangerRose,
                 Icons.savings_outlined,
                 c.maxWidth,
                 kCols),
           ]),
+          if (!widget.readOnly && !widget.advisorMode) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(
+                onPressed: () => _openMovementDialog(),
+                icon: const Icon(Icons.swap_horiz, size: 18),
+                label: const Text('Trasladar entre cajas'),
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           const Text('Cuentas de transferencia',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
