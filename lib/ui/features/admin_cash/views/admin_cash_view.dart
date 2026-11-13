@@ -397,7 +397,7 @@ class _TransfersTab extends StatelessWidget {
                             CashInfoLine('Comprador', p.ticket.buyerName),
                             CashInfoLine('Registró', '${a.sellerName} • ${cashDate(a.date)}'),
                             CashInfoLine('Fecha transferencia', cashDate(a.transferDate)),
-                            CashInfoLine('Banco origen', a.originBank ?? ''),
+                            if ((a.originBank ?? '').isNotEmpty) CashInfoLine('Banco origen', a.originBank ?? ''),
                             CashInfoLine('N° aprobación', a.approvalNumber ?? ''),
                             CashInfoLine('Cuenta destino', a.cuentaDestino ?? ''),
                             if (a.duplicateApprovalConfirmed)
@@ -555,7 +555,7 @@ class DeliveryCard extends StatelessWidget {
             ],
             if (d.isTransfer) ...[
               CashInfoLine('Fecha transferencia', cashDate(d.transferDate)),
-              CashInfoLine('Banco origen', d.originBank ?? ''),
+              if ((d.originBank ?? '').isNotEmpty) CashInfoLine('Banco origen', d.originBank ?? ''),
               CashInfoLine('N° aprobación', d.approvalNumber ?? ''),
               CashInfoLine('Cuenta destino', d.destination ?? ''),
             ],

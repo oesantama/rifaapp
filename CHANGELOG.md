@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.30] - 2026-11-13
+
+- Aviso al comprador por WhatsApp: el mensaje ya no dice «PAGO TOTAL» a todo. Ahora identifica qué se confirmó: «Transferencia confirmada» o «Pago/Abono confirmado en caja», y si la boleta quedó pagada en TOTAL o es solo un ABONO, mostrando el valor confirmado, el total pagado de la boleta y el saldo pendiente. Además se corrigió que, al validar una transferencia, el comprador recibía dos mensajes (y uno de «pago total» incluso al rechazarla).
+- Entrega del asesor por transferencia: ahora se adjunta primero el soporte y de él se leen la fecha, el N° de aprobación, el valor (se avisa si no coincide con la entrega) y la cuenta destino; lo que no se lee se llena a mano. Ya no se pide el banco de origen.
+
 ## [3.4.29] - 2026-11-13
 
 - Traslados entre cajas: nuevo registro de movimientos de dinero entre el efectivo y las cuentas (o entre cuentas). El botón «Trasladar entre cajas» (Pagos y abonos → Resumen por cuenta, y en la pestaña nueva) pide caja de origen, caja de destino, valor, fecha, justificación (obligatoria) y observación; no deja pasar del saldo de la caja de origen. Los traslados suman al destino y restan al origen en el «Debe haber» de cada caja, y se pueden anular con motivo.

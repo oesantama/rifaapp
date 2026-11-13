@@ -74,7 +74,6 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
     final accounts = raffle?.transferAccounts ?? const [];
     String method = 'efectivo';
     DateTime? date;
-    final bankCtrl = TextEditingController();
     final approvalCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
     String? destination = accounts.length == 1 ? accounts.first.label : null;
@@ -82,12 +81,54 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
     String? proof;
     String? error;
     bool sending = false;
+    // Lectura del comprobante: primero se adjunta el soporte y de él se toman fecha, aprobación, valor y cuenta destino (lo que se lea)
+    Map<String, dynamic>? read;
+    bool reading = false;
+    StateSetter? refresh;
+    List<String> listOf(String key) => ((read?[key] as List?) ?? []).map((e) => '$e').toList();
+    Future<void> readProof(String dataUri) async {
+      reading = true;
+      read = null;
+      refresh?.call(() {});
+      try {
+        final res = await ApiService().readTransferProof(dataUri);
+        if (proof != dataUri) return;
+        read = res;
+        if (res['readable'] == true) {
+          // Fecha: solo si es válida (no futura y de los últimos 30 días)
+          final parsed = DateTime.tryParse('${res['date'] ?? ''}');
+          if (parsed != null) {
+            final day = DateTime(parsed.year, parsed.month, parsed.day);
+            final today = ColombiaTime.today();
+            if (!day.isAfter(today) && !day.isBefore(today.subtract(const Duration(days: 30)))) date = day;
+          }
+          // Referencia: la primera con etiqueta (aprobación, autorización, comprobante…) si el campo está vacío
+          final refs = listOf('references');
+          if (refs.isNotEmpty && approvalCtrl.text.trim().isEmpty) approvalCtrl.text = refs.first;
+          // Cuenta destino: solo si coincide una sola cuenta de la rifa
+          String digits(String v) => v.replaceAll(RegExp(r'\D'), '');
+          final runs = listOf('accountNumbers');
+          final matches = accounts.where((a) {
+            final n = digits(a.accountNumber.isNotEmpty ? a.accountNumber : a.key);
+            return n.length >= 6 && runs.any((r) => r.contains(n) || n.contains(r));
+          }).toList();
+          if (matches.length == 1) destination = matches.first.label;
+        }
+      } catch (_) {
+        // sin lectura automática se llena a mano
+      } finally {
+        reading = false;
+        refresh?.call(() {});
+      }
+    }
 
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setD) => AlertDialog(
+        builder: (ctx, setD) {
+         refresh = setD;
+         return AlertDialog(
           title: Text('Entregar ${cashCurrency.format(total)}'),
           content: SizedBox(
             width: 460,
@@ -121,6 +162,78 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                   ),
                   const SizedBox(height: 12),
                   if (method == 'transferencia') ...[
+                    // 1) Primero el soporte: de él se leen el valor, la fecha, la aprobación y la cuenta destino
+                    OutlinedButton.icon(
+                      onPressed: reading
+                          ? null
+                          : () async {
+                              try {
+                                final picked = await pickImageBase64(maxSide: 1600);
+                                if (picked != null) {
+                                  final prepared = prepareProofImage(picked, maxSide: 1600);
+                                  setD(() => proof = prepared);
+                                  readProof(prepared);
+                                }
+                              } on ImageTooHeavyException catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(e.message)));
+                                }
+                              }
+                            },
+                      icon: Icon(proof == null ? Icons.attach_file : Icons.check_circle, color: proof == null ? null : AppTheme.secondaryEmerald),
+                      label: Text(proof == null ? 'Adjuntar soporte de la transferencia *' : 'Soporte adjunto (cambiar)'),
+                    ),
+                    if (reading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Row(children: [
+                          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 8),
+                          Text('Leyendo el comprobante…', style: TextStyle(fontSize: 12.5)),
+                        ]),
+                      )
+                    else if (read != null && read!['available'] == true)
+                      Builder(builder: (_) {
+                        final amounts = ((read!['amounts'] as List?) ?? []).whereType<num>().toList();
+                        final matchesTotal = amounts.any((a) => (a - total).abs() < 1);
+                        final readable = read!['readable'] == true;
+                        return Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: (readable ? AppTheme.secondaryEmerald : Colors.grey).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: !readable
+                              ? const Text('No pude leer el comprobante (imagen borrosa o con poca luz). Complete los datos a mano.', style: TextStyle(fontSize: 12.5))
+                              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  const Text('🔎 Leído del comprobante', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                  if (amounts.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Valor en el comprobante: ${amounts.take(2).map((a) => cashCurrency.format(a)).join(' / ')}'
+                                      '${matchesTotal ? '  ✓ coincide con la entrega' : '  ⚠️ la entrega es de ${cashCurrency.format(total)}'}',
+                                      style: TextStyle(
+                                          fontSize: 12.5, fontWeight: FontWeight.w600, color: matchesTotal ? AppTheme.secondaryEmerald : Colors.orange.shade900),
+                                    ),
+                                  ],
+                                  if (listOf('references').isEmpty && listOf('referenceGuesses').isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Wrap(spacing: 6, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                                      const Text('Posibles referencias:', style: TextStyle(fontSize: 12.5)),
+                                      for (final g in listOf('referenceGuesses').take(3))
+                                        ActionChip(
+                                          label: Text(g, style: const TextStyle(fontSize: 12)),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => setD(() => approvalCtrl.text = g),
+                                        ),
+                                    ]),
+                                  ],
+                                ]),
+                        );
+                      }),
+                    const SizedBox(height: 10),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.event),
@@ -138,8 +251,6 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    BankField(controller: bankCtrl, label: 'Banco desde el que transfirió *'),
-                    const SizedBox(height: 10),
                     TextField(
                       controller: approvalCtrl,
                       textCapitalization: TextCapitalization.characters,
@@ -153,7 +264,7 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                     if (accounts.isNotEmpty)
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        initialValue: destination,
+                        value: destination,
                         decoration: const InputDecoration(labelText: 'Cuenta a la que transfirió', border: OutlineInputBorder()),
                         items: [
                           for (final a in accounts) DropdownMenuItem(value: a.label, child: Text(a.label, overflow: TextOverflow.ellipsis))
@@ -165,22 +276,6 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                         controller: destinationCtrl,
                         decoration: const InputDecoration(labelText: 'Cuenta a la que transfirió', border: OutlineInputBorder()),
                       ),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        try {
-                          final picked = await pickImageBase64(maxSide: 1600);
-                          if (picked != null) setD(() => proof = prepareProofImage(picked, maxSide: 1600));
-                        } on ImageTooHeavyException catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(e.message)));
-                          }
-                        }
-                      },
-                      icon: Icon(proof == null ? Icons.attach_file : Icons.check_circle,
-                          color: proof == null ? null : AppTheme.secondaryEmerald),
-                      label: Text(proof == null ? 'Adjuntar soporte de la transferencia *' : 'Soporte adjunto (cambiar)'),
-                    ),
                     const SizedBox(height: 10),
                   ] else
                     Text(
@@ -204,8 +299,8 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                   ? null
                   : () async {
                       if (method == 'transferencia') {
-                        if (date == null || bankCtrl.text.trim().isEmpty || approvalKey(approvalCtrl.text).length < 3) {
-                          setD(() => error = 'Complete la fecha, el banco y el número de aprobación.');
+                        if (date == null || approvalKey(approvalCtrl.text).length < 3) {
+                          setD(() => error = 'Complete la fecha y el número de aprobación.');
                           return;
                         }
                         if (proof == null) {
@@ -226,7 +321,6 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                         'note': noteCtrl.text.trim(),
                         if (method == 'transferencia') ...{
                           'transferDate': ColombiaTime.toDay(date!),
-                          'originBank': bankCtrl.text.trim(),
                           'approvalNumber': approvalCtrl.text.trim(),
                           'destination': destination ?? destinationCtrl.text.trim(),
                           'soporteImageBase64': proof,
@@ -256,7 +350,8 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
               label: const Text('Reportar entrega'),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
   }

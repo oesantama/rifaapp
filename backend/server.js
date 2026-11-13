@@ -6774,6 +6774,51 @@ function findTicketAbono(ticketId, abonoId) {
   return { ticket, abono };
 }
 
+/**
+ * Mensaje de WhatsApp al comprador cuando el administrador confirma un pago. Distingue lo que se confirmó para no confundir:
+ *   kind 'transferencia' → «TRANSFERENCIA CONFIRMADA»; 'efectivo' / 'caja' → «PAGO … CONFIRMADO»
+ *   y, según el saldo de la boleta, si quedó pagada en TOTAL o si es solo un ABONO con saldo pendiente.
+ * amountNow: valor del pago que se acaba de confirmar. abono: el pago (para mostrar aprobación y banco).
+ */
+function buyerPaymentConfirmationMessage({ ticket, raffle, kind, amountNow, abono }) {
+  const money = v => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+  const price = Number(ticket.price) || Number(raffle && raffle.ticketPrice) || 0;
+  const paid = Number(ticket.totalPaid) || 0;
+  const pending = Math.max(0, price - paid);
+  const isFull = price > 0 && pending <= 0;
+  const name = ticket.buyerName || 'Participante';
+  const nums = (ticket.numbers || []).join('  •  ') || String(ticket.ticketNumber || '');
+  const isTransfer = kind === 'transferencia';
+  const title = isTransfer
+    ? (isFull ? '¡TRANSFERENCIA CONFIRMADA! BOLETA PAGADA EN TOTAL' : '¡TRANSFERENCIA CONFIRMADA! ABONO REGISTRADO')
+    : (isFull ? '¡PAGO TOTAL CONFIRMADO EN CAJA!' : '¡ABONO CONFIRMADO EN CAJA!');
+  const intro = isTransfer
+    ? `tu transferencia bancaria llegó a nuestra cuenta y fue confirmada por la administración.${isFull ? ' Con este pago tu boleta quedó pagada en su totalidad.' : ' Este es un abono: tu boleta todavía tiene saldo pendiente.'}`
+    : (isFull
+      ? 'tu boleta quedó pagada en su totalidad y confirmada en caja por la administración.'
+      : 'recibimos y confirmamos tu abono en caja. Este es un abono: tu boleta todavía tiene saldo pendiente.');
+  const lines = [
+    `🔢 *Tus Números:* ${nums}`,
+    `💵 *${isTransfer ? 'Valor de la transferencia' : 'Valor confirmado'}:* ${money(amountNow)} COP`
+  ];
+  if (isTransfer && abono && abono.approvalNumber) lines.push(`🧾 *Comprobante bancario:* #${abono.approvalNumber}`);
+  if (isTransfer && abono && abono.originBank) lines.push(`🏛️ *Banco / Medio:* ${abono.originBank}`);
+  lines.push(`💰 *Total pagado de la boleta:* ${money(paid)} de ${money(price)} COP`);
+  if (!isFull) lines.push(`⏳ *Saldo pendiente:* ${money(pending)} COP`);
+  lines.push(`🏆 *Sorteo:* ${(raffle && raffle.title) || 'Gran Sorteo'}`);
+  lines.push(`📌 *Estado:* ${isFull ? 'PAGADA — activa para el sorteo' : `ABONADA — falta ${money(pending)} para completar el pago`}`);
+  return `✅ *${title}* 🎉
+
+Hola *${name}*, ${intro}
+
+${lines.join('\n')}
+
+🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
+${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
+
+¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+}
+
 // Admin "confirm received" of a whole ticket: cash received in hand and transfers validated
 app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   const ticket = db.tickets.find(t => t.id === req.params.id);
@@ -6784,8 +6829,10 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   if (raffle && !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Boleta no encontrada' });
   const at = new Date().toISOString();
   const by = actorName(req);
+  let confirmedNow = 0;
   for (const a of ticket.abonos || []) {
     if ((a.amount || 0) <= 0 || isAbonoSettled(a)) continue;
+    confirmedNow += a.amount || 0;
     if (isTransferAbono(a)) a.verification = { status: 'VALIDADA', by, at, note: 'Confirmado desde Caja' };
     else {
       a.received = { by, at, method: 'efectivo', note: 'Recibido directamente por el administrador' };
@@ -6800,21 +6847,7 @@ app.post('/api/tickets/:id/confirm', adminOnly, (req, res) => {
   if (ticket.buyerPhone) {
     const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
     const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
-    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
-    const confirmMsg = 
-`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
-
-Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
-
-🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
-💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
-🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
-📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
-
-🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
-
-¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+    const confirmMsg = buyerPaymentConfirmationMessage({ ticket, raffle, kind: 'caja', amountNow: confirmedNow });
 
     whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
       console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
@@ -6920,26 +6953,8 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/verify', adminOnly, (req, res) => 
     if (ticket.buyerPhone) {
       const company = (db.companies || []).find(c => c.id === raffle.companyId) || (db.companies || [])[0] || {};
       const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
-      const approvalTxt = abono.approvalNumber ? `\n🧾 *Comprobante bancario:* #${abono.approvalNumber}` : '';
-      const bankTxt = abono.originBank ? `\n🏛️ *Banco / Medio:* ${abono.originBank}` : '';
-      const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
-      const isFull = totalPaid >= Number(raffle.ticketPrice || 0);
-
       if (action === 'validar') {
-        const confirmMsg = 
-`✅ *¡PAGO VALIDADO Y CONFIRMADO EN BANCO!* 🎉
-
-Hola *${ticket.buyerName || 'Participante'}*, tu transferencia bancaria ha sido confirmada con éxito por nuestro equipo administrativo.
-
-🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
-💵 *Valor Validado:* $${Number(abono.amount || 0).toLocaleString('es-CO')} COP${approvalTxt}${bankTxt}
-🏆 *Sorteo:* ${raffle.title || 'Gran Sorteo'}
-📌 *Estado:* ${isFull ? 'PAGADA / CONFIRMADA (Activa para el sorteo)' : `ABONADA ($${totalPaid.toLocaleString('es-CO')} de $${Number(raffle.ticketPrice || 0).toLocaleString('es-CO')})`}
-
-🌐 *Puedes consultar y descargar tu Boleta Oficial con QR y Soporte Digital aquí:*
-${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
-
-¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+        const confirmMsg = buyerPaymentConfirmationMessage({ ticket, raffle, kind: 'transferencia', amountNow: abono.amount, abono });
 
         whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
           console.warn('⚠️ No se pudo enviar WhatsApp de confirmación de pago:', err.message);
@@ -6965,31 +6980,6 @@ Por favor verifica la transacción o comunícate con nosotros por este medio par
   recalcCashConfirmation(ticket);
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
-
-  // Auto-notificar al comprador por WhatsApp si tiene teléfono
-  if (ticket.buyerPhone) {
-    const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
-    const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
-    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
-    const confirmMsg = 
-`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
-
-Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
-
-🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
-💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
-🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
-📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
-
-🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
-
-¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
-
-    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
-      console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
-    });
-  }
 
   res.json(withVerification(ticket));
 });
@@ -7104,21 +7094,7 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) =>
   if (ticket.buyerPhone) {
     const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
     const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
-    const totalPaid = (ticket.abonos || []).filter(a => isAbonoSettled(a)).reduce((s, a) => s + (a.amount || 0), 0);
-    const confirmMsg = 
-`✅ *¡PAGO TOTAL CONFIRMADO Y REGISTRADO EN CAJA!* 🎉
-
-Estimado(a) *${ticket.buyerName || 'Participante'}*, tu boleta ha sido completamente validada y confirmada en caja por la administración.
-
-🔢 *Tus Números:* ${ticket.numbers.join('  •  ')}
-💵 *Total Cancelado:* $${totalPaid.toLocaleString('es-CO')} COP
-🏆 *Sorteo:* ${raffle?.title || 'Gran Sorteo'}
-📌 *Estado:* PAGADA Y ACTIVA PARA EL SORTEO
-
-🌐 *Consulta tu boleta oficial con QR y Soporte Digital aquí:*
-${PUBLIC_BASE_URL}/boleta?phone=${ticket.buyerPhone}
-
-¡Muchas gracias y te deseamos muchísima suerte en el sorteo! 🍀✨`;
+    const confirmMsg = buyerPaymentConfirmationMessage({ ticket, raffle, kind: 'efectivo', amountNow: abono.amount, abono });
 
     whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
       console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
@@ -7212,8 +7188,9 @@ app.post('/api/cash/deliveries', requireRole('asesor'), async (req, res) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > colombiaDay(Date.now())) return res.status(400).json({ error: 'Indique la fecha de la transferencia (no puede ser futura).' });
     const approvalNumber = String(body.approvalNumber || '').trim().slice(0, 40);
     if (approvalKey(approvalNumber).length < 3) return res.status(400).json({ error: 'Ingrese el número de aprobación de la transferencia.' });
-    const originBank = String(body.originBank || '').trim().slice(0, 60);
-    if (!originBank) return res.status(400).json({ error: 'Indique el banco desde el que transfirió.' });
+    // El banco de origen ya no se pide en las entregas: se conserva si llega y es un banco activo
+    const bankRaw = String(body.originBank || '').trim().slice(0, 60);
+    const originBank = bankRaw && isActiveBank(bankRaw) ? bankRaw : '';
     if (!body.soporteImageBase64) return res.status(400).json({ error: 'Adjunte el soporte de la transferencia.' });
     transfer = { transferDate: day, approvalNumber, originBank, destination: String(body.destination || '').trim().slice(0, 200) };
   }
