@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.35] - 2026-11-13
+
+- Gastos y traslados: al ver un gasto se puede abrir su soporte (foto) con «Ver soporte».
+- Cajas (efectivo y cada cuenta): las tarjetas siempre tienen «Registrar gasto», «Ver gastos (N)», «Ver traslados (N)» y «Trasladar desde aquí»; los gastos y traslados de esa caja se abren en una ventana propia. En las cifras se distingue lo que «Llegó por traslado (+)» de lo que «Salió por traslado (−)», y en la lista de traslados de una caja cada uno se marca «LLEGÓ POR TRASLADO» (verde, con +) o «SALIÓ POR TRASLADO» (rojo, con −), diciendo de dónde vino o hacia dónde fue.
+
 ## [3.4.34] - 2026-11-13
 
 - Aviso de número ya vendido por otro asesor: ahora también aparece en Mis Boletas al buscar un número (antes solo en Números disponibles) y es solo para el asesor; el administrador y quien ve todas las boletas ya no lo ven.

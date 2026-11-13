@@ -229,6 +229,10 @@ class CashMovementsTab extends StatefulWidget {
   final VoidCallback
       onChanged; // para que el resumen se vuelva a cargar tras anular o crear
   final VoidCallback onNewMovement;
+  // Para abrirla ya enfocada en una caja (el diálogo de cada caja): qué ver primero y de qué caja
+  final String? initialKind;
+  final String? initialAccount;
+  final bool lockAccount;
 
   const CashMovementsTab({
     super.key,
@@ -239,6 +243,9 @@ class CashMovementsTab extends StatefulWidget {
     required this.readOnly,
     required this.onChanged,
     required this.onNewMovement,
+    this.initialKind,
+    this.initialAccount,
+    this.lockAccount = false,
   });
 
   @override
@@ -259,6 +266,8 @@ class CashMovementsTabState extends State<CashMovementsTab> {
   @override
   void initState() {
     super.initState();
+    _kind = widget.initialKind ?? _kind;
+    _account = widget.initialAccount ?? _account;
     reload();
   }
 
@@ -333,73 +342,59 @@ class CashMovementsTabState extends State<CashMovementsTab> {
   Widget _rowCard(Map<String, dynamic> r) {
     final voided = r['voided'] != null;
     final isExpense = _kind == 'gastos';
-    final amount = cashCurrency.format((r['amount'] as num?) ?? 0);
+    final raw = (r['amount'] as num?) ?? 0;
+    // Mirando una caja: el traslado «llegó» (entra, +) o «salió» (sale, −) de ESA caja; sin caja elegida se ve de dónde a dónde
+    final incoming = !isExpense && _account.isNotEmpty && r['to'] == _account;
+    final outgoing = !isExpense && _account.isNotEmpty && r['from'] == _account;
+    final amount = (incoming ? '+ ' : outgoing ? '− ' : '') + cashCurrency.format(raw);
+    final amountColor = voided ? Colors.grey : (incoming ? AppTheme.secondaryEmerald : (outgoing || isExpense) ? AppTheme.dangerRose : null);
     final muted = voided ? Colors.grey : null;
     final title = isExpense
         ? '${r['accountLabel'] ?? ''}'
-        : '${r['fromLabel'] ?? ''}  →  ${r['toLabel'] ?? ''}';
+        : (incoming ? 'Desde ${r['fromLabel'] ?? ''}' : outgoing ? 'Hacia ${r['toLabel'] ?? ''}' : '${r['fromLabel'] ?? ''}  →  ${r['toLabel'] ?? ''}');
     final detail = isExpense
         ? '${r['reason'] ?? ''}'
-        : [
-            if ('${r['reason'] ?? ''}'.isNotEmpty) '${r['reason']}',
-            if ('${r['note'] ?? ''}'.isNotEmpty) 'Obs.: ${r['note']}'
-          ].join('\n');
+        : [if ('${r['reason'] ?? ''}'.isNotEmpty) '${r['reason']}', if ('${r['note'] ?? ''}'.isNotEmpty) 'Obs.: ${r['note']}'].join('\n');
+    final iconColor = voided ? Colors.grey : (incoming ? AppTheme.secondaryEmerald : (isExpense || outgoing ? AppTheme.dangerRose : AppTheme.primaryBlue));
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(isExpense ? Icons.receipt_long_outlined : Icons.swap_horiz,
-              color: voided
-                  ? Colors.grey
-                  : (isExpense ? AppTheme.dangerRose : AppTheme.primaryBlue)),
+          Icon(isExpense ? Icons.receipt_long_outlined : (incoming ? Icons.south_west : outgoing ? Icons.north_east : Icons.swap_horiz), color: iconColor),
           const SizedBox(width: 10),
           Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Wrap(
-                  spacing: 8,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(title,
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: muted,
-                            decoration:
-                                voided ? TextDecoration.lineThrough : null)),
-                    if (!isExpense && r['auto'] == true)
-                      const CashChip('AUTOMÁTICO · ENTREGA POR TRANSFERENCIA',
-                          AppTheme.secondaryEmerald),
-                    if (voided) const CashChip('ANULADO', Colors.grey),
-                  ]),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: muted, decoration: voided ? TextDecoration.lineThrough : null)),
+                if (incoming) const CashChip('LLEGÓ POR TRASLADO', AppTheme.secondaryEmerald, icon: Icons.south_west),
+                if (outgoing) const CashChip('SALIÓ POR TRASLADO', AppTheme.dangerRose, icon: Icons.north_east),
+                if (!isExpense && r['auto'] == true) const CashChip('AUTOMÁTICO · ENTREGA POR TRANSFERENCIA', Colors.teal),
+                if (voided) const CashChip('ANULADO', Colors.grey),
+              ]),
               const SizedBox(height: 2),
-              Text(
-                  '${cashDate(r['date']?.toString())} · ${r['createdBy'] ?? ''}${isExpense && r['advisorName'] != null ? ' · ${r['advisorName']}' : ''}',
+              Text('${cashDate(r['date']?.toString())} · ${r['createdBy'] ?? ''}${isExpense && r['advisorName'] != null ? ' · ${r['advisorName']}' : ''}',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              if (detail.isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(detail,
-                        style: TextStyle(fontSize: 12.5, color: muted))),
-              if (voided)
-                Text('Anulado: ${(r['voided'] as Map)['reason'] ?? ''}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              if (detail.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(detail, style: TextStyle(fontSize: 12.5, color: muted))),
+              if (isExpense && r['hasSupport'] == true)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    onPressed: () => showSoporte(context,
+                        driveId: r['soporteDriveId'] as String?, webViewUrl: r['soporteWebViewUrl'] as String?, title: 'Soporte del gasto · ${cashCurrency.format(raw)}'),
+                    icon: const Icon(Icons.image_search, size: 18),
+                    label: const Text('Ver soporte'),
+                  ),
+                ),
+              if (voided) Text('Anulado: ${(r['voided'] as Map)['reason'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ]),
           ),
           const SizedBox(width: 8),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(amount,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: muted,
-                    decoration: voided ? TextDecoration.lineThrough : null)),
+            Text(amount, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: amountColor, decoration: voided ? TextDecoration.lineThrough : null)),
             if (!widget.readOnly && !voided && !(r['auto'] == true))
-              TextButton(
-                  onPressed: () => _void(r),
-                  child: const Text('Anular',
-                      style: TextStyle(color: AppTheme.dangerRose))),
+              TextButton(onPressed: () => _void(r), child: const Text('Anular', style: TextStyle(color: AppTheme.dangerRose))),
           ]),
         ]),
       ),
@@ -433,6 +428,7 @@ class CashMovementsTabState extends State<CashMovementsTab> {
                   reload();
                 },
               ),
+              if (!widget.lockAccount)
               SizedBox(
                 width: 230,
                 child: DropdownButtonFormField<String>(
@@ -545,6 +541,59 @@ class CashMovementsTabState extends State<CashMovementsTab> {
             ]),
           ),
       ]),
+    );
+  }
+}
+
+
+/// Gastos y traslados de UNA caja (el efectivo o una cuenta): se abre desde su tarjeta del resumen.
+class BoxMovementsDialog extends StatelessWidget {
+  final ApiService api;
+  final CashBox box;
+  final String initialKind; // 'gastos' | 'traslados'
+  final String from;
+  final String to;
+  final List<CashBox> boxes;
+  final bool readOnly;
+  final VoidCallback onChanged;
+  final VoidCallback onNewMovement;
+
+  const BoxMovementsDialog({
+    super.key,
+    required this.api,
+    required this.box,
+    required this.initialKind,
+    required this.from,
+    required this.to,
+    required this.boxes,
+    required this.readOnly,
+    required this.onChanged,
+    required this.onNewMovement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    return AlertDialog(
+      insetPadding: const EdgeInsets.all(12),
+      title: Text('Gastos y traslados · ${box.label}', style: const TextStyle(fontSize: 16)),
+      content: SizedBox(
+        width: 720,
+        height: size.height * 0.7,
+        child: CashMovementsTab(
+          api: api,
+          from: from,
+          to: to,
+          boxes: boxes,
+          readOnly: readOnly,
+          onChanged: onChanged,
+          onNewMovement: onNewMovement,
+          initialKind: initialKind,
+          initialAccount: box.key,
+          lockAccount: true,
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
     );
   }
 }

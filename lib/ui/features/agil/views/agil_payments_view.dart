@@ -415,14 +415,17 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
       {required String account, required String label}) {
     final expenses = Map<String, dynamic>.from(m['expenses'] ?? {});
     final count = _n(expenses['count']).toInt();
+    final movedIn = Map<String, dynamic>.from(m['movedIn'] ?? {});
+    final movedOut = Map<String, dynamic>.from(m['movedOut'] ?? {});
+    final movedInCount = _n(movedIn['count']).toInt();
+    final movedOutCount = _n(movedOut['count']).toInt();
     final balance = _n(m['balance']);
     return [
       const Divider(height: 20),
-      _line('Gastos', _n(expenses['amount']), count, AppTheme.dangerRose),
-      if (_n(Map<String, dynamic>.from(m['movedIn'] ?? {})['count']) > 0)
-        _line('Traslados recibidos', _n(Map<String, dynamic>.from(m['movedIn'])['amount']), _n(Map<String, dynamic>.from(m['movedIn'])['count']).toInt(), Colors.teal),
-      if (_n(Map<String, dynamic>.from(m['movedOut'] ?? {})['count']) > 0)
-        _line('Traslados enviados', _n(Map<String, dynamic>.from(m['movedOut'])['amount']), _n(Map<String, dynamic>.from(m['movedOut'])['count']).toInt(), Colors.blueGrey),
+      _line('Gastos (−)', _n(expenses['amount']), count, AppTheme.dangerRose),
+      // Traslados entre cajas: lo que LLEGÓ a esta caja (suma) y lo que SALIÓ de ella (resta)
+      _line('Llegó por traslado (+)', _n(movedIn['amount']), movedInCount, AppTheme.secondaryEmerald),
+      _line('Salió por traslado (−)', _n(movedOut['amount']), movedOutCount, AppTheme.dangerRose),
       Container(
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -454,12 +457,21 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Registrar gasto'),
             ),
-          if (count > 0)
+          TextButton.icon(
+            onPressed: () => _openExpensesList(account: account, label: label, kind: 'gastos'),
+            icon: const Icon(Icons.list_alt, size: 18),
+            label: Text('Ver gastos ($count)'),
+          ),
+          TextButton.icon(
+            onPressed: () => _openExpensesList(account: account, label: label, kind: 'traslados'),
+            icon: const Icon(Icons.swap_horiz, size: 18),
+            label: Text('Ver traslados (${movedInCount + movedOutCount})'),
+          ),
+          if (!widget.readOnly && !widget.advisorMode)
             TextButton.icon(
-              onPressed: () =>
-                  _openExpensesList(account: account, label: label),
-              icon: const Icon(Icons.list_alt, size: 18),
-              label: Text('Ver gastos ($count)'),
+              onPressed: () => _openMovementDialog(from: account),
+              icon: const Icon(Icons.north_east, size: 18),
+              label: const Text('Trasladar desde aquí'),
             ),
         ]),
       ),
@@ -481,16 +493,24 @@ class _AgilPaymentsViewState extends State<AgilPaymentsView>
     }
   }
 
-  Future<void> _openExpensesList(
-      {required String account, required String label}) async {
-    final changed = await showDialog<bool>(
-        context: context,
-        builder: (_) => ExpensesListDialog(
-            api: _api,
-            account: account,
-            label: label,
-            allowVoid: !widget.advisorMode && !widget.readOnly));
-    if (changed == true) await _load();
+  Future<void> _openExpensesList({required String account, required String label, String kind = 'gastos'}) async {
+    final boxes = _boxes();
+    final box = boxes.where((b) => b.key == account).firstOrNull ?? CashBox(account, label, 0);
+    await showDialog(
+      context: context,
+      builder: (_) => BoxMovementsDialog(
+        api: _api,
+        box: box,
+        initialKind: kind,
+        from: _from == null ? '' : _day.format(_from!),
+        to: _to == null ? '' : _day.format(_to!),
+        boxes: boxes,
+        readOnly: widget.readOnly || widget.advisorMode,
+        onChanged: _load,
+        onNewMovement: () => _openMovementDialog(from: account),
+      ),
+    );
+    await _load();
   }
 
   /// Las cajas para trasladar: el efectivo y cada cuenta, con su saldo («debe haber»).
