@@ -13,6 +13,8 @@ Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya c
 - Conexión lenta o con pocos datos: las cargas de sorteos, asesores, ganadores y boletas se reintentan solas (1 s y 3 s de espera) y, si no hay respuesta, conservan lo que ya se veía en vez de mostrar sorteos o asesores de ejemplo; si la lista de boletas no pudo cargar aparece el aviso «Conexión lenta o sin internet» con el botón Reintentar, y se vuelve a cargar sola cuando regresa la conexión.
 - Menos consumo: la consulta de cambios de boletas (cada 3 s) se espacia hasta 30 s cuando falla y se pausa con la pestaña oculta.
 - Rendimiento: filtrar y ordenar miles de boletas se hace solo cuando cambia algo que influye (antes se repetía en cada repintado).
+- Recarga (F5) lenta: la web registraba dos service workers a la vez (el obsoleto de Flutter y el propio de la app) que se reemplazaban entre sí y recargaban la página; ahora solo queda el de la app. Además, al recargar ya no se descarga completo main.dart.js (1,6 MB): se revalida con el servidor y, si no cambió, se usa el guardado.
+- Service worker: ya no intenta guardar peticiones de extensiones del navegador (error «Request scheme 'chrome-extension' is unsupported» en la consola).
 - Ingreso: se suelta el foco de los campos antes de entrar, para evitar el error «Null check operator used on a null value» que el motor web mostraba en la consola.
 
 ## [3.4.26] - 2026-11-12

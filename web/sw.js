@@ -1,5 +1,5 @@
 // Rifa Master PWA Service Worker v1.0.0
-const CACHE_NAME = 'rifamaster-pwa-v2';
+const CACHE_NAME = 'rifamaster-pwa-v3';
 const PRECACHE_ASSETS = [
   './',
   'index.html',
@@ -44,10 +44,13 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Skip non-GET requests
-  if (req.method !== 'GET') {
+  // Solo http(s) y GET: las peticiones de extensiones del navegador (chrome-extension://) no se pueden guardar en caché
+  if (req.method !== 'GET' || !url.protocol.startsWith('http')) {
     return;
   }
+
+  // Guarda en caché sin dejar promesas con error sin atender
+  const store = (request, response) => caches.open(CACHE_NAME).then((cache) => cache.put(request, response)).catch(() => {});
 
   // Bypass API endpoints, APK downloads, and socket connections
   if (
@@ -66,7 +69,7 @@ self.addEventListener('fetch', (event) => {
         .then((response) => {
           if (response && response.status === 200) {
             const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, responseClone));
+            store(req, responseClone);
           }
           return response;
         })
@@ -80,11 +83,13 @@ self.addEventListener('fetch', (event) => {
   // Código y datos de versión (JS, JSON, HTML): primero la red, así una versión nueva se ve de inmediato
   if (/\.(js|json|html)$/.test(url.pathname)) {
     event.respondWith(
-      fetch(req, { cache: 'no-store' })
+      // 'no-cache' = revalidar con el servidor (ETag): si no cambió responde 304 sin bajar el archivo (main.dart.js pesa ~1,6 MB);
+      // antes 'no-store' lo descargaba completo en cada recarga, lo que es muy lento con pocos datos
+      fetch(req, { cache: 'no-cache' })
         .then((response) => {
           if (response && response.status === 200) {
             const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, responseClone));
+            store(req, responseClone);
           }
           return response;
         })
@@ -100,7 +105,7 @@ self.addEventListener('fetch', (event) => {
         // Fetch in background to revalidate cache
         fetch(req).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, networkResponse));
+            store(req, networkResponse);
           }
         }).catch(() => {});
         return cachedResponse;
@@ -109,7 +114,7 @@ self.addEventListener('fetch', (event) => {
       return fetch(req).then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, responseClone));
+          store(req, responseClone);
         }
         return networkResponse;
       }).catch(() => {
