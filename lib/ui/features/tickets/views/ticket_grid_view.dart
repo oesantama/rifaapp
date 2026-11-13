@@ -45,16 +45,27 @@ class _TicketGridViewState extends State<TicketGridView> {
     _startLiveSync();
   }
 
+  // Segundos entre consultas de cambios: 3 normalmente; con mala conexión se espacian hasta 30 y se pausan con la pestaña oculta
+  int _syncSeconds = 3;
+  // Resultado del último filtrado (ver build)
+  int? _cacheKey;
+  List<Ticket>? _cacheDisplay;
+  Map<String, int>? _cacheCounts;
+
   void _startLiveSync() {
     _liveSyncTimer?.cancel();
-    _liveSyncTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _liveSyncTimer = Timer(Duration(seconds: _syncSeconds), () async {
       if (!mounted) return;
+      final state = WidgetsBinding.instance.lifecycleState;
+      final visible = state == null || state == AppLifecycleState.resumed;
       final raffleVM = Provider.of<RaffleViewModel>(context, listen: false);
       final currentRaffle = raffleVM.selectedRaffle;
-      if (currentRaffle != null) {
+      if (visible && currentRaffle != null) {
         final ticketVM = Provider.of<TicketViewModel>(context, listen: false);
-        ticketVM.syncIfChanged(raffleId: currentRaffle.id);
+        final ok = await ticketVM.syncIfChanged(raffleId: currentRaffle.id);
+        _syncSeconds = ok ? 3 : (_syncSeconds * 2).clamp(3, 30);
       }
+      if (mounted) _startLiveSync();
     });
   }
 
@@ -95,52 +106,86 @@ class _TicketGridViewState extends State<TicketGridView> {
       builder: (context, ticketVM, raffleVM, advisorVM, _) {
         final currentRaffle = raffleVM.selectedRaffle;
 
-        // Auto-fix if tickets in memory belong to another raffle (e.g. loaded without raffleId in another view)
-        if (currentRaffle != null &&
-            !ticketVM.isLoading &&
-            ticketVM.tickets.isNotEmpty &&
-            ticketVM.tickets.any((t) => t.raffleId != currentRaffle.id)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (context.mounted)
-              ticketVM.loadTickets(raffleId: currentRaffle.id);
-          });
-        }
+        // Filtrar y ordenar miles de boletas es lo más pesado de esta pantalla: solo se recalcula si cambió algo que influye
+        final adv = authVM.activeAdvisor;
+        final cacheKey = Object.hash(
+          ticketVM.ticketsVersion,
+          ticketVM.searchQuery,
+          ticketVM.selectedStatusFilter,
+          ticketVM.selectedAdvisorFilter,
+          currentRaffle?.id,
+          currentRaffle?.isIndependentBook,
+          authVM.isAsesor,
+          adv?.id,
+          adv?.canManageAllTickets,
+          adv?.mode,
+          adv?.assignedTicketRanges.join(','),
+        );
+        if (_cacheKey != cacheKey || _cacheDisplay == null || _cacheCounts == null) {
+          // Auto-fix if tickets in memory belong to another raffle (e.g. loaded without raffleId in another view)
+          if (currentRaffle != null &&
+              !ticketVM.isLoading &&
+              ticketVM.tickets.isNotEmpty &&
+              ticketVM.tickets.any((t) => t.raffleId != currentRaffle.id)) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted)
+                ticketVM.loadTickets(raffleId: currentRaffle.id);
+            });
+          }
 
-        List<Ticket> displayTickets = ticketVM.searchedTickets;
-        if (currentRaffle != null) {
-          displayTickets = displayTickets
-              .where((t) => t.raffleId == currentRaffle.id)
-              .toList();
-        }
+          var shown = ticketVM.searchedTickets;
+          if (currentRaffle != null) {
+            shown = shown.where((t) => t.raffleId == currentRaffle.id).toList();
+          }
 
-        // El ayudante del administrador (oficina/integral con permiso) ve las boletas de todos los asesores
-        if (authVM.isAsesor && authVM.activeAdvisor != null && authVM.activeAdvisor!.canManageAllTickets != true) {
-          final adv = authVM.activeAdvisor!;
-          displayTickets = displayTickets.where((t) {
-            if (t.status != 'DISPONIBLE') {
-              // Only see tickets sold by themselves!
-              return t.advisorId == adv.id ||
-                  t.advisorName.trim().toLowerCase() ==
-                      adv.name.trim().toLowerCase() ||
-                  (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
-            }
-            return adv.coversTicket(t,
-                independent: currentRaffle?.isIndependentBook ?? true);
-          }).toList();
-        }
+          // El ayudante del administrador (oficina/integral con permiso) ve las boletas de todos los asesores
+          if (authVM.isAsesor && adv != null && adv.canManageAllTickets != true) {
+            shown = shown.where((t) {
+              if (t.status != 'DISPONIBLE') {
+                // Only see tickets sold by themselves!
+                return t.advisorId == adv.id ||
+                    t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
+                    (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
+              }
+              return adv.coversTicket(t, independent: currentRaffle?.isIndependentBook ?? true);
+            }).toList();
+          }
 
-        // Counts per status reflect exactly what this user can see (before the status filter)
-        final statusCounts = TicketViewModel.countByStatus(displayTickets);
-        displayTickets = displayTickets
-            .where((t) =>
-                TicketViewModel.matchesStatus(t, ticketVM.selectedStatusFilter))
-            .toList()
-          ..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+          // Counts per status reflect exactly what this user can see (before the status filter)
+          _cacheCounts = TicketViewModel.countByStatus(shown);
+          _cacheDisplay = shown
+              .where((t) => TicketViewModel.matchesStatus(t, ticketVM.selectedStatusFilter))
+              .toList()
+            ..sort((a, b) => a.sortNumber.compareTo(b.sortNumber));
+          _cacheKey = cacheKey;
+        }
+        final displayTickets = _cacheDisplay!;
+        final statusCounts = _cacheCounts!;
 
         return Column(
           children: [
             const CurrentRaffleBanner(),
             const AdvisorNumbersBar(),
+            if (ticketVM.loadFailed)
+              Container(
+                width: double.infinity,
+                color: Colors.orange.shade100,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(children: [
+                  Icon(Icons.wifi_off_rounded, size: 18, color: Colors.orange.shade900),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Conexión lenta o sin internet: se muestran los últimos datos y se reintenta solo.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _isRefreshing ? null : () => _refreshTickets(ticketVM, currentRaffle?.id, showSummary: false),
+                    child: const Text('Reintentar'),
+                  ),
+                ]),
+              ),
             Container(
               padding: EdgeInsets.all(
                   MediaQuery.of(context).size.width < 600 ? 12 : 16),

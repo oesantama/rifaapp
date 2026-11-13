@@ -107,6 +107,11 @@ class _LoginViewState extends State<LoginView> {
     }
 
     if (success) {
+      // Se suelta el foco ANTES de que el formulario desaparezca: si no, el motor web recibe «mostrar teclado» sin
+      // campo activo y registra «Null check operator used on a null value» en la consola
+      _userFocus.unfocus();
+      _passwordFocus.unfocus();
+      FocusManager.instance.primaryFocus?.unfocus();
       // shouldSave: el navegador ofrece guardar la contraseña solo si la persona marcó "Recordar contraseña"
       TextInput.finishAutofillContext(shouldSave: _rememberMe);
       await _saveRemembered();

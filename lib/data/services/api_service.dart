@@ -119,6 +119,22 @@ class ApiService {
     return list;
   }
 
+  /// GET con reintentos ante fallos transitorios (sin internet, tiempo agotado, 502-504): espera 1 s y 3 s entre intentos.
+  /// Si al final falla LANZA el error; así las pantallas conservan lo que ya tenían en vez de mostrar datos de ejemplo.
+  Future<http.Response> _getWithRetry(Uri uri, {Duration timeout = const Duration(seconds: 20), int retries = 2}) async {
+    for (var attempt = 0;; attempt++) {
+      try {
+        final response = await authGet(uri).timeout(timeout);
+        if (response.statusCode >= 502 && response.statusCode <= 504 && attempt < retries) throw Exception('servidor ocupado');
+        return response;
+      } catch (e) {
+        debugPrint('⚠️ GET ${uri.path} falló (intento ${attempt + 1}): $e');
+        if (attempt >= retries) rethrow;
+        await Future.delayed(Duration(milliseconds: attempt == 0 ? 1000 : 3000));
+      }
+    }
+  }
+
   Future<List<Raffle>> getRaffles({String? advisorId, bool isAsesor = false}) async {
     if (!_useLocalFallback) {
       try {
@@ -126,13 +142,15 @@ class ApiService {
           if (isAsesor && advisorId != null) 'advisorId': advisorId,
           if (isAsesor) 'role': 'asesor',
         });
-        final response = await authGet(uri).timeout(const Duration(seconds: 15));
+        final response = await _getWithRetry(uri);
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Raffle.fromJson(json)).toList();
         }
+        throw ApiException.fromResponse(response);
       } catch (e) {
         debugPrint('⚠️ Error/Timeout obteniendo sorteos de API: $e');
+        rethrow;
       }
     }
 
@@ -460,20 +478,12 @@ class ApiService {
         });
         // Un reintento ante fallos transitorios. Si aun así falla se LANZA el error: antes se devolvía la lista local
         // (casi vacía: solo la última boleta consultada) y la pantalla perdía todos los números hasta recargar (F5).
-        for (var attempt = 0;; attempt++) {
-          try {
-            final response = await authGet(uri).timeout(const Duration(seconds: 25));
-            if (response.statusCode == 200) {
-              List data = jsonDecode(response.body);
-              return data.map((json) => Ticket.fromJson(json)).toList();
-            }
-            throw Exception('Error ${response.statusCode} obteniendo boletas');
-          } catch (e) {
-            debugPrint('⚠️ Error/Timeout obteniendo boletas de API (intento ${attempt + 1}): $e');
-            if (attempt >= 1) rethrow;
-            await Future.delayed(const Duration(milliseconds: 600));
-          }
+        final response = await _getWithRetry(uri, timeout: const Duration(seconds: 40));
+        if (response.statusCode == 200) {
+          List data = jsonDecode(response.body);
+          return data.map((json) => Ticket.fromJson(json)).toList();
         }
+        throw Exception('Error ${response.statusCode} obteniendo boletas');
       } catch (e) {
         rethrow;
       }
@@ -627,13 +637,15 @@ class ApiService {
   Future<List<Advisor>> getAdvisors() async {
     if (!_useLocalFallback) {
       try {
-        final response = await authGet(Uri.parse('$baseUrl/advisors')).timeout(const Duration(seconds: 15));
+        final response = await _getWithRetry(Uri.parse('$baseUrl/advisors'));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => Advisor.fromJson(json)).toList();
         }
+        throw ApiException.fromResponse(response);
       } catch (e) {
         debugPrint('⚠️ Error/Timeout obteniendo asesores de API: $e');
+        rethrow;
       }
     }
     return _localAdvisors;
@@ -954,13 +966,15 @@ class ApiService {
   Future<List<WinnerRecord>> getWinners() async {
     if (!_useLocalFallback) {
       try {
-        final response = await authGet(Uri.parse('$baseUrl/winners')).timeout(const Duration(seconds: 15));
+        final response = await _getWithRetry(Uri.parse('$baseUrl/winners'));
         if (response.statusCode == 200) {
           List data = jsonDecode(response.body);
           return data.map((json) => WinnerRecord.fromJson(json)).toList();
         }
+        throw ApiException.fromResponse(response);
       } catch (e) {
         debugPrint('⚠️ Error/Timeout obteniendo ganadores de API: $e');
+        rethrow;
       }
     }
     return _localWinners;

@@ -12,6 +12,9 @@ class TicketViewModel extends ChangeNotifier {
 
   List<Ticket> _tickets = [];
   List<Ticket> get tickets => _tickets;
+  // Sube cada vez que cambia la lista de boletas: las pantallas lo usan para no recalcular filtros y orden en cada repintado
+  int _ticketsVersion = 0;
+  int get ticketsVersion => _ticketsVersion;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -49,6 +52,7 @@ class TicketViewModel extends ChangeNotifier {
       final fresh = await _repository.fetchTickets(raffleId: raffleId);
       if (seq != _loadSeq) return;
       _tickets = fresh;
+      _ticketsVersion++;
       _loadFailed = false;
       if (raffleId != null && raffleId.isNotEmpty) {
         _currentRevision = await _repository.getRaffleRevision(raffleId);
@@ -67,13 +71,19 @@ class TicketViewModel extends ChangeNotifier {
   /// Silently checks if the server revision has changed.
   /// If changed, reloads tickets in the background without triggering _isLoading
   /// (avoiding full-screen spinner, jitter, or resetting user view).
-  Future<void> syncIfChanged({required String raffleId}) async {
-    if (_isLoading || _isBackgroundSyncing || raffleId.isEmpty) return;
+  /// Devuelve false si no pudo consultar al servidor (sin internet o conexión lenta), para que quien llama espacie las consultas.
+  Future<bool> syncIfChanged({required String raffleId}) async {
+    if (_isLoading || _isBackgroundSyncing || raffleId.isEmpty) return true;
     try {
       final remoteRev = await _repository.getRaffleRevision(raffleId);
+      // La carga anterior falló (sin internet o conexión lenta) y ya hay respuesta del servidor: se vuelve a cargar sola
+      if (_loadFailed) {
+        await loadTickets(raffleId: raffleId);
+        return !_loadFailed;
+      }
       if (_currentRevision == 0) {
         _currentRevision = remoteRev;
-        return;
+        return true;
       }
       if (remoteRev > _currentRevision) {
         _isBackgroundSyncing = true;
@@ -83,15 +93,18 @@ class TicketViewModel extends ChangeNotifier {
         final freshTickets = await _repository.fetchTickets(raffleId: raffleId);
         if (seq != _loadSeq || _isLoading) {
           _isBackgroundSyncing = false;
-          return;
+          return true;
         }
         _tickets = freshTickets;
+        _ticketsVersion++;
         _currentRevision = remoteRev;
         _isBackgroundSyncing = false;
         notifyListeners();
       }
+      return true;
     } catch (e) {
       _isBackgroundSyncing = false;
+      return false;
     }
   }
 
@@ -298,6 +311,7 @@ class TicketViewModel extends ChangeNotifier {
   /// Drops data from a previous session so another user never sees it.
   void reset() {
     _tickets = [];
+    _ticketsVersion++;
     _searchQuery = '';
     _selectedStatusFilter = 'TODOS';
     _selectedAdvisorFilter = null;

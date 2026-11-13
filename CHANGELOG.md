@@ -8,6 +8,13 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.27] - 2026-11-13
+
+- Conexión lenta o con pocos datos: las cargas de sorteos, asesores, ganadores y boletas se reintentan solas (1 s y 3 s de espera) y, si no hay respuesta, conservan lo que ya se veía en vez de mostrar sorteos o asesores de ejemplo; si la lista de boletas no pudo cargar aparece el aviso «Conexión lenta o sin internet» con el botón Reintentar, y se vuelve a cargar sola cuando regresa la conexión.
+- Menos consumo: la consulta de cambios de boletas (cada 3 s) se espacia hasta 30 s cuando falla y se pausa con la pestaña oculta.
+- Rendimiento: filtrar y ordenar miles de boletas se hace solo cuando cambia algo que influye (antes se repetía en cada repintado).
+- Ingreso: se suelta el foco de los campos antes de entrar, para evitar el error «Null check operator used on a null value» que el motor web mostraba en la consola.
+
 ## [3.4.26] - 2026-11-12
 
 - Fotos de soportes: antes de subirlas se reducen sin perder legibilidad: se parte de calidad alta y solo si la foto pesa más de ≈1.1 MB se baja la calidad poco a poco (hasta 70) y, si aun así pesa, el tamaño (sin bajar de 1000 px de lado). Aplica a soportes de pagos, entregas de efectivo y gastos.
