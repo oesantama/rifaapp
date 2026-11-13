@@ -593,6 +593,8 @@ $advisorHeader
     if (raw.isEmpty) return const SizedBox.shrink();
     final q = foldText(raw);
     final me = authVM.isAsesor ? authVM.activeAdvisor : null;
+    // El aviso es solo para el asesor: el administrador y quien ve todas las boletas no lo necesitan
+    if (me == null || me.canManageAllTickets) return const SizedBox.shrink();
     final sold = raffleTickets
         .where((t) => t.status != 'DISPONIBLE' && t.numbers.any((n) => n == q || (q.length >= 3 && n.contains(q))))
         .take(4)
@@ -606,9 +608,6 @@ $advisorHeader
     String stateOf(Ticket t) => AppTheme.getStatusLabel(t.status).toLowerCase();
     String line(Ticket t) {
       final number = t.numbers.firstWhere((n) => n == q || n.contains(q), orElse: () => q);
-      if (me == null) {
-        return 'El N° $number ya está vendido (${stateOf(t)})${t.advisorName.trim().isNotEmpty ? ' por ${t.advisorName.trim()}' : ''}.';
-      }
       return mine(t)
           ? 'El N° $number ya lo vendió usted (${stateOf(t)}).'
           : 'El N° $number ya fue vendido por otro asesor: no está disponible.';

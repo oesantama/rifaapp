@@ -8,6 +8,10 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.34] - 2026-11-13
+
+- Aviso de número ya vendido por otro asesor: ahora también aparece en Mis Boletas al buscar un número (antes solo en Números disponibles) y es solo para el asesor; el administrador y quien ve todas las boletas ya no lo ven.
+
 ## [3.4.33] - 2026-11-13
 
 - WhatsApp del asesor: cada asesor puede vincular SU WhatsApp (toca su nombre arriba a la derecha → «Mi WhatsApp para mis clientes»: QR o código de 8 dígitos). Ese número solo envía avisos: el bot NO contesta los mensajes que lleguen a ese WhatsApp personal. En la lista de asesores se ve quién lo tiene vinculado.

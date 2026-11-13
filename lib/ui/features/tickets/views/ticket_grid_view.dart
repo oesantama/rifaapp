@@ -51,6 +51,8 @@ class _TicketGridViewState extends State<TicketGridView> {
   int? _cacheKey;
   List<Ticket>? _cacheDisplay;
   Map<String, int>? _cacheCounts;
+  // Números buscados que ya vendió otro asesor (solo se calcula para un asesor; ver build)
+  List<String> _cacheSoldByOthers = const [];
 
   void _startLiveSync() {
     _liveSyncTimer?.cancel();
@@ -139,7 +141,21 @@ class _TicketGridViewState extends State<TicketGridView> {
           }
 
           // El ayudante del administrador (oficina/integral con permiso) ve las boletas de todos los asesores
+          _cacheSoldByOthers = const [];
           if (authVM.isAsesor && adv != null && adv.canManageAllTickets != true) {
+            bool isMine(Ticket t) =>
+                t.advisorId == adv.id ||
+                t.advisorName.trim().toLowerCase() == adv.name.trim().toLowerCase() ||
+                (adv.code.isNotEmpty && t.advisorName.contains(adv.code));
+            // Si busca un número y ya lo vendió OTRO asesor, solo a este asesor se le avisa (el administrador y quien ve todo no lo necesitan)
+            final q = ticketVM.searchQuery.trim();
+            if (RegExp(r'^\d+$').hasMatch(q)) {
+              _cacheSoldByOthers = shown
+                  .where((t) => t.status != 'DISPONIBLE' && !isMine(t))
+                  .expand((t) => t.numbers.where((n) => n == q || (q.length >= 3 && n.contains(q))))
+                  .take(4)
+                  .toList();
+            }
             shown = shown.where((t) {
               if (t.status != 'DISPONIBLE') {
                 // Only see tickets sold by themselves!
@@ -452,6 +468,24 @@ class _TicketGridViewState extends State<TicketGridView> {
               ),
             ),
             const Divider(height: 1),
+            if (_cacheSoldByOthers.isNotEmpty)
+              Container(
+                width: double.infinity,
+                color: Colors.orange.withValues(alpha: 0.14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(children: [
+                  Icon(Icons.info_outline, size: 18, color: Colors.orange.shade800),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _cacheSoldByOthers.length == 1
+                          ? 'El N° ${_cacheSoldByOthers.first} ya fue vendido por otro asesor: no está disponible.'
+                          : 'Los N° ${_cacheSoldByOthers.join(', ')} ya fueron vendidos por otro asesor: no están disponibles.',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.orange.shade900),
+                    ),
+                  ),
+                ]),
+              ),
             Expanded(
               child: ticketVM.isLoading
                   ? const Center(child: CircularProgressIndicator())
