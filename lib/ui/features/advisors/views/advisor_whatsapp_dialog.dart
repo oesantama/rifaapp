@@ -3,7 +3,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:rifaapp/data/services/api_service.dart';
+import 'package:provider/provider.dart';
 import 'package:rifaapp/ui/core/theme.dart';
+import 'package:rifaapp/ui/features/auth/view_models/auth_view_model.dart';
 
 /// El asesor vincula SU WhatsApp (QR o código de 8 dígitos). Con él el sistema envía a sus clientes los recordatorios del sorteo
 /// semanal y el resultado. Ese WhatsApp solo envía: el bot no contesta los mensajes que le lleguen.
@@ -201,6 +203,47 @@ class _AdvisorWhatsAppDialogState extends State<AdvisorWhatsAppDialog> {
         ),
       ),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar'))],
+    );
+  }
+}
+
+/// Abre el diálogo y, al cerrarlo, vuelve a leer al asesor para que el aviso desaparezca si ya quedó vinculado.
+Future<void> openAdvisorWhatsApp(BuildContext context) async {
+  final auth = context.read<AuthViewModel>();
+  await showDialog(context: context, builder: (_) => const AdvisorWhatsAppDialog());
+  await auth.refreshActiveAdvisor();
+}
+
+/// Aviso en el Dashboard del asesor que aún no vinculó su WhatsApp.
+class AdvisorWhatsAppPrompt extends StatelessWidget {
+  const AdvisorWhatsAppPrompt({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      color: const Color(0xFF128C7E).withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Color(0xFF128C7E), width: 0.8)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          const Icon(Icons.chat, color: Color(0xFF128C7E), size: 28),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Vincula tu WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 2),
+              Text('Para que tus clientes reciban desde tu número el recordatorio del sorteo semanal y el resultado.', style: TextStyle(fontSize: 12.5)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF128C7E)),
+            onPressed: () => openAdvisorWhatsApp(context),
+            child: const Text('Vincular'),
+          ),
+        ]),
+      ),
     );
   }
 }

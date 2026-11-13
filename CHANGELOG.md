@@ -12,6 +12,8 @@ Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya c
 
 - Aviso de número ya vendido por otro asesor: ahora también aparece en Mis Boletas al buscar un número (antes solo en Números disponibles) y es solo para el asesor; el administrador y quien ve todas las boletas ya no lo ven.
 
+- Asesor: vincular su WhatsApp ahora es más fácil de encontrar: ícono de WhatsApp en la barra superior (verde si ya está vinculado) y una tarjeta «Vincula tu WhatsApp» en su Dashboard mientras no lo haya hecho (además de la opción en el menú de su nombre).
+
 ## [3.4.33] - 2026-11-13
 
 - WhatsApp del asesor: cada asesor puede vincular SU WhatsApp (toca su nombre arriba a la derecha → «Mi WhatsApp para mis clientes»: QR o código de 8 dígitos). Ese número solo envía avisos: el bot NO contesta los mensajes que lleguen a ese WhatsApp personal. En la lista de asesores se ve quién lo tiene vinculado.

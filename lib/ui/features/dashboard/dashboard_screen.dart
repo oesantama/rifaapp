@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/features/advisors/views/advisor_whatsapp_dialog.dart';
 import 'package:rifaapp/ui/features/raffles/views/raffle_close_card.dart';
 import 'package:rifaapp/ui/features/raffles/views/sales_lock_card.dart';
 import 'package:rifaapp/ui/features/monetization/my_plan_card.dart';
@@ -131,6 +132,8 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Asesor sin WhatsApp vinculado: invitación a vincularlo (recordatorios y resultados de sorteos a sus clientes)
+                if (authVM.isAsesor && authVM.activeAdvisor != null && authVM.activeAdvisor!.whatsappLinked != true) const AdvisorWhatsAppPrompt(),
                 // Company admin: plan (Gratis / PRO), its end date and payments
                 if (authVM.isAdmin && !authVM.isSuperAdmin) const MyPlanCard(),
                 // After the draw: close the raffle (deleted 7 days later) and download its information

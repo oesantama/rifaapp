@@ -559,9 +559,7 @@ class _MainShellScreenState extends State<MainShellScreen>
                             name: authVM.currentUserName,
                             isSuperAdmin: authVM.isSuperAdmin,
                             onWhatsApp: authVM.isAsesor
-                                ? () => showDialog(
-                                    context: context,
-                                    builder: (_) => const AdvisorWhatsAppDialog())
+                                ? () => openAdvisorWhatsApp(context)
                                 : null,
                             onProfile: () {
                               if (authVM.isAdmin || authVM.isSuperAdmin) {
@@ -635,6 +633,19 @@ class _MainShellScreenState extends State<MainShellScreen>
                         const SizedBox(width: 2),
                         // Avisos: sorteo cerca con boletas sin completar y efectivo sin legalizar (solo administradores y asesores)
                         if (!authVM.isSuperAdmin) const AlertsBell(),
+                      // Asesor: vincular su WhatsApp para avisar a sus clientes de los sorteos (verde = ya vinculado)
+                      if (authVM.isAsesor)
+                        IconButton(
+                          icon: Icon(Icons.chat,
+                              size: 20,
+                              color: authVM.activeAdvisor?.whatsappLinked == true
+                                  ? const Color(0xFF25D366)
+                                  : Colors.white70),
+                          tooltip: authVM.activeAdvisor?.whatsappLinked == true
+                              ? 'Mi WhatsApp vinculado'
+                              : 'Vincular mi WhatsApp para mis clientes',
+                          onPressed: () => openAdvisorWhatsApp(context),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.cleaning_services_rounded,
                               size: 20, color: Colors.amber),
