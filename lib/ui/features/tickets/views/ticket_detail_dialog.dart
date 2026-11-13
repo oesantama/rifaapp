@@ -1867,16 +1867,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                           final picked = await pickImageBase64(maxSide: 1600);
                                           if (picked != null) {
                                             if (mounted) setState(() => _uploadingSoporte = true);
-                                            final compressed = compressImageDataUri(picked, maxSide: 1600);
-                                            // Fotos que el navegador no pudo reducir (ej. HEIC o archivos enormes): se avisa antes de enviarlas
-                                            if (compressed.length > 20 * 1024 * 1024) {
-                                              if (mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                                    backgroundColor: Colors.red,
-                                                    content: Text('La imagen es demasiado pesada. Tome una captura de pantalla del comprobante o reduzca la foto.')));
-                                              }
-                                              return;
-                                            }
+                                            final compressed = prepareProofImage(picked, maxSide: 1600);
                                             setState(() {
                                               _soporteBase64 = compressed;
                                               _supportDuplicateConfirmed = false;
@@ -1886,7 +1877,7 @@ class _TicketDetailDialogState extends State<TicketDetailDialog> {
                                         } catch (e) {
                                           if (mounted) {
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(backgroundColor: Colors.red, content: Text('Error al seleccionar la imagen: $e')),
+                                              SnackBar(backgroundColor: Colors.red, content: Text(e is ImageTooHeavyException ? e.message : 'Error al seleccionar la imagen: $e')),
                                             );
                                           }
                                         } finally {

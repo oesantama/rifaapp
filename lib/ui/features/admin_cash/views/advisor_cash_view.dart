@@ -168,8 +168,14 @@ class _AdvisorCashViewState extends State<AdvisorCashView> {
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        final picked = await pickImageBase64(maxSide: 1600);
-                        if (picked != null) setD(() => proof = compressImageDataUri(picked, maxSide: 1600));
+                        try {
+                          final picked = await pickImageBase64(maxSide: 1600);
+                          if (picked != null) setD(() => proof = prepareProofImage(picked, maxSide: 1600));
+                        } on ImageTooHeavyException catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(backgroundColor: Colors.red, content: Text(e.message)));
+                          }
+                        }
                       },
                       icon: Icon(proof == null ? Icons.attach_file : Icons.check_circle,
                           color: proof == null ? null : AppTheme.secondaryEmerald),

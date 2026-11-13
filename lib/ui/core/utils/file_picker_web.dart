@@ -100,9 +100,25 @@ Future<String?> _readImageFile(html.File file, int maxSide) async {
       final scale = (maxSide / (w > h ? w : h)).clamp(0.0, 1.0);
       final cw = (w * scale).round();
       final ch = (h * scale).round();
-      final canvas = html.CanvasElement(width: cw, height: ch);
-      canvas.context2D.drawImageScaled(image, 0, 0, cw, ch);
-      final dataUrl = canvas.toDataUrl('image/jpeg', 0.85);
+      // Calidad alta de entrada (0.9); si pesa más de ≈1.1 MB se baja poco a poco la calidad y luego el tamaño
+      var cw2 = cw, ch2 = ch;
+      var quality = 0.9;
+      String encode() {
+        final canvas = html.CanvasElement(width: cw2, height: ch2);
+        canvas.context2D.drawImageScaled(image, 0, 0, cw2, ch2);
+        return canvas.toDataUrl('image/jpeg', quality);
+      }
+      var dataUrl = encode();
+      for (var i = 0; i < 8 && dataUrl.startsWith('data:image/jpeg') && dataUrl.length > 1500000; i++) {
+        if (quality > 0.72) {
+          quality -= 0.06;
+        } else {
+          cw2 = (cw2 * 0.88).round();
+          ch2 = (ch2 * 0.88).round();
+          if (cw2 < 700 || ch2 < 700) break;
+        }
+        dataUrl = encode();
+      }
       if (dataUrl.startsWith('data:image/jpeg')) return dataUrl;
     }
   } catch (_) {

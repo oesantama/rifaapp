@@ -1473,9 +1473,9 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
     try {
       final picked = await pickImageBase64(maxSide: 1600);
       if (picked != null && mounted)
-        setState(() => _image = compressImageDataUri(picked, maxSide: 1600));
+        setState(() => _image = prepareProofImage(picked, maxSide: 1600));
     } catch (e) {
-      if (mounted) setState(() => _error = 'No se pudo cargar la foto: $e');
+      if (mounted) setState(() => _error = e is ImageTooHeavyException ? e.message : 'No se pudo cargar la foto: $e');
     }
   }
 

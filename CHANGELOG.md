@@ -8,6 +8,11 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.26] - 2026-11-12
+
+- Fotos de soportes: antes de subirlas se reducen sin perder legibilidad: se parte de calidad alta y solo si la foto pesa más de ≈1.1 MB se baja la calidad poco a poco (hasta 70) y, si aun así pesa, el tamaño (sin bajar de 1000 px de lado). Aplica a soportes de pagos, entregas de efectivo y gastos.
+- Si la foto sigue pesando más de ≈6 MB después de reducirla, la app avisa «Bájele la calidad o el tamaño, o tome una captura de pantalla del comprobante» en lugar de intentar subirla.
+
 ## [3.4.25] - 2026-11-12
 
 - Soportes pesados: el servidor aceptaba como máximo 10 MB por petición y rechazaba los soportes grandes (40 rechazos en un día) con una página de error; ahora admite 25 MB y, si aun así es demasiado, responde con un aviso claro. La app también avisa antes de enviar una imagen demasiado pesada.
