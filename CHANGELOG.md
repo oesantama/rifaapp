@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.25] - 2026-11-12
+
+- Soportes pesados: el servidor aceptaba como máximo 10 MB por petición y rechazaba los soportes grandes (40 rechazos en un día) con una página de error; ahora admite 25 MB y, si aun así es demasiado, responde con un aviso claro. La app también avisa antes de enviar una imagen demasiado pesada.
+- Comprobantes: el número de operación que se parte en varias líneas (Bre-B: 35 dígitos en 3 líneas) se lee completo y la etiqueta partida («Número de» / «operación») se reconoce; antes se tomaba solo un fragmento.
+- Comprobantes: la fecha «12 De Noviembre De 2026» se reconoce con cualquier combinación de mayúsculas; el banco que viene bajo «Banco», «Para» o «Enviado a» se considera destino y ya no se toma como banco de origen.
+
 ## [3.4.24] - 2026-11-12
 
 - Ranking de asesores (pestaña Asesores y Proyección): se ordena por ventas de calle, con la opción de ordenarlo por oficina; siempre se muestran las ventas de calle y de oficina y el total vendido. En Proyección cada fila muestra además el valor de la otra zona y el total.

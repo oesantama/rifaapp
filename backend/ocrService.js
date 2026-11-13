@@ -73,7 +73,16 @@ const normRef = s => String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 const lookalike = s => normRef(s).replace(/O|Q|D/g, '0').replace(/[IL|]/g, '1').replace(/Z/g, '2').replace(/S/g, '5').replace(/B/g, '8');
 
 function extractReferences(text) {
-  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rawLines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  // Etiquetas que el comprobante parte en dos líneas ("Número de" / "operación"): se unen para reconocerlas
+  const lines = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    if (i + 1 < rawLines.length && /(?:n[uú]mero|nro\.?|n[°ºo]\.?|c[oó]digo|id)\s+de$/i.test(rawLines[i]) &&
+        /^(?:operaci[oó]n|aprobaci[oó]n|autorizaci[oó]n|transacci[oó]n|referencia|comprobante|confirmaci[oó]n|pago)\b/i.test(rawLines[i + 1])) {
+      lines.push(`${rawLines[i]} ${rawLines[i + 1]}`);
+      i++;
+    } else lines.push(rawLines[i]);
+  }
   const found = [];
   const add = (raw, score) => {
     const value = normRef(raw);
@@ -106,6 +115,16 @@ function extractReferences(text) {
     // Prioridad por etiqueta: «aprobación» y «código de autorización» son la referencia de pago; «transacción» u «operación» solo si no hay otra
     const strength = /aprob|apr[o0c]|autorizaci/i.test(label[0]) ? 6 : (/transacci|operaci|movimiento|seguimiento/i.test(label[0]) ? 0 : 3);
     // Un fragmento que está dentro de otro código de la misma línea ("O695949" dentro de "M2O695949") no es una referencia aparte
+    // Números largos que el comprobante parte en varias líneas (ej. Bre-B: número de operación de 35 dígitos en 3 líneas): se unen
+    if (got.length) {
+      const first = normRef(got[0]);
+      if (/^\d{10,}$/.test(first)) {
+        const tokenLine = tokens(after).length ? i : i + 1;
+        let joined = first;
+        for (let k = tokenLine + 1; k <= tokenLine + 4 && lines[k] && /^[\d \-]{4,}$/.test(lines[k]); k++) joined += normRef(lines[k]);
+        if (joined.length > first.length && joined.length <= 40) got = [joined, ...got.slice(1)];
+      }
+    }
     got = got.filter(a => !got.some(b => b !== a && normRef(b).length > normRef(a).length && normRef(b).includes(normRef(a))));
     got.forEach((tok, k) => add(tok, strength + 10 - k));
   });
@@ -131,7 +150,7 @@ function extractDate(text, now = new Date()) {
   };
   for (const m of t.matchAll(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/g)) push(m.index, m[1], m[2], m[3]);
   for (const m of t.matchAll(/(?<!\d)(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/g)) push(m.index, m[3], m[2], m[1]);
-  for (const m of t.matchAll(/(?<!\d)(\d{1,2})\s*(?:de\s+)?([A-Za-záéíóúÁÉÍÓÚ]{3,10})\.?,?\s*(?:de\s+)?(\d{4})/g)) { const mo = monthOf(m[2]); if (mo) push(m.index, m[3], mo, m[1]); }
+  for (const m of t.matchAll(/(?<!\d)(\d{1,2})\s*(?:de\s+)?([A-Za-záéíóúÁÉÍÓÚ]{3,10})\.?,?\s*(?:de\s+)?(\d{4})/gi)) { const mo = monthOf(m[2]); if (mo) push(m.index, m[3], mo, m[1]); }
   for (const m of t.matchAll(/([A-Za-z]{3,10})\.?\s+(\d{1,2}),?\s+(\d{4})/g)) { const mo = monthOf(m[1]); if (mo) push(m.index, m[3], mo, m[2]); }
   found.sort((a, b) => a.index - b.index);
   return found.length ? found[0].value : '';
@@ -183,13 +202,21 @@ function guessBank(text) {
   // Recargas, consignaciones y depósitos en corresponsal: el banco o billetera que aparece es el DESTINO; no hay banco de origen
   if (/recarga|corresponsal|consignaci[oó]n|dep[oó]sito/.test(t)) return '';
   const banks = [['nequi', 'Nequi'], ['daviplata', 'Daviplata'], ['bancolombia', 'Bancolombia'], ['davivienda', 'Davivienda'], ['bbva', 'BBVA'], ['banco de bogot', 'Banco de Bogotá'], ['occidente', 'Banco de Occidente'], ['agrario', 'Banco Agrario'], ['popular', 'Banco Popular'], ['scotiabank', 'Scotiabank Colpatria'], ['colpatria', 'Scotiabank Colpatria'], ['itau', 'Itaú'], ['av villas', 'AV Villas'], ['caja social', 'Banco Caja Social']];
-  // El banco de origen es el primero que aparece en el comprobante (el destino suele ir después)
-  let best = null;
-  for (const [needle, name] of banks) {
-    const at = t.indexOf(needle);
-    if (at >= 0 && (!best || at < best.at)) best = { at, name };
+  // El banco de origen es el primero que aparece en el comprobante, salvo el que viene bajo una etiqueta de destino
+  // ("Banco" / "Para" / "Enviado a" / "Destino"), que es el banco que recibe
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].toLowerCase();
+    const prev = (lines[i - 1] || '').toLowerCase();
+    if (/^(?:banco(?:\s+destino)?|banco\s+que\s+recibe|destino|para|enviado\s+a|beneficiario)\s*:?$/.test(prev) || /^banco\s+destino/.test(l)) continue;
+    let best = null;
+    for (const [needle, name] of banks) {
+      const at = l.indexOf(needle);
+      if (at >= 0 && (!best || at < best.at)) best = { at, name };
+    }
+    if (best) return best.name;
   }
-  return best ? best.name : '';
+  return '';
 }
 
 /**
@@ -249,6 +276,16 @@ function verifyReference(proof, typed) {
   // También vale si aparece en el texto del comprobante como una palabra completa (o como un número escrito en grupos,
   // ej. "1843 852 709"). Antes bastaba con que estuviera dentro del texto pegado, y fragmentos de la fecha o la hora
   // (ej. "2026 - 2:54") daban por buena una referencia falsa como 20262.
+  // Números partidos en varias líneas consecutivas de solo dígitos
+  const allLines = String(proof.text || '').split(/\r?\n/).map(l => l.trim());
+  for (let i = 0; i < allLines.length; i++) {
+    if (!/^[\d \-]{4,}$/.test(allLines[i])) continue;
+    let joined = normRef(allLines[i]);
+    for (let k = i + 1; k <= i + 4 && /^[\d \-]{4,}$/.test(allLines[k] || ''); k++) {
+      joined += normRef(allLines[k]);
+      if (lookalike(joined) === wanted) return { status: 'MATCH', read };
+    }
+  }
   for (const line of String(proof.text || '').split(/\r?\n/)) {
     const words = line.split(/[^0-9A-Za-z]+/).filter(Boolean);
     if (words.some(w => lookalike(w) === wanted)) return { status: 'MATCH', read };

@@ -189,8 +189,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 app.options('*', cors());
-app.use(express.json({ limit: '10mb' }));
+// Las fotos de soportes viajan en base64 dentro del JSON: 10 MB se quedaba corto con capturas pesadas (nginx admite 50 MB)
+app.use(express.json({ limit: '25mb' }));
 app.set('trust proxy', true);
+// Errores al leer el cuerpo de la petición: respuesta clara en JSON (antes salía una página de error genérica)
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.too.large' || err.name === 'PayloadTooLargeError')) {
+    return res.status(413).json({ error: 'La imagen es demasiado pesada. Tome una captura de pantalla del comprobante o reduzca la foto e intente de nuevo.', code: 'PAYLOAD_TOO_LARGE' });
+  }
+  if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'La solicitud no es válida.' });
+  next(err);
+});
 
 // Never send password hashes or credentials to clients
 app.use('/api', (req, res, next) => {
@@ -6158,7 +6167,7 @@ app.post('/api/transfers/read-proof', async (req, res) => {
   if (recent.length >= 10) return res.status(429).json({ error: 'Demasiadas lecturas seguidas. Espere un momento.' });
   readProofHits.set(who, [...recent, now]);
   const raw = req.body && req.body.imageBase64;
-  if (typeof raw !== 'string' || raw.length < 100 || raw.length > 12 * 1024 * 1024) return res.status(400).json({ error: 'Imagen no válida.' });
+  if (typeof raw !== 'string' || raw.length < 100 || raw.length > 24 * 1024 * 1024) return res.status(400).json({ error: 'La imagen es demasiado pesada. Tome una captura de pantalla del comprobante o reduzca la foto.' });
   const buffer = Buffer.from(raw.replace(/^data:image\/\w+;base64,/, ''), 'base64');
   if (buffer.length < 2000) return res.status(400).json({ error: 'La imagen es demasiado pequeña.' });
   const read = await ocrService.readProof(buffer);
