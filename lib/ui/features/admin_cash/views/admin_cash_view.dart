@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rifaapp/ui/core/utils/text_search.dart';
 import 'package:provider/provider.dart';
 import 'package:rifaapp/data/models/cash_delivery.dart';
 import 'package:rifaapp/data/models/ticket.dart';
@@ -298,6 +299,39 @@ class _AdminCashViewState extends State<AdminCashView> {
             ),
             _WithAdvisorsTab(
               payments: withAdvisors,
+              onReceiveMany: (chosen) async {
+                final total = chosen.fold(0.0, (sum, p) => sum + p.abono.amount);
+                final advisors = chosen.map((p) => p.abono.sellerName).toSet();
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: Text('Recibir ${chosen.length} pago(s) en mano'),
+                    content: Text(
+                      '¿Recibió ${cashCurrency.format(total)} en efectivo'
+                      '${advisors.length == 1 ? ' de ${advisors.first}' : ' de ${advisors.length} asesores'} '
+                      'por ${chosen.length} boleta(s)? Quedan conciliados en caja y ya no se podrán anular. '
+                      'Cada comprador recibe un aviso por WhatsApp.',
+                    ),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sí, recibido')),
+                    ],
+                  ),
+                );
+                if (ok != true || !mounted) return;
+                final (error, result) = await context.read<CashViewModel>().receiveCashBatch(
+                  [for (final p in chosen) {'ticketId': p.ticket.id, 'abonoId': p.abono.id}],
+                  raffleId: _raffleId,
+                );
+                final skipped = ((result?['skipped'] as List?) ?? []).length;
+                final received = (result?['received'] as num?)?.toInt() ?? 0;
+                await _after(
+                  error,
+                  skipped == 0
+                      ? 'Se recibieron $received pago(s) por ${cashCurrency.format((result?['amount'] as num?) ?? 0)}.'
+                      : 'Se recibieron $received pago(s); $skipped no se pudieron recibir (ya estaban recibidos o cambiaron). Revise la lista.',
+                );
+              },
               onReceive: (p) async {
                 final ok = await showDialog<bool>(
                   context: context,
@@ -606,47 +640,164 @@ class DeliveryCard extends StatelessWidget {
   }
 }
 
-class _WithAdvisorsTab extends StatelessWidget {
+class _WithAdvisorsTab extends StatefulWidget {
   final List<CashPayment> payments;
   final void Function(CashPayment) onReceive;
+  final Future<void> Function(List<CashPayment>) onReceiveMany;
 
-  const _WithAdvisorsTab({required this.payments, required this.onReceive});
+  const _WithAdvisorsTab({required this.payments, required this.onReceive, required this.onReceiveMany});
+
+  @override
+  State<_WithAdvisorsTab> createState() => _WithAdvisorsTabState();
+}
+
+class _WithAdvisorsTabState extends State<_WithAdvisorsTab> {
+  final Set<String> _selected = {}; // ticketId~abonoId
+  final _search = TextEditingController();
+  bool _busy = false;
+
+  String _key(CashPayment p) => '${p.ticket.id}~${p.abono.id}';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WithAdvisorsTab old) {
+    super.didUpdateWidget(old);
+    // Lo que ya no está pendiente (recibido) sale de la selección
+    final alive = widget.payments.map(_key).toSet();
+    _selected.removeWhere((k) => !alive.contains(k));
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (payments.isEmpty) return _empty('Ningún asesor tiene efectivo pendiente por entregar.');
+    if (widget.payments.isEmpty) return _empty('Ningún asesor tiene efectivo pendiente por entregar.');
+    final q = foldText(_search.text);
     final byAdvisor = <String, List<CashPayment>>{};
-    for (final p in payments) {
+    for (final p in widget.payments) {
+      if (q.isNotEmpty && !foldText(p.abono.sellerName).contains(q)) continue;
       byAdvisor.putIfAbsent(p.abono.sellerName, () => []).add(p);
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-      children: [
-        Text(
-          'Efectivo cobrado por los asesores que aún no han entregado. Ellos reportan la entrega desde "Mi Caja"; '
-          'si le entregan el dinero en mano, márquelo como recibido.',
-          style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
+    final visible = byAdvisor.values.expand((l) => l).toList();
+    final chosen = widget.payments.where((p) => _selected.contains(_key(p))).toList();
+    final chosenTotal = chosen.fold(0.0, (sum, p) => sum + p.abono.amount);
+    final allVisibleSelected = visible.isNotEmpty && visible.every((p) => _selected.contains(_key(p)));
+
+    Widget advisorCard(String name, List<CashPayment> list) {
+      final keys = list.map(_key).toList();
+      final count = keys.where(_selected.contains).length;
+      return Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ExpansionTile(
+          initiallyExpanded: byAdvisor.length == 1 || q.isNotEmpty,
+          leading: Checkbox(
+            tristate: true,
+            value: count == 0 ? false : (count == keys.length ? true : null),
+            onChanged: (v) => setState(() => v == true ? _selected.addAll(keys) : _selected.removeAll(keys)),
+          ),
+          title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+          subtitle: Text(
+              '${list.length} pago(s) • ${cashCurrency.format(list.fold(0.0, (s, p) => s + p.abono.amount))}'
+              '${count > 0 ? '  ·  $count seleccionado(s)' : ''}'),
+          children: [
+            for (final p in list)
+              CheckboxListTile(
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _selected.contains(_key(p)),
+                onChanged: (v) => setState(() => v == true ? _selected.add(_key(p)) : _selected.remove(_key(p))),
+                title: Text('Boleta N° ${p.ticket.displayNumber} • ${cashCurrency.format(p.abono.amount)}'),
+                subtitle: Text('${p.ticket.buyerName} • ${cashDate(p.abono.date)}'),
+                secondary: TextButton(onPressed: () => widget.onReceive(p), child: const Text('Recibido en mano')),
+              ),
+          ],
         ),
-        const SizedBox(height: 10),
-        for (final entry in byAdvisor.entries)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ExpansionTile(
-              initiallyExpanded: byAdvisor.length == 1,
-              title: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${entry.value.length} pago(s) • ${cashCurrency.format(entry.value.fold(0.0, (s, p) => s + p.abono.amount))}'),
-              children: [
-                for (final p in entry.value)
-                  ListTile(
-                    dense: true,
-                    title: Text('Boleta N° ${p.ticket.displayNumber} • ${cashCurrency.format(p.abono.amount)}'),
-                    subtitle: Text('${p.ticket.buyerName} • ${cashDate(p.abono.date)}'),
-                    trailing: TextButton(onPressed: () => onReceive(p), child: const Text('Recibido en mano')),
+      );
+    }
+
+    return Column(children: [
+      Expanded(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          children: [
+            Text(
+              'Efectivo cobrado por los asesores que aún no han entregado. Ellos reportan la entrega desde "Mi Caja"; '
+              'si le entregan el dinero en mano, márquelo como recibido: uno por uno o varios a la vez.',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
+            ),
+            const SizedBox(height: 10),
+            Wrap(spacing: 10, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              SizedBox(
+                width: 300,
+                child: TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    labelText: 'Buscar asesor que entrega',
+                    hintText: 'Escriba el nombre…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(_search.clear)),
                   ),
-              ],
+                ),
+              ),
+              TextButton.icon(
+                onPressed: visible.isEmpty
+                    ? null
+                    : () => setState(() {
+                          final keys = visible.map(_key);
+                          allVisibleSelected ? _selected.removeAll(keys) : _selected.addAll(keys);
+                        }),
+                icon: Icon(allVisibleSelected ? Icons.deselect : Icons.select_all, size: 18),
+                label: Text(allVisibleSelected ? 'Quitar selección' : 'Seleccionar todos (${visible.length})'),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            if (byAdvisor.isEmpty) Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('Ningún asesor coincide con la búsqueda.', style: TextStyle(color: Colors.grey[600])))),
+            for (final entry in byAdvisor.entries) advisorCard(entry.key, entry.value),
+          ],
+        ),
+      ),
+      // Barra de recibo (checkout): aparece al marcar pagos
+      if (chosen.isNotEmpty)
+        Material(
+          elevation: 8,
+          color: Theme.of(context).cardColor,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(children: [
+                Expanded(
+                  child: Text('${chosen.length} pago(s) seleccionado(s) • ${cashCurrency.format(chosenTotal)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                TextButton(onPressed: () => setState(_selected.clear), child: const Text('Limpiar')),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          setState(() => _busy = true);
+                          try {
+                            await widget.onReceiveMany(chosen);
+                          } finally {
+                            if (mounted) setState(() => _busy = false);
+                          }
+                        },
+                  icon: _busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.payments_outlined),
+                  label: const Text('Recibir seleccionados'),
+                ),
+              ]),
             ),
           ),
-      ],
-    );
+        ),
+    ]);
   }
 }

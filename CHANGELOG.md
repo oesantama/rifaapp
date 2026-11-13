@@ -8,6 +8,12 @@ Formato: [Versionamiento semántico](https://semver.org/lang/es/) — `MAYOR.MEN
 
 Para publicar una versión: `scripts/release.sh X.Y.Z` (con todo el trabajo ya confirmado en git).
 
+## [3.4.31] - 2026-11-13
+
+- Caja → En poder de asesores: se pueden marcar varios pagos (uno por uno, todos los de un asesor o todos los visibles) y recibirlos de una vez con el botón «Recibir seleccionados» (con confirmación del total). Cada comprador recibe un solo aviso por boleta; los pagos que ya no se pueden recibir se informan sin detener los demás.
+- Caja → En poder de asesores: buscador para filtrar por el nombre del asesor que entrega.
+- Números disponibles: al buscar un número que ya no está disponible se avisa. Al asesor se le dice «ya fue vendido por otro asesor» (o «ya lo vendió usted»), sin mostrarle datos del comprador ni quién lo vendió; al administrador, quién lo vendió y en qué estado.
+
 ## [3.4.30] - 2026-11-13
 
 - Aviso al comprador por WhatsApp: el mensaje ya no dice «PAGO TOTAL» a todo. Ahora identifica qué se confirmó: «Transferencia confirmada» o «Pago/Abono confirmado en caja», y si la boleta quedó pagada en TOTAL o es solo un ABONO, mostrando el valor confirmado, el total pagado de la boleta y el saldo pendiente. Además se corrigió que, al validar una transferencia, el comprador recibía dos mensajes (y uno de «pago total» incluso al rechazarla).

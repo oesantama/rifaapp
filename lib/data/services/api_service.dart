@@ -1280,6 +1280,17 @@ class ApiService {
     throw ApiException.fromResponse(response);
   }
 
+  /// Recibe varios pagos en efectivo de una vez. Devuelve { received, amount, skipped: [{ticketId, abonoId, error}] }.
+  Future<Map<String, dynamic>> receiveCashBatch(List<Map<String, String>> items) async {
+    final response = await authPost(
+      Uri.parse('$baseUrl/cash/abonos/receive-batch'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'items': items}),
+    ).timeout(const Duration(seconds: 60));
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body));
+    throw ApiException.fromResponse(response);
+  }
+
   Future<Map<String, dynamic>> distributeTransferSurplus(
     String ticketId,
     String abonoId, {

@@ -586,6 +586,51 @@ $advisorHeader
     );
   }
 
+  /// Si el número buscado ya no está disponible, se avisa: «ya fue vendido por otro asesor» (o «ya lo vendió usted»).
+  /// A un asesor nunca se le muestran datos del comprador ni quién lo vendió.
+  Widget _soldNumberNotice(List<Ticket> raffleTickets, AuthViewModel authVM) {
+    final raw = _searchFilter.trim();
+    if (raw.isEmpty) return const SizedBox.shrink();
+    final q = foldText(raw);
+    final me = authVM.isAsesor ? authVM.activeAdvisor : null;
+    final sold = raffleTickets
+        .where((t) => t.status != 'DISPONIBLE' && t.numbers.any((n) => n == q || (q.length >= 3 && n.contains(q))))
+        .take(4)
+        .toList();
+    if (sold.isEmpty) return const SizedBox.shrink();
+    bool mine(Ticket t) =>
+        me != null &&
+        (t.advisorId == me.id ||
+            t.advisorName.trim().toLowerCase() == me.name.trim().toLowerCase() ||
+            (me.code.isNotEmpty && t.advisorName.contains(me.code)));
+    String stateOf(Ticket t) => AppTheme.getStatusLabel(t.status).toLowerCase();
+    String line(Ticket t) {
+      final number = t.numbers.firstWhere((n) => n == q || n.contains(q), orElse: () => q);
+      if (me == null) {
+        return 'El N° $number ya está vendido (${stateOf(t)})${t.advisorName.trim().isNotEmpty ? ' por ${t.advisorName.trim()}' : ''}.';
+      }
+      return mine(t)
+          ? 'El N° $number ya lo vendió usted (${stateOf(t)}).'
+          : 'El N° $number ya fue vendido por otro asesor: no está disponible.';
+    }
+
+    return Container(
+      width: double.infinity,
+      color: Colors.orange.withValues(alpha: 0.14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.info_outline, size: 18, color: Colors.orange.shade800),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final t in sold)
+              Text(line(t), style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.orange.shade900)),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ticketVM = context.watch<TicketViewModel>();
@@ -667,6 +712,7 @@ $advisorHeader
               maxOpps: maxOpps,
             ),
             const Divider(height: 1),
+            _soldNumberNotice(raffleTickets, authVM),
 
             // MAIN PREVIEW & CANVAS AREA (SMOOTH MOUSE/TOUCH SCROLLING + ZOOM)
             Expanded(

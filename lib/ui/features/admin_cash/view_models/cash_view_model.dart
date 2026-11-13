@@ -49,6 +49,13 @@ class CashViewModel extends ChangeNotifier {
   Future<String?> receiveCash(String ticketId, String abonoId, {String? raffleId}) =>
       _run(() => _repository.receiveCashPayment(ticketId, abonoId), raffleId: raffleId);
 
+  /// Recibe varios pagos en efectivo de una vez. Devuelve (error, resultado): el resultado trae cuántos se recibieron y cuáles no.
+  Future<(String?, Map<String, dynamic>?)> receiveCashBatch(List<Map<String, String>> items, {String? raffleId}) async {
+    Map<String, dynamic>? result;
+    final error = await _run(() async => result = await _repository.receiveCashBatch(items), raffleId: raffleId);
+    return (error, result);
+  }
+
   Future<String?> reportDelivery(Map<String, dynamic> body, {String? raffleId}) =>
       _run(() => _repository.reportCashDelivery(body), raffleId: raffleId);
 

@@ -148,6 +148,8 @@ class RaffleRepository {
 
   Future<Ticket> receiveCashPayment(String ticketId, String abonoId) => _apiService.receiveCashPayment(ticketId, abonoId);
 
+  Future<Map<String, dynamic>> receiveCashBatch(List<Map<String, String>> items) => _apiService.receiveCashBatch(items);
+
   Future<Uint8List> fetchDriveFile(String fileId) => _apiService.fetchDriveFile(fileId);
 
   Future<String> requestAccountDeletion(String reason) => _apiService.requestAccountDeletion(reason);

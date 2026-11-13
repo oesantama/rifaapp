@@ -7077,31 +7077,70 @@ app.post('/api/cash/abonos/:ticketId/:abonoId/distribute', adminOnly, (req, res)
   });
 });
 
+/** Avisa al comprador (WhatsApp) que se confirmó su pago en efectivo recibido en mano. */
+function notifyCashReceived(ticket, raffle, abono, amountNow) {
+  if (!ticket.buyerPhone) return;
+  const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
+  const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
+  const confirmMsg = buyerPaymentConfirmationMessage({ ticket, raffle, kind: 'efectivo', amountNow, abono });
+  whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
+    console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
+  });
+}
+
+/** Valida y marca un pago en efectivo como recibido en mano. Devuelve el texto del error o null si quedó recibido. */
+function receiveCashAbono(req, ticket, abono, raffle) {
+  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return { status: 404, error: 'Pago no encontrado.' };
+  if (isTransferAbono(abono)) return { status: 400, error: 'Es una transferencia: valídela en lugar de recibirla.' };
+  if (abono.received) return { status: 400, error: 'Este pago ya fue recibido.' };
+  if (abono.deliveryId) return { status: 400, error: 'Este pago está en una entrega del asesor: confírmela o recházela.' };
+  abono.received = { by: actorName(req), at: new Date().toISOString(), method: 'efectivo', note: 'Recibido en mano por el administrador' };
+  recalcCashConfirmation(ticket);
+  return null;
+}
+
 // Admin received a cash payment in hand (without a delivery report from the advisor)
 app.post('/api/cash/abonos/:ticketId/:abonoId/receive', adminOnly, (req, res) => {
   const { ticket, abono } = findTicketAbono(req.params.ticketId, req.params.abonoId);
   const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
-  if (!abono || !raffle || !canAccessRaffle(req, raffle)) return res.status(404).json({ error: 'Pago no encontrado.' });
-  if (isTransferAbono(abono)) return res.status(400).json({ error: 'Es una transferencia: valídela en lugar de recibirla.' });
-  if (abono.received) return res.status(400).json({ error: 'Este pago ya fue recibido.' });
-  if (abono.deliveryId) return res.status(400).json({ error: 'Este pago está en una entrega del asesor: confírmela o recházela.' });
-  abono.received = { by: actorName(req), at: new Date().toISOString(), method: 'efectivo', note: 'Recibido en mano por el administrador' };
-  recalcCashConfirmation(ticket);
+  const failure = receiveCashAbono(req, ticket, abono, raffle);
+  if (failure) return res.status(failure.status).json({ error: failure.error });
   saveDB();
   notifyRaffleChanged(ticket.raffleId);
-
-  // Auto-notificar al comprador por WhatsApp si tiene teléfono
-  if (ticket.buyerPhone) {
-    const company = (db.companies || []).find(c => c.id === raffle?.companyId) || (db.companies || [])[0] || {};
-    const instanceName = whatsappService.getInstanceName({ role: 'admin', record: company });
-    const confirmMsg = buyerPaymentConfirmationMessage({ ticket, raffle, kind: 'efectivo', amountNow: abono.amount, abono });
-
-    whatsappService.sendTextMessage(instanceName, ticket.buyerPhone, confirmMsg, { origin: 'aviso-comprador' }).catch(err => {
-      console.warn('⚠️ No se pudo enviar WhatsApp tras confirmación de boleta:', err.message);
-    });
-  }
-
+  notifyCashReceived(ticket, raffle, abono, abono.amount);
   res.json(withVerification(ticket));
+});
+
+// Recibir varios pagos en efectivo de una vez (checkout): cada uno se valida por separado; los que no se pueden se informan.
+// Al comprador se le envía UN solo aviso por boleta (con la suma de lo que se recibió de esa boleta).
+app.post('/api/cash/abonos/receive-batch', adminOnly, (req, res) => {
+  const items = Array.isArray((req.body || {}).items) ? req.body.items.slice(0, 300) : [];
+  if (!items.length) return res.status(400).json({ error: 'Seleccione al menos un pago.' });
+  const received = [];
+  const skipped = [];
+  const perTicket = new Map(); // ticketId -> { ticket, raffle, total, last }
+  for (const item of items) {
+    const { ticket, abono } = findTicketAbono(String(item.ticketId || ''), String(item.abonoId || ''));
+    const raffle = ticket && (db.raffles || []).find(r => r.id === ticket.raffleId);
+    const failure = receiveCashAbono(req, ticket, abono, raffle);
+    if (failure) {
+      skipped.push({ ticketId: item.ticketId, abonoId: item.abonoId, error: failure.error });
+      continue;
+    }
+    received.push({ ticketId: ticket.id, abonoId: abono.id, amount: abono.amount });
+    const acc = perTicket.get(ticket.id) || { ticket, raffle, total: 0, last: abono };
+    acc.total += Number(abono.amount) || 0;
+    acc.last = abono;
+    perTicket.set(ticket.id, acc);
+  }
+  if (received.length) {
+    saveDB();
+    for (const { ticket, raffle, total, last } of perTicket.values()) {
+      notifyRaffleChanged(ticket.raffleId);
+      notifyCashReceived(ticket, raffle, last, total);
+    }
+  }
+  res.json({ received: received.length, amount: received.reduce((sum, r) => sum + (Number(r.amount) || 0), 0), skipped });
 });
 
 /** Delivery as returned to the app, with each payment's current state. */
