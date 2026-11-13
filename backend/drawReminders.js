@@ -163,8 +163,62 @@ ${lacking ? '💳 Puedes completar tu abono con tu asesor(a) o respondiendo este
       return false;
     }
   }
-  const pause = pauseFn || (() => sleep(4000 + Math.random() * 4000));
+  // ------------------------------------------------------------------ ritmo de envío (para que WhatsApp no bloquee los números)
+  // • Entre un mensaje y otro: 6-12 s; si son más de 30 por enviar, 10-20 s.
+  // • Cada 15 mensajes: un descanso largo de 1 a 2 minutos más.
+  // • Tope por número y por día (200): al llegar se detiene y sigue al día siguiente.
+  // • Si un número falla 3 veces seguidas (desconectado o con restricción) se deja de usar en esa vuelta.
+  // • Solo en horario de atención (resultados: 8 a.m. a 9 p.m.; recordatorios: 9 a.m. a 7 p.m., hora de Colombia).
+  const DAILY_CAP = Number(process.env.DRAW_WA_DAILY_CAP) || 200;
+  const REST_EVERY = Number(process.env.DRAW_WA_REST_EVERY) || 15;
+  const MAX_FAILS_IN_ROW = 3;
   const MAX_PER_TICK = 120;
+  const pause = pauseFn || sleep;
+
+  /** Espera (ms) antes del siguiente mensaje: depende de cuántos van en esta vuelta y de cuántos faltan en total. */
+  function delayMs(sentInRun, volume) {
+    const big = volume > 30;
+    let ms = (big ? 10000 : 6000) + Math.random() * (big ? 10000 : 6000);
+    if (sentInRun > 0 && sentInRun % REST_EVERY === 0) ms += 60000 + Math.random() * 60000;
+    return ms;
+  }
+  const counterKey = (instance, now) => `${colombiaDay(now)}|${instance}`;
+  function sentToday(instance, now = Date.now()) {
+    const db = getDb();
+    return (db.drawSendCounters && db.drawSendCounters[counterKey(instance, now)]) || 0;
+  }
+  function countSent(instance, now = Date.now()) {
+    const db = getDb();
+    db.drawSendCounters = db.drawSendCounters || {};
+    const k = counterKey(instance, now);
+    db.drawSendCounters[k] = (db.drawSendCounters[k] || 0) + 1;
+    // solo se guardan los contadores de los últimos días
+    for (const key of Object.keys(db.drawSendCounters)) if (key.slice(0, 10) < colombiaDay(now - 3 * DAY_MS)) delete db.drawSendCounters[key];
+  }
+  const colombiaHour = now => new Date(now - 5 * 3600 * 1000).getUTCHours();
+  const resultsWindowOpen = (now = Date.now()) => colombiaHour(now) >= 8 && colombiaHour(now) < 21;
+
+  /**
+   * Envía una lista respetando el ritmo y los topes. onResult(item, ok) guarda el resultado de cada uno.
+   * Devuelve cuántos se enviaron y por qué se detuvo (si faltaron).
+   */
+  async function sendPaced(items, origin, { budget = Infinity, onResult, now = () => Date.now() }) {
+    const fails = {};
+    let sent = 0;
+    let stopped = null;
+    for (const item of items) {
+      if (sent >= budget) { stopped = 'tope-de-la-vuelta'; break; }
+      if ((fails[item.instance] || 0) >= MAX_FAILS_IN_ROW) continue; // ese número está fallando: se reintenta en otra vuelta
+      if (sentToday(item.instance, now()) >= DAILY_CAP) { stopped = 'tope-diario'; continue; }
+      const ok = await sendOne(item, origin);
+      fails[item.instance] = ok ? 0 : (fails[item.instance] || 0) + 1;
+      if (ok) countSent(item.instance, now());
+      sent++;
+      onResult(item, ok);
+      await pause(delayMs(sent, items.length));
+    }
+    return { sent, stopped };
+  }
 
   const running = { reminders: false, results: false };
 
@@ -189,16 +243,17 @@ ${lacking ? '💳 Puedes completar tu abono con tu asesor(a) o respondiendo este
           const state = db.drawReminderState[stateKey] = db.drawReminderState[stateKey] || { sent: {}, tries: {} };
           const { messages } = buildReminders(db, company, raffle, prize, today);
           const pending = messages.filter(m => !state.sent[`${m.senderKey}|${m.phone}`] && (state.tries[`${m.senderKey}|${m.phone}`] || 0) < 3);
-          for (const m of pending) {
-            if (budget <= 0) break;
-            const k = `${m.senderKey}|${m.phone}`;
-            budget--;
-            const ok = await sendOne(m, 'recordatorio-sorteo');
-            if (ok) state.sent[k] = new Date().toISOString();
-            else state.tries[k] = (state.tries[k] || 0) + 1;
-            saveDB();
-            await pause();
-          }
+          const { sent } = await sendPaced(pending, 'recordatorio-sorteo', {
+            budget,
+            now: () => now,
+            onResult: (m, ok) => {
+              const k = `${m.senderKey}|${m.phone}`;
+              if (ok) state.sent[k] = new Date().toISOString();
+              else state.tries[k] = (state.tries[k] || 0) + 1;
+              saveDB();
+            }
+          });
+          budget -= sent;
         }
       }
     } finally {
@@ -276,6 +331,7 @@ ${lacking ? '💳 Puedes completar tu abono con tu asesor(a) o respondiendo este
 
   async function processResults() {
     if (running.results) return;
+    if (!resultsWindowOpen()) return; // de noche no se envía: queda pendiente y sigue a las 8 a.m.
     running.results = true;
     try {
       const db = getDb();
@@ -290,16 +346,23 @@ ${lacking ? '💳 Puedes completar tu abono con tu asesor(a) o respondiendo este
         const { messages, skipped } = buildResultMessages(db, company, raffle, record);
         ann.skipped = skipped;
         ann.total = messages.length;
-        for (const m of messages) {
-          const k = `${m.senderKey}|${m.phone}`;
-          if (track.sent[k] || (track.tries[k] || 0) >= 3) continue;
-          const ok = await sendOne(m, 'resultado-sorteo');
-          if (ok) track.sent[k] = new Date().toISOString();
-          else track.tries[k] = (track.tries[k] || 0) + 1;
-          ann.sentCount = Object.keys(track.sent).length;
-          ann.failedCount = Object.values(track.tries).filter(n => n >= 3).length;
+        const pendingMsgs = messages.filter(m => !track.sent[`${m.senderKey}|${m.phone}`] && (track.tries[`${m.senderKey}|${m.phone}`] || 0) < 3);
+        const { stopped } = await sendPaced(pendingMsgs, 'resultado-sorteo', {
+          onResult: (m, ok) => {
+            const k = `${m.senderKey}|${m.phone}`;
+            if (ok) track.sent[k] = new Date().toISOString();
+            else track.tries[k] = (track.tries[k] || 0) + 1;
+            ann.sentCount = Object.keys(track.sent).length;
+            ann.failedCount = Object.values(track.tries).filter(n => n >= 3).length;
+            saveDB();
+          }
+        });
+        // Si se detuvo por el tope diario o por un número que falla, quedan pendientes y siguen en la próxima vuelta (no se da por terminado)
+        const leftover = messages.filter(m => !track.sent[`${m.senderKey}|${m.phone}`] && (track.tries[`${m.senderKey}|${m.phone}`] || 0) < 3);
+        if (leftover.length) {
+          if (stopped === 'tope-diario') ann.pausedByCap = new Date().toISOString();
           saveDB();
-          await pause();
+          continue;
         }
         ann.done = true;
         ann.finishedAt = new Date().toISOString();
@@ -389,5 +452,5 @@ ${lacking ? '💳 Puedes completar tu abono con tu asesor(a) o respondiendo este
     timer = setInterval(tick, 10 * 60 * 1000);
   }
 
-  return { start, registerRoutes, announceResult, processReminders, processResults, buildReminders, buildResultMessages, preview, configOf, reminderText, resultText, dueDraws };
+  return { sendPaced, delayMs, sentToday, DAILY_CAP, REST_EVERY, start, registerRoutes, announceResult, processReminders, processResults, buildReminders, buildResultMessages, preview, configOf, reminderText, resultText, dueDraws };
 };

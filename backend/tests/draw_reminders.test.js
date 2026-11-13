@@ -121,3 +121,44 @@ const company = db.companies[0];
   assert.ok(sent[0].text.includes('vendido a *Pedro W.*') && sent[0].text.includes('no tenía el abono mínimo ($80.000)') && sent[0].text.includes('se acumula'));
   console.log('OK: recordatorios y resultados de sorteos');
 })().catch(e => { console.error('FALLO', e); process.exit(1); });
+
+// ---------------------------------------------------------------- ritmo de envío (que WhatsApp no bloquee los números)
+(async () => {
+  const waits = [];
+  const db2 = { companies: [{ id: 'c1' }], advisors: [], raffles: [], tickets: [], winners: [] };
+  let n = 0;
+  const wa = { getInstanceName: () => 'empresa_x', getHealth: () => ({ state: 'open' }), sendTextMessage: async () => { n++; return { ok: true }; } };
+  const svc = create({ getDb: () => db2, saveDB() {}, whatsappService: wa, weeklyMinAbonoOf, log: { warn() {} }, pauseFn: async ms => { waits.push(ms); } });
+  const items = Array.from({ length: 40 }, (_, i) => ({ instance: 'empresa_x', phone: `300${i}`, text: 'hola' }));
+  const r = await svc.sendPaced(items, 'prueba', { onResult() {}, now: () => Date.parse('2026-11-11T15:00:00Z') });
+  assert.strictEqual(r.sent, 40);
+  assert.strictEqual(waits.length, 40, 'una pausa después de cada mensaje');
+  assert.ok(waits.every(w => w >= 10000), 'con más de 30 mensajes: mínimo 10 s entre uno y otro');
+  assert.ok(waits.filter(w => w >= 70000).length === 2, 'descanso largo (1-2 min más) cada 15 mensajes: 2 en 40');
+  const small = Array.from({ length: 5 }, (_, i) => ({ instance: 'empresa_x', phone: `310${i}`, text: 'hola' }));
+  waits.length = 0;
+  await svc.sendPaced(small, 'prueba', { onResult() {}, now: () => Date.parse('2026-11-12T15:00:00Z') });
+  assert.ok(waits.every(w => w >= 6000 && w < 12000), 'pocos mensajes: 6 a 12 s');
+
+  // tope diario por número
+  n = 0;
+  const cap = Array.from({ length: svc.DAILY_CAP + 30 }, (_, i) => ({ instance: 'empresa_cap', phone: `320${i}`, text: 'hola' }));
+  const rc = await svc.sendPaced(cap, 'prueba', { onResult() {}, now: () => Date.parse('2026-11-13T15:00:00Z') });
+  assert.strictEqual(rc.sent, svc.DAILY_CAP, `no pasa de ${svc.DAILY_CAP} por número y día`);
+  assert.strictEqual(rc.stopped, 'tope-diario');
+  const rc2 = await svc.sendPaced(cap.slice(0, 5), 'prueba', { onResult() {}, now: () => Date.parse('2026-11-14T15:00:00Z') });
+  assert.strictEqual(rc2.sent, 5, 'al día siguiente se puede enviar otra vez');
+
+  // un número que falla 3 veces seguidas se deja de usar en la vuelta, pero otro número sigue
+  const wa3 = { getInstanceName: () => 'x', getHealth: () => ({ state: 'open' }), sendTextMessage: async (inst) => (inst === 'roto' ? { ok: false } : { ok: true }) };
+  const svc3 = create({ getDb: () => db2, saveDB() {}, whatsappService: wa3, weeklyMinAbonoOf, log: { warn() {} }, pauseFn: async () => {} });
+  const mixed = [
+    ...Array.from({ length: 6 }, (_, i) => ({ instance: 'roto', phone: `330${i}`, text: 'x' })),
+    ...Array.from({ length: 3 }, (_, i) => ({ instance: 'sano', phone: `340${i}`, text: 'x' }))
+  ];
+  const results = [];
+  const rm = await svc3.sendPaced(mixed, 'prueba', { onResult: (m, ok) => results.push(`${m.instance}:${ok}`) });
+  assert.strictEqual(results.filter(x => x === 'roto:false').length, 3, 'tras 3 fallos seguidos no insiste con ese número');
+  assert.strictEqual(results.filter(x => x === 'sano:true').length, 3, 'el otro número sigue enviando');
+  console.log('OK: ritmo de envío de WhatsApp');
+})().catch(e => { console.error('FALLO ritmo', e); process.exit(1); });
